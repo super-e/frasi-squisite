@@ -1,8 +1,12 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
+using FrasiSquisite.Server.Rooms;
 using FrasiSquisite.Shared.Protocol;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace FrasiSquisite.Server.Tests.Realtime;
@@ -104,12 +108,52 @@ public sealed class GameHubTests : IAsyncLifetime
         public ValueTask DisposeAsync() => Connection.DisposeAsync();
     }
 
-    private async Task<Client> ConnettiAsync()
+    /// <summary>
+    /// Cattura i log di livello Error+ dell'host, per verificare che un
+    /// percorso dichiaratamente "silenzioso" (es. la disconnessione su una
+    /// stanza sparita) non lasci comunque un'eccezione non gestita nei log
+    /// del server: quella è l'unica traccia osservabile del comportamento,
+    /// dato che il client non vede nulla in entrambi i casi.
+    /// </summary>
+    private sealed class CapturingLoggerProvider : ILoggerProvider
+    {
+        public ConcurrentQueue<string> VociDiErrore { get; } = new();
+
+        public ILogger CreateLogger(string categoryName) => new CapturingLogger(categoryName, VociDiErrore);
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class CapturingLogger(string categoria, ConcurrentQueue<string> vociDiErrore) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Error;
+
+            public void Log<TState>(
+                LogLevel logLevel,
+                EventId eventId,
+                TState state,
+                Exception? exception,
+                Func<TState, Exception?, string> formatter)
+            {
+                if (logLevel >= LogLevel.Error)
+                {
+                    vociDiErrore.Enqueue($"[{categoria}] {formatter(state, exception)} :: {exception}");
+                }
+            }
+        }
+    }
+
+    private Task<Client> ConnettiAsync() => ConnettiAsync(_factory);
+
+    private static async Task<Client> ConnettiAsync(WebApplicationFactory<Program> factory)
     {
         var connection = new HubConnectionBuilder()
             .WithUrl(
-                new Uri(_factory.Server.BaseAddress, "hubs/game"),
-                options => options.HttpMessageHandlerFactory = _ => _factory.Server.CreateHandler())
+                new Uri(factory.Server.BaseAddress, "hubs/game"),
+                options => options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler())
             .Build();
 
         var client = new Client(connection);
@@ -228,5 +272,48 @@ public sealed class GameHubTests : IAsyncLifetime
         // resta bloccato in silenzio senza alcun modo di saperlo.
         await Assert.ThrowsAsync<HubException>(() =>
             anna.Connection.InvokeAsync("SubmitSlot", new SubmitSlotRequest("STANZA-INESISTENTE", "testo")));
+    }
+
+    [Fact]
+    public async Task DisconnessioneSuStanzaSparitaNonLasciaErroriNeiLogDelServer()
+    {
+        var loggerProvider = new CapturingLoggerProvider();
+        await using var factory = _factory.WithWebHostBuilder(
+            builder => Microsoft.AspNetCore.Hosting.WebHostBuilderExtensions.ConfigureLogging(
+                builder, logging => logging.AddProvider(loggerProvider)));
+
+        await using var anna = await ConnettiAsync(factory);
+
+        var codice = await anna.Connection.InvokeAsync<string>(
+            "CreateRoom",
+            new CreateRoomRequest(ProtocolVersion.Current, Guid.NewGuid(), "Anna"));
+        await anna.WaitFor<RoomStateMessage>(TimeSpan.FromSeconds(5));
+
+        // La stanza sparisce mentre Anna è ancora connessa (es. riavvio del
+        // server, spec §7.1): il registro è un singleton, quindi risolverlo
+        // dal service provider dell'host di test dà l'istanza usata dall'hub.
+        var registro = factory.Services.GetRequiredService<IRoomRegistry>();
+        registro.Remove(codice);
+
+        // Disconnettere Anna ora forza OnDisconnectedAsync a dispatchare
+        // PlayerLeft su una stanza inesistente: DispatchAsync lancia
+        // HubException. SignalR assorbe comunque l'eccezione per non far
+        // esplodere la connessione (il client non vede nulla in entrambi i
+        // casi), ma senza il try/catch in OnDisconnectedAsync quell'eccezione
+        // non gestita compare nei log del server a ogni disconnessione di una
+        // stanza sparita: è l'unica traccia osservabile del comportamento, e
+        // ciò che questo test verifica non accada.
+        await anna.Connection.StopAsync();
+
+        // Attesa limitata di una condizione (non uno sleep alla cieca): dà il
+        // tempo alla disconnessione lato server di completare, in modo che un
+        // eventuale log di errore compaia prima dell'asserzione finale.
+        var scadenza = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+        while (DateTime.UtcNow < scadenza && loggerProvider.VociDiErrore.IsEmpty)
+        {
+            await Task.Delay(20);
+        }
+
+        Assert.Empty(loggerProvider.VociDiErrore);
     }
 }
