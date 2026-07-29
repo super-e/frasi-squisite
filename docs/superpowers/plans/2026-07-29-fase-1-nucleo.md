@@ -3069,8 +3069,8 @@ git commit -m "feat(server): registro stanze in memoria e generazione codici"
 In `Directory.Packages.props`, dentro `<ItemGroup Label="Test">`:
 
 ```xml
-    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.10" />
 ```
 
 In `tests/FrasiSquisite.Server.Tests/FrasiSquisite.Server.Tests.csproj`, nell'`<ItemGroup>` dei pacchetti:
@@ -3662,8 +3662,8 @@ Rilancia: ora fallisce con `CS0246` su `FrasiSquisite.App.Services` se il primo 
 In `Directory.Packages.props`, dentro `<ItemGroup Label="App (MAUI)">`:
 
 ```xml
-    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.0" />
-    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.10" />
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
 ```
 
 In `src/FrasiSquisite.App/FrasiSquisite.App.csproj`, nell'`<ItemGroup>` dei pacchetti:
