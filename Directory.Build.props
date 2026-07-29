@@ -1,0 +1,17 @@
+<Project>
+
+  <!--
+    Impostazioni comuni a tutti i progetti della solution.
+    Tenerle qui evita che i progetti divergano fra loro nel tempo.
+  -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <NeutralLanguage>it-IT</NeutralLanguage>
+  </PropertyGroup>
+
+</Project>

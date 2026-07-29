@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FrasiSquisite.App/FrasiSquisite.App.csproj" />
+    <Project Path="src/FrasiSquisite.Domain/FrasiSquisite.Domain.csproj" />
+    <Project Path="src/FrasiSquisite.Server/FrasiSquisite.Server.csproj" />
+    <Project Path="src/FrasiSquisite.Shared/FrasiSquisite.Shared.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FrasiSquisite.Domain.Tests/FrasiSquisite.Domain.Tests.csproj" />
+    <Project Path="tests/FrasiSquisite.Server.Tests/FrasiSquisite.Server.Tests.csproj" />
+    <Project Path="tests/FrasiSquisite.Shared.Tests/FrasiSquisite.Shared.Tests.csproj" />
+  </Folder>
+</Solution>
