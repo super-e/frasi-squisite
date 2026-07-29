@@ -1,0 +1,13 @@
+{
+  "id": "surrealista-classico",
+  "version": 1,
+  "nome": "Surrealista classico",
+  "template": "{0} {1} {2} {3} {4}",
+  "caselle": [
+    { "ruolo": "Soggetto",    "prompt": "Un soggetto, con l'articolo", "esempio": "Il cadavere" },
+    { "ruolo": "Aggettivo",   "prompt": "Un aggettivo",                "esempio": "squisito" },
+    { "ruolo": "Verbo",       "prompt": "Un verbo coniugato",          "esempio": "berrà" },
+    { "ruolo": "Complemento", "prompt": "Un complemento oggetto",      "esempio": "il vino" },
+    { "ruolo": "Aggettivo",   "prompt": "Un altro aggettivo",          "esempio": "nuovo" }
+  ]
+}
