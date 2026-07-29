@@ -1,6 +1,8 @@
 using FrasiSquisite.Domain.Engine;
+using FrasiSquisite.Domain.Filling;
 using FrasiSquisite.Domain.Model;
 using FrasiSquisite.Domain.Modes;
+using FrasiSquisite.Domain.Randomness;
 using Xunit;
 
 namespace FrasiSquisite.Domain.Tests.Engine;
@@ -12,7 +14,8 @@ namespace FrasiSquisite.Domain.Tests.Engine;
 /// </summary>
 public class SecretezzaTests
 {
-    private readonly IGameEngine _motore = new GameEngine(new RoleSchemaMode());
+    private readonly IGameEngine _motore =
+        new GameEngine(new RoleSchemaMode(), new StaticWordPool(), new SeededRandomSource(1));
 
     private static Guid Giocatore(int i) => Guid.Parse($"00000000-0000-0000-0000-{i:D12}");
 
@@ -39,8 +42,11 @@ public class SecretezzaTests
                 var risultato = _motore.Handle(stato, new SlotSubmitted(Giocatore(g), segreto));
                 stato = risultato.State;
 
+                testiSegreti.Add(segreto);
+
                 // Ogni messaggio emesso finché siamo in scrittura non deve
-                // contenere nessuno dei testi già inviati.
+                // contenere nessuno dei testi inviati, incluso quello appena
+                // scritto: la fuga tipica è un broadcast che lo rimbalza.
                 if (stato.Phase == RoomPhase.Writing)
                 {
                     var serializzati = risultato.AllMessages()
@@ -53,8 +59,6 @@ public class SecretezzaTests
                             Assert.DoesNotContain(precedente, s, StringComparison.Ordinal));
                     }
                 }
-
-                testiSegreti.Add(segreto);
             }
         }
     }

@@ -1,6 +1,8 @@
 using FrasiSquisite.Domain.Engine;
+using FrasiSquisite.Domain.Filling;
 using FrasiSquisite.Domain.Model;
 using FrasiSquisite.Domain.Modes;
+using FrasiSquisite.Domain.Randomness;
 using FrasiSquisite.Shared.Protocol;
 using Xunit;
 
@@ -8,7 +10,8 @@ namespace FrasiSquisite.Domain.Tests.Engine;
 
 public class RoundTests
 {
-    private readonly IGameEngine _motore = new GameEngine(new RoleSchemaMode());
+    private readonly IGameEngine _motore =
+        new GameEngine(new RoleSchemaMode(), new StaticWordPool(), new SeededRandomSource(1));
 
     private static Guid Giocatore(int i) => Guid.Parse($"00000000-0000-0000-0000-{i:D12}");
 

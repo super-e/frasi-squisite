@@ -1,6 +1,8 @@
 using FrasiSquisite.Domain.Engine;
+using FrasiSquisite.Domain.Filling;
 using FrasiSquisite.Domain.Model;
 using FrasiSquisite.Domain.Modes;
+using FrasiSquisite.Domain.Randomness;
 using FrasiSquisite.Shared.Protocol;
 using Xunit;
 
@@ -12,7 +14,8 @@ public class LobbyTests
     private static readonly Guid Bruno = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000002");
     private static readonly Guid Carla = Guid.Parse("cccccccc-0000-0000-0000-000000000003");
 
-    private readonly IGameEngine _motore = new GameEngine(new RoleSchemaMode());
+    private readonly IGameEngine _motore =
+        new GameEngine(new RoleSchemaMode(), new StaticWordPool(), new SeededRandomSource(1));
 
     private GameState StanzaVuota() => GameState.NewRoom("ABCD", TestSchemas.WithSlots(5));
 
