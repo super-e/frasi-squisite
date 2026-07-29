@@ -57,6 +57,15 @@ public sealed class GameHubTests : IAsyncLifetime
             throw new InvalidOperationException($"Nessun messaggio di tipo {typeof(T).Name} ricevuto.");
         }
 
+        public int CountOf<T>()
+        {
+            lock (_received)
+            {
+                var nome = typeof(T).Name;
+                return _received.Count(m => m.Type == nome);
+            }
+        }
+
         public async Task WaitFor<T>(TimeSpan timeout)
         {
             var scadenza = DateTime.UtcNow + timeout;
@@ -74,6 +83,22 @@ public sealed class GameHubTests : IAsyncLifetime
             }
 
             throw new TimeoutException($"Nessun {typeof(T).Name} entro {timeout}.");
+        }
+
+        public async Task WaitForCount<T>(int count, TimeSpan timeout)
+        {
+            var scadenza = DateTime.UtcNow + timeout;
+            while (DateTime.UtcNow < scadenza)
+            {
+                if (CountOf<T>() >= count)
+                {
+                    return;
+                }
+
+                await Task.Delay(20);
+            }
+
+            throw new TimeoutException($"Meno di {count} messaggi di tipo {typeof(T).Name} entro {timeout}.");
         }
 
         public ValueTask DisposeAsync() => Connection.DisposeAsync();
@@ -145,13 +170,38 @@ public sealed class GameHubTests : IAsyncLifetime
 
         var richiesta = anna.Last<SlotRequestMessage>();
         Assert.Equal(5, richiesta.TotalRounds);
+        var totalRounds = richiesta.TotalRounds;
 
-        // Cinque round con due giocatori.
-        for (var round = 0; round < 5; round++)
+        // Bruno invia due volte nello stesso round: solo lui deve vedere
+        // l'errore "già inviato" (spec §2.3: nessun giocatore vede i fatti
+        // privati di un altro). Se SendToPlayer regredisse a un broadcast
+        // sull'intera stanza, questo messaggio arriverebbe anche ad Anna.
+        await bruno.Connection.InvokeAsync("SubmitSlot", new SubmitSlotRequest(codice, "bruno0"));
+        await bruno.Connection.InvokeAsync("SubmitSlot", new SubmitSlotRequest(codice, "bruno0-bis"));
+        await bruno.WaitFor<ErrorMessage>(TimeSpan.FromSeconds(5));
+        var erroreBruno = bruno.Last<ErrorMessage>();
+        Assert.Equal("ALREADY_SUBMITTED", erroreBruno.Code);
+
+        // Cinque round con due giocatori (il primo invio di Bruno vale per il round 0).
+        await anna.Connection.InvokeAsync("SubmitSlot", new SubmitSlotRequest(codice, "anna0"));
+        for (var round = 1; round < totalRounds; round++)
         {
             await anna.Connection.InvokeAsync("SubmitSlot", new SubmitSlotRequest(codice, $"anna{round}"));
             await bruno.Connection.InvokeAsync("SubmitSlot", new SubmitSlotRequest(codice, $"bruno{round}"));
         }
+
+        // Ogni giocatore deve ricevere esattamente una SlotRequestMessage a
+        // round: se il routing per-giocatore regredisse a un broadcast di
+        // stanza, ciascuno ne riceverebbe il doppio (la propria e quella
+        // dell'altro), e nessuna asserzione sul contenuto lo rileverebbe
+        // perché per lo schema di default il contenuto è identico per round.
+        await anna.WaitForCount<SlotRequestMessage>(totalRounds, TimeSpan.FromSeconds(5));
+        await bruno.WaitForCount<SlotRequestMessage>(totalRounds, TimeSpan.FromSeconds(5));
+        Assert.Equal(totalRounds, anna.CountOf<SlotRequestMessage>());
+        Assert.Equal(totalRounds, bruno.CountOf<SlotRequestMessage>());
+
+        // E l'errore di Bruno non deve mai comparire nella casella di Anna.
+        Assert.Equal(0, anna.CountOf<ErrorMessage>());
 
         await anna.Connection.InvokeAsync("AdvanceReveal", codice);
         await anna.WaitFor<RevealStepMessage>(TimeSpan.FromSeconds(5));
@@ -160,5 +210,23 @@ public sealed class GameHubTests : IAsyncLifetime
         Assert.Equal(0, passo.PhraseIndex);
         Assert.Equal(2, passo.TotalPhrases);
         Assert.Single(passo.RevealedSlots);
+    }
+
+    [Fact]
+    public async Task SubmitSlotSuUnaStanzaInesistenteSegnalaErroreAlClient()
+    {
+        await using var anna = await ConnettiAsync();
+
+        await anna.Connection.InvokeAsync<string>(
+            "CreateRoom",
+            new CreateRoomRequest(ProtocolVersion.Current, Guid.NewGuid(), "Anna"));
+        await anna.WaitFor<RoomStateMessage>(TimeSpan.FromSeconds(5));
+
+        // Una stanza che non esiste (es. persa per un riavvio del server) deve
+        // fallire in modo osservabile dal client, non completare come se il
+        // comando fosse andato a buon fine (spec §7.1): altrimenti il client
+        // resta bloccato in silenzio senza alcun modo di saperlo.
+        await Assert.ThrowsAsync<HubException>(() =>
+            anna.Connection.InvokeAsync("SubmitSlot", new SubmitSlotRequest("STANZA-INESISTENTE", "testo")));
     }
 }

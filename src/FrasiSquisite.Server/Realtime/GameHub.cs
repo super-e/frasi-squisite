@@ -48,7 +48,16 @@ public sealed class GameHub(GameHost host, IRoomRegistry rooms) : Hub
         if (Context.Items.TryGetValue(RoomKey, out var room) && room is string roomCode &&
             Context.Items.TryGetValue(PlayerKey, out var player) && player is Guid playerId)
         {
-            await host.DispatchAsync(roomCode, new PlayerLeft(playerId));
+            try
+            {
+                await host.DispatchAsync(roomCode, new PlayerLeft(playerId));
+            }
+            catch (HubException)
+            {
+                // La stanza può essere sparita (es. riavvio del server): in
+                // disconnessione non c'è più nessun client a cui segnalarlo,
+                // quindi la ignoriamo invece di far fallire la disconnessione.
+            }
         }
 
         await base.OnDisconnectedAsync(exception);

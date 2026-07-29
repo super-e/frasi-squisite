@@ -4,11 +4,16 @@ using FrasiSquisite.Domain.Modes;
 using FrasiSquisite.Domain.Randomness;
 using FrasiSquisite.Server.Realtime;
 using FrasiSquisite.Server.Rooms;
+using FrasiSquisite.Shared.Protocol;
 using FrasiSquisite.Shared.Schemas;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddSignalR();
+// Il client (e i test) deserializzano con ProtocolJson.Options: senza questa
+// configurazione esplicita, un domani un converter aggiunto lì non verrebbe
+// applicato in serializzazione, e il client leggerebbe male in silenzio.
+builder.Services.AddSignalR()
+    .AddJsonProtocol(o => o.PayloadSerializerOptions = ProtocolJson.Options);
 
 builder.Services.AddSingleton<ISchemaCatalog, EmbeddedSchemaCatalog>();
 builder.Services.AddSingleton<IRandomSource, SystemRandomSource>();

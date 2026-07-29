@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using FrasiSquisite.Domain.Engine;
 using FrasiSquisite.Server.Rooms;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Logging;
 
 namespace FrasiSquisite.Server.Realtime;
 
@@ -13,7 +14,8 @@ namespace FrasiSquisite.Server.Realtime;
 public sealed class GameHost(
     IGameEngine engine,
     IRoomRegistry rooms,
-    IHubContext<GameHub> hub)
+    IHubContext<GameHub> hub,
+    ILogger<GameHost> logger)
 {
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> Locks =
         new(StringComparer.OrdinalIgnoreCase);
@@ -22,6 +24,11 @@ public sealed class GameHost(
     /// Serializza gli eventi per stanza: due invii simultanei leggerebbero lo
     /// stesso stato e si sovrascriverebbero a vicenda.
     /// </summary>
+    /// <exception cref="HubException">
+    /// La stanza non esiste (es. persa per un riavvio del server): senza
+    /// questo segnale il chiamante crederebbe che il comando sia andato a
+    /// buon fine e la partita si bloccherebbe in silenzio.
+    /// </exception>
     public async Task DispatchAsync(string roomCode, GameEvent evt, CancellationToken ct = default)
     {
         var gate = Locks.GetOrAdd(roomCode, _ => new SemaphoreSlim(1, 1));
@@ -31,7 +38,7 @@ public sealed class GameHost(
         {
             if (!rooms.TryGet(roomCode, out var stato))
             {
-                return;
+                throw new HubException("Stanza non trovata.");
             }
 
             var risultato = engine.Handle(stato, evt);
@@ -39,7 +46,23 @@ public sealed class GameHost(
 
             foreach (var effetto in risultato.Effects)
             {
-                await EseguiAsync(roomCode, effetto, ct);
+                try
+                {
+                    await EseguiAsync(roomCode, effetto, ct);
+                }
+                catch (Exception ex)
+                {
+                    // Non viene inghiottita: il chiamante deve comunque vedere il
+                    // fallimento, ma senza questo log resterebbe invisibile sul
+                    // percorso di disconnessione, dove non c'è alcun client a cui
+                    // segnalarlo (spec §3.2).
+                    logger.LogError(
+                        ex,
+                        "Invio effetto fallito per la stanza {RoomCode}, tipo effetto {EffectType}.",
+                        roomCode,
+                        effetto.GetType().Name);
+                    throw;
+                }
             }
         }
         finally
