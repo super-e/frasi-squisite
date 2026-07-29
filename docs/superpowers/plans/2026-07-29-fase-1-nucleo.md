@@ -2521,7 +2521,7 @@ Attenzione a `LobbyTests.QuandoEsceLHostIlRuoloPassaAlPresenteDaPiuTempo` e `Qua
 
 Run: `dotnet test tests/FrasiSquisite.Domain.Tests --nologo`
 
-Expected: PASS, 306 test superati (284 precedenti + 9 `AbbandonoTests` + 13 `StaticWordPoolTests`).
+Expected: PASS, 304 test superati (284 precedenti + 9 `AbbandonoTests` + 11 `StaticWordPoolTests`).
 
 - [ ] **Step 8: Commit**
 
@@ -2758,7 +2758,7 @@ e aggiungi il metodo:
 
 Run: `dotnet test tests/FrasiSquisite.Domain.Tests --nologo`
 
-Expected: PASS, 311 test superati.
+Expected: PASS, 309 test superati.
 
 - [ ] **Step 5: Commit**
 
