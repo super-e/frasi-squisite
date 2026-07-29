@@ -47,5 +47,6 @@ sta in [docs/superpowers/specs/2026-07-29-frasi-squisite-design.md](docs/superpo
 
 ## Stato
 
-Repository imbastito: struttura, referenze e suite di test in piedi.
-Nessuna logica di gioco ancora implementata.
+Fase 1 completata: partita giocabile dalla lobby al reveal, con più dispositivi
+Android collegati a un server locale. Senza timer, voto, persistenza né AI —
+arrivano nelle fasi successive (vedi spec §13).
