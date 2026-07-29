@@ -1,6 +1,7 @@
 using FrasiSquisite.Domain.Model;
 using FrasiSquisite.Domain.Modes;
 using FrasiSquisite.Shared.Protocol;
+using FrasiSquisite.Shared.Validation;
 
 namespace FrasiSquisite.Domain.Engine;
 
@@ -15,6 +16,7 @@ public sealed class GameEngine(IGameMode mode) : IGameEngine
         PlayerJoined e => OnPlayerJoined(state, e),
         PlayerLeft e => OnPlayerLeft(state, e),
         GameStartRequested e => OnGameStartRequested(state, e),
+        SlotSubmitted e => OnSlotSubmitted(state, e),
         _ => EngineResult.NoChange(state),
     };
 
@@ -82,8 +84,118 @@ public sealed class GameEngine(IGameMode mode) : IGameEngine
         return StartGame(state);
     }
 
-    // Implementato nel Task 6.
-    private EngineResult StartGame(GameState state) => EngineResult.NoChange(state);
+    private EngineResult StartGame(GameState state)
+    {
+        var frasi = Enumerable
+            .Range(0, _mode.PhraseCount(state.Players.Count, state.Schema))
+            .Select(i => Phrase.Empty(i, state.Schema.SlotCount))
+            .ToList();
+
+        var nuovo = state with
+        {
+            Phase = RoomPhase.Writing,
+            Round = 0,
+            Phrases = frasi,
+            SubmittedThisRound = new HashSet<Guid>(),
+        };
+
+        List<Effect> effetti = [new BroadcastToRoom(RoomState(nuovo))];
+        effetti.AddRange(SlotRequests(nuovo));
+
+        return new EngineResult(nuovo, effetti);
+    }
+
+    private EngineResult OnSlotSubmitted(GameState state, SlotSubmitted e)
+    {
+        if (state.Phase != RoomPhase.Writing)
+        {
+            return Error(state, e.PlayerId, "NOT_WRITING", "Non è il momento di scrivere.");
+        }
+
+        var indice = state.IndexOfPlayer(e.PlayerId);
+        if (indice < 0)
+        {
+            return Error(state, e.PlayerId, "NOT_IN_ROOM", "Non sei in questa stanza.");
+        }
+
+        if (state.SubmittedThisRound.Contains(e.PlayerId))
+        {
+            return Error(state, e.PlayerId, "ALREADY_SUBMITTED", "Hai già inviato per questo round.");
+        }
+
+        // Il server riapplica la validazione: non può fidarsi del client.
+        var esito = SlotTextValidator.Validate(e.Text);
+        if (!esito.IsValid)
+        {
+            return Error(state, e.PlayerId, "INVALID_TEXT", esito.Error!);
+        }
+
+        var assegnazione = _mode.AssignSlot(state.Round, indice, state.Players.Count, state.Schema);
+
+        var frasi = state.Phrases.ToArray();
+        frasi[assegnazione.PhraseIndex] = frasi[assegnazione.PhraseIndex]
+            .With(assegnazione.SlotIndex, new Slot(e.PlayerId, esito.Normalized));
+
+        var inviati = new HashSet<Guid>(state.SubmittedThisRound) { e.PlayerId };
+
+        var nuovo = state with { Phrases = frasi, SubmittedThisRound = inviati };
+
+        if (inviati.Count < nuovo.Players.Count)
+        {
+            return new EngineResult(nuovo, [
+                new BroadcastToRoom(new RoundProgressMessage(nuovo.Round, inviati.Count, nuovo.Players.Count)),
+            ]);
+        }
+
+        return AdvanceRound(nuovo);
+    }
+
+    private EngineResult AdvanceRound(GameState state)
+    {
+        var prossimo = state with
+        {
+            Round = state.Round + 1,
+            SubmittedThisRound = new HashSet<Guid>(),
+        };
+
+        if (_mode.IsComplete(prossimo))
+        {
+            var reveal = prossimo with
+            {
+                Phase = RoomPhase.Reveal,
+                RevealPhraseIndex = 0,
+                RevealSlotCount = 0,
+            };
+
+            return new EngineResult(reveal, [new BroadcastToRoom(RoomState(reveal))]);
+        }
+
+        List<Effect> effetti = [
+            new BroadcastToRoom(new RoundProgressMessage(state.Round, state.Players.Count, state.Players.Count)),
+        ];
+        effetti.AddRange(SlotRequests(prossimo));
+
+        return new EngineResult(prossimo, effetti);
+    }
+
+    private IEnumerable<Effect> SlotRequests(GameState state)
+    {
+        for (var i = 0; i < state.Players.Count; i++)
+        {
+            var assegnazione = _mode.AssignSlot(state.Round, i, state.Players.Count, state.Schema);
+            var casella = state.Schema.Caselle[assegnazione.SlotIndex];
+
+            // Nota: PhraseIndex resta deliberatamente fuori dal messaggio.
+            yield return new SendToPlayer(
+                state.Players[i].Id,
+                new SlotRequestMessage(
+                    state.Round,
+                    state.Schema.SlotCount,
+                    casella.Ruolo,
+                    casella.Prompt,
+                    casella.Esempio));
+        }
+    }
 
     private static EngineResult Error(GameState state, Guid playerId, string code, string message) =>
         new(state, [new SendToPlayer(playerId, new ErrorMessage(code, message))]);
