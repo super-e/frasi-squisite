@@ -1,6 +1,25 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-	<application android:allowBackup="true" android:icon="@mipmap/appicon" android:roundIcon="@mipmap/appicon_round" android:supportsRtl="true"></application>
+	<!--
+	  Il server di gioco gira in HTTP semplice su un indirizzo scelto
+	  dall'utente (ServerUrl è un campo libero, default "http://10.0.2.2:5000"
+	  per l'emulatore): da Android 9 (targetSdk) in su il traffico cleartext è
+	  bloccato di default, quindi senza questo flag la primissima chiamata di
+	  rete dell'app ("Crea una stanza") fallirebbe sempre.
+
+	  Si è valutato un network_security_config.xml con domain-config limitato
+	  alle reti private invece del flag generale, ma lo schema Android non
+	  supporta intervalli CIDR nei domain-config: i <domain> devono essere
+	  hostname o IP letterali singoli. Dato che il server puo' stare su
+	  qualunque IP LAN scelto da chi ospita la partita (non un indirizzo
+	  fisso), uno scoping per dominio dovrebbe elencare IP a mano - fragile e
+	  comunque destinato a rompersi non appena l'host cambia rete - oppure
+	  degenerare in un consenso quasi totale. Si è quindi optato per il flag
+	  generale: la app non supererebbe così com'è una review Play Store, ma
+	  quel percorso non è nello scope di questa fase (v. anche §7.1 sulle
+	  stanze in memoria).
+	-->
+	<application android:allowBackup="true" android:icon="@mipmap/appicon" android:roundIcon="@mipmap/appicon_round" android:supportsRtl="true" android:usesCleartextTraffic="true"></application>
 	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 	<uses-permission android:name="android.permission.INTERNET" />
 </manifest>

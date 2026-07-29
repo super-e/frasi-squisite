@@ -12,16 +12,30 @@ public sealed class FakeGameConnection : IGameConnection
 
     public event Action<object>? MessageReceived;
 
+    public event Action? ConnectionInterrupted;
+
     public bool IsConnected { get; private set; }
 
     public IReadOnlyList<string> Calls => _calls;
 
     public string NextRoomCode { get; set; } = "ABCD";
 
+    /// <summary>
+    /// Se impostata, il prossimo metodo invocato la lancia invece di
+    /// completare con successo (e si azzera da sola): simula un guasto di
+    /// rete o di hub (es. HubException, HttpRequestException) senza dover
+    /// implementare un vero trasporto solo per provare che la ViewModel
+    /// gestisca il fallimento invece di propagarlo (spec C2).
+    /// </summary>
+    public Exception? NextFailure { get; set; }
+
     public void Emit(object message) => MessageReceived?.Invoke(message);
+
+    public void EmitConnectionInterrupted() => ConnectionInterrupted?.Invoke();
 
     public Task ConnectAsync(string serverUrl, CancellationToken ct = default)
     {
+        LanciaSeImpostato();
         _calls.Add($"Connect({serverUrl})");
         IsConnected = true;
         return Task.CompletedTask;
@@ -29,30 +43,35 @@ public sealed class FakeGameConnection : IGameConnection
 
     public Task<string> CreateRoomAsync(Guid playerId, string nickname)
     {
+        LanciaSeImpostato();
         _calls.Add($"CreateRoom({nickname})");
         return Task.FromResult(NextRoomCode);
     }
 
     public Task JoinRoomAsync(Guid playerId, string nickname, string roomCode)
     {
+        LanciaSeImpostato();
         _calls.Add($"JoinRoom({nickname},{roomCode})");
         return Task.CompletedTask;
     }
 
     public Task StartGameAsync(string roomCode)
     {
+        LanciaSeImpostato();
         _calls.Add($"StartGame({roomCode})");
         return Task.CompletedTask;
     }
 
     public Task SubmitSlotAsync(string roomCode, string text)
     {
+        LanciaSeImpostato();
         _calls.Add($"SubmitSlot({roomCode},{text})");
         return Task.CompletedTask;
     }
 
     public Task AdvanceRevealAsync(string roomCode)
     {
+        LanciaSeImpostato();
         _calls.Add($"AdvanceReveal({roomCode})");
         return Task.CompletedTask;
     }
@@ -62,5 +81,14 @@ public sealed class FakeGameConnection : IGameConnection
         _calls.Add("Disconnect()");
         IsConnected = false;
         return Task.CompletedTask;
+    }
+
+    private void LanciaSeImpostato()
+    {
+        if (NextFailure is { } eccezione)
+        {
+            NextFailure = null;
+            throw eccezione;
+        }
     }
 }

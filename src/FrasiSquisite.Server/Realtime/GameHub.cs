@@ -1,11 +1,13 @@
 using FrasiSquisite.Domain.Engine;
+using FrasiSquisite.Domain.Model;
 using FrasiSquisite.Server.Rooms;
 using FrasiSquisite.Shared.Protocol;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Logging;
 
 namespace FrasiSquisite.Server.Realtime;
 
-public sealed class GameHub(GameHost host, IRoomRegistry rooms) : Hub
+public sealed class GameHub(GameHost host, IRoomRegistry rooms, ILogger<GameHub> logger) : Hub
 {
     private const string RoomKey = "room";
     private const string PlayerKey = "player";
@@ -30,6 +32,19 @@ public sealed class GameHub(GameHost host, IRoomRegistry rooms) : Hub
             throw new HubException("Stanza non trovata.");
         }
 
+        // Il controllo va fatto PRIMA di aggiungere la connessione ai gruppi
+        // SignalR (spec I2): farlo dopo iscrive comunque chi viene rifiutato,
+        // che da quel momento riceve ogni RevealStepMessage e la
+        // GameFinishedMessage di una partita a cui non partecipa. Una finestra
+        // di corsa residua (la fase cambia proprio tra questo controllo e la
+        // dispatch sotto) resta possibile - le operazioni sul registro sono
+        // singolarmente thread-safe ma la sequenza no - ed è accettata: è
+        // l'eccezione, non la regola come accadeva prima di questo fix.
+        if (stanza.Phase != RoomPhase.Lobby)
+        {
+            throw new HubException("La partita è già iniziata.");
+        }
+
         await EntraAsync(stanza.RoomCode, request.PlayerId);
         await host.DispatchAsync(stanza.RoomCode, new PlayerJoined(request.PlayerId, request.Nickname));
     }
@@ -52,11 +67,22 @@ public sealed class GameHub(GameHost host, IRoomRegistry rooms) : Hub
             {
                 await host.DispatchAsync(roomCode, new PlayerLeft(playerId));
             }
-            catch (HubException)
+            catch (Exception ex)
             {
-                // La stanza può essere sparita (es. riavvio del server): in
+                // La stanza può essere sparita (es. riavvio del server, che
+                // lancia HubException), ma su un socket già a metà morto anche
+                // IOException, ObjectDisposedException o OperationCanceledException
+                // sono guasti plausibili nell'invio degli effetti. In
                 // disconnessione non c'è più nessun client a cui segnalarlo,
-                // quindi la ignoriamo invece di far fallire la disconnessione.
+                // quindi non deve far esplodere la disconnessione - ma va comunque
+                // loggato (a livello Warning, non Error: è un percorso atteso,
+                // non un guasto del server) perché è l'unica traccia osservabile
+                // rimasta di quel che è successo.
+                logger.LogWarning(
+                    ex,
+                    "Disconnessione del giocatore {PlayerId} dalla stanza {RoomCode}: dispatch di PlayerLeft fallita.",
+                    playerId,
+                    roomCode);
             }
         }
 

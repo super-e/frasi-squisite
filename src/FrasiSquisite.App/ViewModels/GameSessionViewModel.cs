@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using FrasiSquisite.App.Services;
 using FrasiSquisite.Shared.Protocol;
 using FrasiSquisite.Shared.Validation;
+using Microsoft.AspNetCore.SignalR;
 
 namespace FrasiSquisite.App.ViewModels;
 
@@ -35,6 +36,7 @@ public partial class GameSessionViewModel : ObservableObject
         // Sottoscrizione nel costruttore: la ViewModel deve reagire ai messaggi
         // fin dal primo istante, anche prima che l'utente tocchi qualcosa.
         _connection.MessageReceived += OnMessage;
+        _connection.ConnectionInterrupted += OnConnectionInterrupted;
     }
 
     [ObservableProperty]
@@ -82,6 +84,9 @@ public partial class GameSessionViewModel : ObservableObject
     [ObservableProperty]
     private string _errorText = string.Empty;
 
+    [ObservableProperty]
+    private string _connectionBanner = string.Empty;
+
     public ObservableCollection<PlayerView> Players { get; } = [];
 
     public ObservableCollection<string> RevealedSlots { get; } = [];
@@ -91,27 +96,27 @@ public partial class GameSessionViewModel : ObservableObject
     public ObservableCollection<string> FinalPhrases { get; } = [];
 
     [RelayCommand]
-    private async Task CreateRoomAsync()
+    private Task CreateRoomAsync() => EseguiComandoAsync(async () =>
     {
         ErrorText = string.Empty;
         await EnsureConnectedAsync();
         RoomCode = await _connection.CreateRoomAsync(_playerId, Nickname);
-    }
+    });
 
     [RelayCommand]
-    private async Task JoinRoomAsync()
+    private Task JoinRoomAsync() => EseguiComandoAsync(async () =>
     {
         ErrorText = string.Empty;
         await EnsureConnectedAsync();
         RoomCode = JoinCode.Trim().ToUpperInvariant();
         await _connection.JoinRoomAsync(_playerId, Nickname, RoomCode);
-    }
+    });
 
     [RelayCommand]
-    private Task StartGameAsync() => _connection.StartGameAsync(RoomCode);
+    private Task StartGameAsync() => EseguiComandoAsync(() => _connection.StartGameAsync(RoomCode));
 
     [RelayCommand]
-    private async Task SubmitSlotAsync()
+    private Task SubmitSlotAsync() => EseguiComandoAsync(async () =>
     {
         // Stesso validatore che riapplica il server: feedback immediato senza
         // che le due regole possano divergere.
@@ -126,10 +131,10 @@ public partial class GameSessionViewModel : ObservableObject
         await _connection.SubmitSlotAsync(RoomCode, esito.Normalized);
         SlotText = string.Empty;
         Screen = ScreenState.Waiting;
-    }
+    });
 
     [RelayCommand]
-    private Task AdvanceRevealAsync() => _connection.AdvanceRevealAsync(RoomCode);
+    private Task AdvanceRevealAsync() => EseguiComandoAsync(() => _connection.AdvanceRevealAsync(RoomCode));
 
     private async Task EnsureConnectedAsync()
     {
@@ -137,6 +142,49 @@ public partial class GameSessionViewModel : ObservableObject
         {
             await _connection.ConnectAsync(ServerUrl);
         }
+    }
+
+    /// <summary>
+    /// Ogni comando generato da [RelayCommand] diventa un AsyncRelayCommand: con
+    /// le opzioni di default un'eccezione non osservata viene ri-lanciata sul
+    /// thread che l'ha invocato, che su Android è il main looper - crash del
+    /// processo per un errore di rete tutt'altro che eccezionale (URL sbagliato,
+    /// stanza sparita, versione incompatibile, server irraggiungibile). Ogni
+    /// comando passa quindi da qui: l'eccezione viene raccolta e mostrata
+    /// nel banner invece di propagarsi.
+    /// </summary>
+    private async Task EseguiComandoAsync(Func<Task> azione)
+    {
+        try
+        {
+            await azione();
+        }
+        catch (HubException ex)
+        {
+            // Il server risponde già con un messaggio pensato per l'utente,
+            // in italiano (es. "Stanza non trovata.", "...Aggiorna l'app."):
+            // lo si mostra così com'è, senza riformularlo.
+            ErrorText = ex.Message;
+        }
+        catch (Exception)
+        {
+            // Guasto di trasporto (URL irraggiungibile, connessione caduta
+            // prima ancora di parlare con l'hub, ecc.): non c'è un messaggio
+            // del server da mostrare, quindi uno generico ma comunque visibile
+            // - non deve mai sparire nel nulla.
+            ErrorText = "Non riesco a raggiungere il server.";
+        }
+    }
+
+    private void OnConnectionInterrupted()
+    {
+        // Il trasporto SignalR può riconnettersi da solo (.WithAutomaticReconnect),
+        // ma con un nuovo ConnectionId che non recupera l'appartenenza ai gruppi
+        // della stanza: il server ha già marcato il giocatore disconnesso e ci
+        // gioca un bot al suo posto. Il rejoin di partita è Fase 2 e resta fuori
+        // scope, quindi l'avviso non si azzera da solo nemmeno se il trasporto
+        // torna su (Reconnected): per questa sessione non cambia nulla.
+        ConnectionBanner = "Connessione persa: un bot sta giocando al tuo posto.";
     }
 
     private void OnMessage(object message)
@@ -171,9 +219,22 @@ public partial class GameSessionViewModel : ObservableObject
                 IsHost = stato.Players.Any(p => p.Id == _playerId && p.IsHost);
                 PlayerCount = stato.Players.Count;
 
+                // "Writing" NON va mappato qui, di proposito: una RoomStateMessage
+                // arriva anche a partita in corso (es. qualcuno si disconnette), e
+                // rimandare in scrittura chi ha già inviato lo strapperebbe dalla
+                // schermata di attesa. "Reveal" invece è l'unico modo in cui un
+                // client può uscire dall'attesa quando l'ultimo round finisce: il
+                // motore non manda più SlotRequestMessage, quindi senza questo
+                // ramo tutti resterebbero bloccati su "Aspettiamo gli altri…" (il
+                // server manda comunque una RevealStepMessage iniziale apposta per
+                // questo passaggio; qui è solo una difesa in profondità).
                 if (stato.Phase == "Lobby")
                 {
                     Screen = ScreenState.Lobby;
+                }
+                else if (stato.Phase == "Reveal")
+                {
+                    Screen = ScreenState.Reveal;
                 }
 
                 break;

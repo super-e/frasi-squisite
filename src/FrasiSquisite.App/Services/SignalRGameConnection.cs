@@ -11,6 +11,8 @@ public sealed class SignalRGameConnection : IGameConnection, IAsyncDisposable
 
     public event Action<object>? MessageReceived;
 
+    public event Action? ConnectionInterrupted;
+
     public bool IsConnected => _connection?.State == HubConnectionState.Connected;
 
     public async Task ConnectAsync(string serverUrl, CancellationToken ct = default)
@@ -33,6 +35,30 @@ public sealed class SignalRGameConnection : IGameConnection, IAsyncDisposable
             }
         });
 
+        // Il riconnettersi a livello di trasporto (.WithAutomaticReconnect) apre
+        // una connessione nuova, con un ConnectionId diverso: non recupera da
+        // solo l'appartenenza ai gruppi SignalR della stanza, che il server ha
+        // già rimosso marcando il giocatore disconnesso (e facendoci giocare un
+        // bot al suo posto). I tre eventi hanno quindi la stessa conseguenza
+        // visibile per il giocatore: senza questo avviso il client resterebbe
+        // "connesso" (IsConnected true) ma sordo a ogni messaggio successivo,
+        // senza che nulla in schermata lo segnali (spec I1).
+        _connection.Reconnecting += _ =>
+        {
+            SollevaConnectionInterrupted();
+            return Task.CompletedTask;
+        };
+        _connection.Reconnected += _ =>
+        {
+            SollevaConnectionInterrupted();
+            return Task.CompletedTask;
+        };
+        _connection.Closed += _ =>
+        {
+            SollevaConnectionInterrupted();
+            return Task.CompletedTask;
+        };
+
         await _connection.StartAsync(ct);
     }
 
@@ -44,22 +70,28 @@ public sealed class SignalRGameConnection : IGameConnection, IAsyncDisposable
     // ViewModel non può conoscere MAUI, quindi è la connessione (che sa di
     // girare su una piattaforma con un thread UI) a doversene occupare per
     // tutti i suoi consumatori. Non "semplificare" rimuovendo questo dispatch.
-    private void SollevaMessageReceived(object messaggio)
+    private void SollevaMessageReceived(object messaggio) =>
+        EseguiSulThreadUI(() => MessageReceived?.Invoke(messaggio));
+
+    private void SollevaConnectionInterrupted() =>
+        EseguiSulThreadUI(() => ConnectionInterrupted?.Invoke());
+
+    private static void EseguiSulThreadUI(Action azione)
     {
         try
         {
-            MainThread.BeginInvokeOnMainThread(() => MessageReceived?.Invoke(messaggio));
+            MainThread.BeginInvokeOnMainThread(azione);
         }
         catch (Exception ex)
         {
             // Nessun dispatcher disponibile (es. fuori da un contesto applicativo
-            // MAUI, come in test o strumenti diagnostici): meglio consegnare
-            // comunque il messaggio piuttosto che far crashare il processo.
+            // MAUI, come in test o strumenti diagnostici): meglio eseguire
+            // comunque l'azione piuttosto che far crashare il processo.
             // La traccia serve solo in debug: non deve indebolire la garanzia
             // "non crashare mai il processo", quindi resta un semplice log.
             System.Diagnostics.Debug.WriteLine(
-                $"SollevaMessageReceived: nessun dispatcher MAUI disponibile, invocazione diretta. {ex}");
-            MessageReceived?.Invoke(messaggio);
+                $"EseguiSulThreadUI: nessun dispatcher MAUI disponibile, invocazione diretta. {ex}");
+            azione();
         }
     }
 

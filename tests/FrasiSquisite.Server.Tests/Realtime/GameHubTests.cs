@@ -247,13 +247,56 @@ public sealed class GameHubTests : IAsyncLifetime
         // E l'errore di Bruno non deve mai comparire nella casella di Anna.
         Assert.Equal(0, anna.CountOf<ErrorMessage>());
 
+        // La fine dell'ultimo round (l'ultimo SubmitSlot appena sopra) ha già
+        // fatto arrivare una RevealStepMessage iniziale e vuota - nessuna
+        // casella ancora scoperta - proprio per portare tutti sulla schermata
+        // di reveal senza che nessuno debba aspettare l'host (spec C1).
+        // WaitFor<RevealStepMessage> da sola quindi non basterebbe più a
+        // sapere che è arrivato il messaggio generato da QUESTO AdvanceReveal:
+        // tornerebbe vera all'istante trovando quello già ricevuto. Si aspetta
+        // perciò che il conteggio salga a due prima di leggere l'ultimo.
         await anna.Connection.InvokeAsync("AdvanceReveal", codice);
-        await anna.WaitFor<RevealStepMessage>(TimeSpan.FromSeconds(5));
+        await anna.WaitForCount<RevealStepMessage>(2, TimeSpan.FromSeconds(5));
 
         var passo = anna.Last<RevealStepMessage>();
         Assert.Equal(0, passo.PhraseIndex);
         Assert.Equal(2, passo.TotalPhrases);
         Assert.Single(passo.RevealedSlots);
+    }
+
+    [Fact]
+    public async Task UnGiocatoreRifiutatoPerchePartitaAvviataNonRestaSottoscrittoAllaStanza()
+    {
+        await using var anna = await ConnettiAsync();
+        await using var bruno = await ConnettiAsync();
+        await using var carla = await ConnettiAsync();
+
+        var codice = await anna.Connection.InvokeAsync<string>(
+            "CreateRoom", new CreateRoomRequest(ProtocolVersion.Current, Guid.NewGuid(), "Anna"));
+
+        await bruno.Connection.InvokeAsync(
+            "JoinRoom", new JoinRoomRequest(ProtocolVersion.Current, Guid.NewGuid(), "Bruno", codice));
+        await bruno.WaitFor<RoomStateMessage>(TimeSpan.FromSeconds(5));
+
+        await anna.Connection.InvokeAsync("StartGame", new StartGameRequest(codice));
+        await anna.WaitFor<SlotRequestMessage>(TimeSpan.FromSeconds(5));
+
+        // Carla prova a entrare a partita già avviata (spec I2): deve essere
+        // rifiutata, e soprattutto non deve restare iscritta ai gruppi
+        // SignalR della stanza. Prima del fix, EntraAsync veniva eseguito
+        // prima del controllo di fase: chi veniva rifiutato restava comunque
+        // nel gruppo e avrebbe ricevuto ogni messaggio successivo di una
+        // partita a cui non partecipa.
+        await Assert.ThrowsAsync<HubException>(() =>
+            carla.Connection.InvokeAsync(
+                "JoinRoom", new JoinRoomRequest(ProtocolVersion.Current, Guid.NewGuid(), "Carla", codice)));
+
+        // Un broadcast alla stanza avviene subito dopo (il progresso del
+        // round): se Carla fosse rimasta iscritta lo riceverebbe.
+        await anna.Connection.InvokeAsync("SubmitSlot", new SubmitSlotRequest(codice, "anna"));
+        await bruno.WaitFor<RoundProgressMessage>(TimeSpan.FromSeconds(5));
+
+        Assert.Empty(carla.Received);
     }
 
     [Fact]

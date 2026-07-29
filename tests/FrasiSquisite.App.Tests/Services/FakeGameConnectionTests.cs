@@ -29,4 +29,29 @@ public class FakeGameConnectionTests
 
         Assert.Same(atteso, ricevuto);
     }
+
+    [Fact]
+    public void EmetteLInterruzioneDiConnessioneVersoGliIscritti()
+    {
+        var connessione = new FakeGameConnection();
+        var sollevato = false;
+        connessione.ConnectionInterrupted += () => sollevato = true;
+
+        connessione.EmitConnectionInterrupted();
+
+        Assert.True(sollevato);
+    }
+
+    [Fact]
+    public async Task NextFailureLanciaUnaVoltaSolaEPoiSiAzzera()
+    {
+        var connessione = new FakeGameConnection { NextFailure = new InvalidOperationException("boom") };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => connessione.CreateRoomAsync(Guid.NewGuid(), "Anna"));
+
+        var codice = await connessione.CreateRoomAsync(Guid.NewGuid(), "Anna");
+
+        Assert.Equal(connessione.NextRoomCode, codice);
+    }
 }

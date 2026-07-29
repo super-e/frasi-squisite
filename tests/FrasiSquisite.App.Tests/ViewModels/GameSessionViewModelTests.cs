@@ -1,5 +1,6 @@
 using FrasiSquisite.App.ViewModels;
 using FrasiSquisite.Shared.Protocol;
+using Microsoft.AspNetCore.SignalR;
 using Xunit;
 
 namespace FrasiSquisite.App.Tests.ViewModels;
@@ -49,6 +50,31 @@ public class GameSessionViewModelTests
         Assert.Equal(ScreenState.Lobby, vm.Screen);
         Assert.Equal(2, vm.Players.Count);
         Assert.True(vm.IsHost);
+    }
+
+    // C1: senza il ramo "Reveal", una RoomStateMessage di fine partita non
+    // sposta mai nessuno dalla schermata di attesa (il motore non manda più
+    // SlotRequestMessage dopo l'ultimo round, e RevealStepMessage arriva solo
+    // in risposta a un comando che solo l'host può inviare): il gioco resta
+    // bloccato per sempre su "Aspettiamo gli altri…". "Writing" resta
+    // deliberatamente fuori: una RoomStateMessage arriva anche a partita in
+    // corso (es. qualcuno si disconnette) e rimapparla strapperebbe dalla
+    // schermata di attesa chi ha già inviato per il round.
+    [Theory]
+    [InlineData("Lobby", ScreenState.Lobby)]
+    [InlineData("Writing", ScreenState.Home)]
+    [InlineData("Reveal", ScreenState.Reveal)]
+    [InlineData("Finished", ScreenState.Home)]
+    public void LoStatoDellaStanzaCambiaSchermataSoloPerLeFasiGestite(string fase, ScreenState atteso)
+    {
+        var (vm, conn) = Crea();
+
+        conn.Emit(new RoomStateMessage(
+            "ABCD", fase,
+            [new PlayerView(Anna, "Anna", true, true)],
+            "surrealista-classico", 5));
+
+        Assert.Equal(atteso, vm.Screen);
     }
 
     [Fact]
@@ -189,5 +215,68 @@ public class GameSessionViewModelTests
         conn.Emit(new ErrorMessage("NOT_HOST", "Solo chi ha creato la stanza può avviare."));
 
         Assert.Equal("Solo chi ha creato la stanza può avviare.", vm.ErrorText);
+    }
+
+    // C2: [RelayCommand] genera un AsyncRelayCommand le cui opzioni di
+    // default non fanno fluire l'eccezione allo scheduler: un'azione utente
+    // di tutti i giorni (URL sbagliato, stanza sparita, server riavviato)
+    // altrimenti farebbe esplodere il processo. Il fatto stesso che
+    // ExecuteAsync qui sotto non lanci è la prova che l'eccezione non si
+    // propaga più.
+    [Fact]
+    public async Task UnGuastoDiTrasportoNellaCreazioneDellaStanzaVieneMostratoENonPropaga()
+    {
+        var (vm, conn) = Crea();
+        conn.NextFailure = new HttpRequestException("host irraggiungibile");
+        vm.Nickname = "Anna";
+
+        await vm.CreateRoomCommand.ExecuteAsync(null);
+
+        Assert.False(string.IsNullOrEmpty(vm.ErrorText));
+        Assert.NotEqual("host irraggiungibile", vm.ErrorText);
+    }
+
+    [Fact]
+    public async Task UnHubExceptionMostraIlMessaggioDelServerVerbatim()
+    {
+        var (vm, conn) = Crea();
+        conn.NextFailure = new HubException("Stanza non trovata.");
+        vm.JoinCode = "ABCD";
+
+        await vm.JoinRoomCommand.ExecuteAsync(null);
+
+        Assert.Equal("Stanza non trovata.", vm.ErrorText);
+    }
+
+    [Fact]
+    public async Task UnGuastoNellInvioDellaCasellaVieneMostratoENonPortaInAttesa()
+    {
+        var (vm, conn) = Crea();
+        vm.RoomCode = "ABCD";
+        conn.Emit(new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio"));
+        vm.SlotText = "Il cadavere";
+        conn.NextFailure = new HubException("Non è il momento di scrivere.");
+
+        await vm.SubmitSlotCommand.ExecuteAsync(null);
+
+        Assert.Equal("Non è il momento di scrivere.", vm.ErrorText);
+        Assert.Equal(ScreenState.Writing, vm.Screen);
+    }
+
+    // I1: un riavvio del trasporto (.WithAutomaticReconnect) apre una
+    // connessione con un nuovo ConnectionId che non recupera l'appartenenza
+    // ai gruppi SignalR della stanza: da quel momento un bot gioca al posto
+    // del giocatore, ma senza questo avviso lo schermo non lo direbbe mai
+    // (IsConnected resterebbe true, nessun messaggio in arrivo lo segnala).
+    [Fact]
+    public void UnInterruzioneDiConnessioneMostraUnAvviso()
+    {
+        var (vm, conn) = Crea();
+
+        Assert.Equal(string.Empty, vm.ConnectionBanner);
+
+        conn.EmitConnectionInterrupted();
+
+        Assert.False(string.IsNullOrEmpty(vm.ConnectionBanner));
     }
 }

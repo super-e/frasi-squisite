@@ -14,6 +14,9 @@
             <Label Text="{Binding ErrorText}" TextColor="OrangeRed"
                    IsVisible="{Binding ErrorText, Converter={StaticResource NotEmpty}}" />
 
+            <Label Text="{Binding ConnectionBanner}" TextColor="OrangeRed"
+                   IsVisible="{Binding ConnectionBanner, Converter={StaticResource NotEmpty}}" />
+
             <!-- Home -->
             <VerticalStackLayout Spacing="12" IsVisible="{Binding Screen, Converter={StaticResource IsScreen}, ConverterParameter=Home}">
                 <Label Text="Frasi Squisite" FontSize="32" HorizontalOptions="Center" />

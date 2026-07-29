@@ -250,7 +250,18 @@ public sealed class GameEngine(IGameMode mode, IWordPool pool, IRandomSource ran
                 RevealSlotCount = 0,
             };
 
-            return new EngineResult(reveal, [new BroadcastToRoom(RoomState(reveal))]);
+            // Nessuna SlotRequestMessage arriva più: senza altri messaggi ogni
+            // client resterebbe fermo sulla schermata di attesa (Screen non
+            // cambia mai da solo). Il RoundProgressMessage saturo evita che
+            // l'attesa resti bloccata a N-1/N, e la RevealStepMessage iniziale
+            // - vuota, nessuna casella ancora scoperta - è ciò che porta tutti
+            // sulla schermata di reveal: solo l'host può poi far avanzare lo
+            // scoprimento vero e proprio (RevealAdvanceRequested).
+            return new EngineResult(reveal, [
+                new BroadcastToRoom(RoomState(reveal)),
+                new BroadcastToRoom(new RoundProgressMessage(state.Round, state.Players.Count, state.Players.Count)),
+                new BroadcastToRoom(new RevealStepMessage(0, reveal.Phrases.Count, [], false, [])),
+            ]);
         }
 
         List<Effect> effetti = [
