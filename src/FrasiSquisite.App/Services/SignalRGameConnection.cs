@@ -50,11 +50,15 @@ public sealed class SignalRGameConnection : IGameConnection, IAsyncDisposable
         {
             MainThread.BeginInvokeOnMainThread(() => MessageReceived?.Invoke(messaggio));
         }
-        catch (Exception)
+        catch (Exception ex)
         {
             // Nessun dispatcher disponibile (es. fuori da un contesto applicativo
             // MAUI, come in test o strumenti diagnostici): meglio consegnare
             // comunque il messaggio piuttosto che far crashare il processo.
+            // La traccia serve solo in debug: non deve indebolire la garanzia
+            // "non crashare mai il processo", quindi resta un semplice log.
+            System.Diagnostics.Debug.WriteLine(
+                $"SollevaMessageReceived: nessun dispatcher MAUI disponibile, invocazione diretta. {ex}");
             MessageReceived?.Invoke(messaggio);
         }
     }

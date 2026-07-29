@@ -159,4 +159,35 @@ public class GameSessionViewModelTests
         Assert.Equal(ScreenState.Lobby, vm.Screen);
         Assert.Equal(string.Empty, vm.ErrorText);
     }
+
+    [Fact]
+    public void UnErroreNonSopravviveAUnMessaggioSullaStessaSchermata()
+    {
+        var (vm, conn) = Crea();
+
+        // Si arriva sulla schermata di Reveal e ci si resta: RevealStepMessage
+        // imposta Screen sullo stesso valore che ha già, quindi il setter
+        // generato non invoca OnScreenChanged. La regola di pulizia
+        // dell'errore non può quindi dipendere dal cambio di schermata.
+        conn.Emit(new RevealStepMessage(0, 3, ["Il cadavere"], false, []));
+        Assert.Equal(ScreenState.Reveal, vm.Screen);
+
+        conn.Emit(new ErrorMessage("TIMEOUT", "Richiesta scaduta, riprova."));
+        Assert.False(string.IsNullOrEmpty(vm.ErrorText));
+
+        conn.Emit(new RevealStepMessage(0, 3, ["Il cadavere", "squisito"], false, []));
+
+        Assert.Equal(ScreenState.Reveal, vm.Screen);
+        Assert.Equal(string.Empty, vm.ErrorText);
+    }
+
+    [Fact]
+    public void UnErroreNonVieneCancellatoDalProprioArrivo()
+    {
+        var (vm, conn) = Crea();
+
+        conn.Emit(new ErrorMessage("NOT_HOST", "Solo chi ha creato la stanza può avviare."));
+
+        Assert.Equal("Solo chi ha creato la stanza può avviare.", vm.ErrorText);
+    }
 }
