@@ -41,6 +41,7 @@
 - `Model/Player.cs`, `Model/Slot.cs`, `Model/Phrase.cs`, `Model/RoomPhase.cs`, `Model/GameState.cs`
 - `Randomness/IRandomSource.cs`, `Randomness/SystemRandomSource.cs`, `Randomness/SeededRandomSource.cs`
 - `Modes/SlotAssignment.cs`, `Modes/IGameMode.cs`, `Modes/RoleSchemaMode.cs`
+- `Filling/IWordPool.cs`, `Filling/StaticWordPool.cs` — dizionario di riserva per il bot che subentra a chi abbandona
 - `Engine/GameEvent.cs` — eventi in ingresso al motore
 - `Engine/Effect.cs` — effetti in uscita dal motore
 - `Engine/EngineResult.cs`
@@ -1976,6 +1977,561 @@ git commit -m "feat(domain): avvio partita, avanzamento round e test di segretez
 
 ---
 
+## Task 6b: Abbandono durante la partita — il bot subentra
+
+**Files:**
+- Create: `src/FrasiSquisite.Domain/Filling/IWordPool.cs`
+- Create: `src/FrasiSquisite.Domain/Filling/StaticWordPool.cs`
+- Modify: `src/FrasiSquisite.Domain/Engine/GameEngine.cs`
+- Modify: `tests/FrasiSquisite.Domain.Tests/Engine/SecretezzaTests.cs`
+- Modify: `tests/FrasiSquisite.Domain.Tests/Engine/LobbyTests.cs`, `RoundTests.cs` (solo la costruzione del motore)
+- Test: `tests/FrasiSquisite.Domain.Tests/Engine/AbbandonoTests.cs`
+
+**Interfaces:**
+- Consumes: `GameState`, `Player`, `IGameMode`, `IRandomSource`, `SlotTextValidator`
+- Produces:
+  - `interface IWordPool { string Take(string ruolo, IRandomSource random); }`
+  - `class StaticWordPool : IWordPool`
+  - `GameEngine` cambia costruttore: `GameEngine(IGameMode mode, IWordPool pool, IRandomSource random)`
+
+**Perché.** La spec §2.2 stabilisce che N è fissato a `StartGame` e non cambia. L'implementazione del Task 6 invece rimuove il giocatore uscito da `Players`, e questo produce tre guasti reali: il round avanza pur mancando qualcuno lasciando caselle `null` per sempre; le assegnazioni si rimappano su un N diverso e un giocatore può sovrascrivere una casella già scritta; con due giocatori l'uscita di uno fa lanciare `ArgumentOutOfRangeException` dal `ThrowIfLessThan(playerCount, 2)` di `AssignSlot`.
+
+La soluzione: **chi si disconnette mantiene il posto e un bot gioca per lui.** In `Lobby` uscire rimuove ancora il giocatore — lì nessuna partita è in corso e N non è ancora fissato.
+
+Il dizionario statico è quello che la spec §8.2 prevede come riserva quando l'AI è irraggiungibile. Arriva qui in anticipo rispetto alla fase 4 perché il bot ne ha bisogno adesso; in fase 4 l'`IAiProvider` diventa semplicemente un'altra implementazione dietro la stessa idea, senza che il motore cambi.
+
+- [ ] **Step 1: Scrivere i test che falliscono**
+
+Crea `tests/FrasiSquisite.Domain.Tests/Engine/AbbandonoTests.cs`:
+
+```csharp
+using FrasiSquisite.Domain.Engine;
+using FrasiSquisite.Domain.Filling;
+using FrasiSquisite.Domain.Model;
+using FrasiSquisite.Domain.Modes;
+using FrasiSquisite.Domain.Randomness;
+using FrasiSquisite.Shared.Protocol;
+using Xunit;
+
+namespace FrasiSquisite.Domain.Tests.Engine;
+
+public class AbbandonoTests
+{
+    private readonly IGameEngine _motore =
+        new GameEngine(new RoleSchemaMode(), new StaticWordPool(), new SeededRandomSource(1));
+
+    private static Guid Giocatore(int i) => Guid.Parse($"00000000-0000-0000-0000-{i:D12}");
+
+    private GameState PartitaAvviata(int n, int k)
+    {
+        var stato = GameState.NewRoom("ABCD", TestSchemas.WithSlots(k));
+
+        for (var i = 0; i < n; i++)
+        {
+            stato = _motore.Handle(stato, new PlayerJoined(Giocatore(i), $"G{i}")).State;
+        }
+
+        return _motore.Handle(stato, new GameStartRequested(Giocatore(0))).State;
+    }
+
+    [Fact]
+    public void InLobbyUscireRimuoveIlGiocatore()
+    {
+        var stato = GameState.NewRoom("ABCD", TestSchemas.WithSlots(5));
+        stato = _motore.Handle(stato, new PlayerJoined(Giocatore(0), "G0")).State;
+        stato = _motore.Handle(stato, new PlayerJoined(Giocatore(1), "G1")).State;
+
+        var risultato = _motore.Handle(stato, new PlayerLeft(Giocatore(1)));
+
+        Assert.Single(risultato.State.Players);
+    }
+
+    [Fact]
+    public void InPartitaUscireNonRimuoveIlGiocatoreMaLoMarcaDisconnesso()
+    {
+        var stato = PartitaAvviata(n: 3, k: 5);
+
+        var risultato = _motore.Handle(stato, new PlayerLeft(Giocatore(1)));
+
+        Assert.Equal(3, risultato.State.Players.Count);
+        Assert.False(risultato.State.FindPlayer(Giocatore(1))!.IsConnected);
+    }
+
+    [Fact]
+    public void IlNumeroDiFrasiNonCambiaQuandoQualcunoAbbandona()
+    {
+        var stato = PartitaAvviata(n: 3, k: 5);
+
+        var risultato = _motore.Handle(stato, new PlayerLeft(Giocatore(1)));
+
+        Assert.Equal(3, risultato.State.Phrases.Count);
+    }
+
+    [Fact]
+    public void LaCasellaDiChiAbbandonaVieneRiempitaDalBot()
+    {
+        var stato = PartitaAvviata(n: 3, k: 5);
+
+        // Round 0, giocatore 1 -> frase (1 + 0) % 3 = 1, casella 0.
+        var risultato = _motore.Handle(stato, new PlayerLeft(Giocatore(1)));
+
+        var slot = risultato.State.Phrases[1].Slots[0];
+        Assert.NotNull(slot);
+        Assert.False(string.IsNullOrWhiteSpace(slot.Text));
+        Assert.Equal(Giocatore(1), slot.AuthorId);
+    }
+
+    [Fact]
+    public void ChiAbbandonaNonBloccaLAvanzamentoDelRound()
+    {
+        var stato = PartitaAvviata(n: 3, k: 5);
+        stato = _motore.Handle(stato, new PlayerLeft(Giocatore(1))).State;
+
+        stato = _motore.Handle(stato, new SlotSubmitted(Giocatore(0), "uno")).State;
+        var risultato = _motore.Handle(stato, new SlotSubmitted(Giocatore(2), "due"));
+
+        Assert.Equal(1, risultato.State.Round);
+    }
+
+    [Fact]
+    public void IlBotRiempieAncheINuoviRoundSenzaCheNessunoAspetti()
+    {
+        const int n = 3;
+        const int k = 4;
+        var stato = PartitaAvviata(n, k);
+        stato = _motore.Handle(stato, new PlayerLeft(Giocatore(1))).State;
+
+        for (var round = 0; round < k; round++)
+        {
+            foreach (var g in (int[])[0, 2])
+            {
+                stato = _motore.Handle(stato, new SlotSubmitted(Giocatore(g), $"r{round}g{g}")).State;
+            }
+        }
+
+        Assert.Equal(RoomPhase.Reveal, stato.Phase);
+        Assert.All(stato.Phrases, f => Assert.True(f.IsComplete));
+    }
+
+    [Fact]
+    public void ConDueGiocatoriLUscitaDiUnoNonFaEsplodereIlMotore()
+    {
+        var stato = PartitaAvviata(n: 2, k: 3);
+        stato = _motore.Handle(stato, new PlayerLeft(Giocatore(1))).State;
+
+        var risultato = _motore.Handle(stato, new SlotSubmitted(Giocatore(0), "sopravvissuto"));
+
+        Assert.Equal(1, risultato.State.Round);
+        Assert.Empty(risultato.MessagesTo<ErrorMessage>(Giocatore(0)));
+    }
+
+    [Fact]
+    public void SeAbbandonaLHostIlRuoloPassaAUnConnesso()
+    {
+        var stato = PartitaAvviata(n: 3, k: 5);
+
+        var risultato = _motore.Handle(stato, new PlayerLeft(Giocatore(0)));
+
+        Assert.NotEqual(Giocatore(0), risultato.State.HostId);
+        Assert.True(risultato.State.FindPlayer(risultato.State.HostId)!.IsConnected);
+    }
+
+    [Fact]
+    public void ChiEGiaDisconnessoNonVieneRiempitoDueVolte()
+    {
+        var stato = PartitaAvviata(n: 3, k: 5);
+        stato = _motore.Handle(stato, new PlayerLeft(Giocatore(1))).State;
+        var testoBot = stato.Phrases[1].Slots[0]!.Text;
+
+        var risultato = _motore.Handle(stato, new PlayerLeft(Giocatore(1)));
+
+        Assert.Equal(testoBot, risultato.State.Phrases[1].Slots[0]!.Text);
+    }
+}
+```
+
+Crea inoltre `tests/FrasiSquisite.Domain.Tests/Filling/StaticWordPoolTests.cs`:
+
+```csharp
+using FrasiSquisite.Domain.Filling;
+using FrasiSquisite.Domain.Randomness;
+using FrasiSquisite.Shared.Validation;
+using Xunit;
+
+namespace FrasiSquisite.Domain.Tests.Filling;
+
+public class StaticWordPoolTests
+{
+    private readonly IWordPool _pool = new StaticWordPool();
+
+    [Theory]
+    [InlineData("Soggetto")]
+    [InlineData("Aggettivo")]
+    [InlineData("Verbo")]
+    [InlineData("Complemento")]
+    public void RestituisceUnaParolaPerIRuoliNoti(string ruolo)
+    {
+        var parola = _pool.Take(ruolo, new SeededRandomSource(1));
+
+        Assert.False(string.IsNullOrWhiteSpace(parola));
+    }
+
+    [Fact]
+    public void PerUnRuoloSconosciutoRicadeSuUnaListaGenerica()
+    {
+        var parola = _pool.Take("RuoloCheNonEsiste", new SeededRandomSource(1));
+
+        Assert.False(string.IsNullOrWhiteSpace(parola));
+    }
+
+    /// <summary>
+    /// Il motore riapplica la validazione a ogni casella: se il dizionario
+    /// contenesse una parola non valida, il riempimento del bot fallirebbe in
+    /// partita e non qui.
+    /// </summary>
+    [Theory]
+    [InlineData("Soggetto")]
+    [InlineData("Aggettivo")]
+    [InlineData("Verbo")]
+    [InlineData("Complemento")]
+    [InlineData("RuoloCheNonEsiste")]
+    public void OgniParolaDelDizionarioSuperaLaValidazione(string ruolo)
+    {
+        for (var seed = 0; seed < 50; seed++)
+        {
+            var parola = _pool.Take(ruolo, new SeededRandomSource(seed));
+
+            Assert.True(SlotTextValidator.Validate(parola).IsValid, $"parola non valida: '{parola}'");
+        }
+    }
+
+    [Fact]
+    public void ConLoStessoSeedRestituisceLaStessaParola()
+    {
+        Assert.Equal(
+            _pool.Take("Soggetto", new SeededRandomSource(42)),
+            _pool.Take("Soggetto", new SeededRandomSource(42)));
+    }
+}
+```
+
+- [ ] **Step 2: Correggere l'ordinamento del test di segretezza**
+
+In `tests/FrasiSquisite.Domain.Tests/Engine/SecretezzaTests.cs`, `testiSegreti.Add(segreto)` viene eseguito **dopo** il blocco di asserzioni, quindi i messaggi prodotti da una chiamata vengono confrontati solo con i segreti dei giri precedenti — mai con quello appena inviato. La fuga più probabile in assoluto, un messaggio che rimbalza in broadcast il testo appena scritto, comparirebbe esattamente e solo lì. Sposta l'aggiunta **prima** delle asserzioni:
+
+```csharp
+                var segreto = $"SEGRETO-r{round}-g{g}";
+                var risultato = _motore.Handle(stato, new SlotSubmitted(Giocatore(g), segreto));
+                stato = risultato.State;
+
+                testiSegreti.Add(segreto);
+
+                // Ogni messaggio emesso finché siamo in scrittura non deve
+                // contenere nessuno dei testi inviati, incluso quello appena
+                // scritto: la fuga tipica è un broadcast che lo rimbalza.
+                if (stato.Phase == RoomPhase.Writing)
+                {
+                    var serializzati = risultato.AllMessages()
+                        .Select(m => System.Text.Json.JsonSerializer.Serialize(m))
+                        .ToList();
+
+                    foreach (var precedente in testiSegreti)
+                    {
+                        Assert.All(serializzati, s =>
+                            Assert.DoesNotContain(precedente, s, StringComparison.Ordinal));
+                    }
+                }
+```
+
+- [ ] **Step 3: Eseguire i test e verificare che falliscano**
+
+Run: `dotnet test tests/FrasiSquisite.Domain.Tests --nologo`
+
+Expected: FAIL in compilazione — `CS0246` su `FrasiSquisite.Domain.Filling`.
+
+- [ ] **Step 4: Creare il dizionario di riserva**
+
+`src/FrasiSquisite.Domain/Filling/IWordPool.cs`:
+
+```csharp
+using FrasiSquisite.Domain.Randomness;
+
+namespace FrasiSquisite.Domain.Filling;
+
+/// <summary>
+/// Fonte di parole per riempire la casella di chi non è in grado di scriverla.
+/// In fase 4 l'AI diventerà un'altra implementazione di questa idea, senza che
+/// il motore cambi (spec §5, §8.2).
+/// </summary>
+public interface IWordPool
+{
+    string Take(string ruolo, IRandomSource random);
+}
+```
+
+`src/FrasiSquisite.Domain/Filling/StaticWordPool.cs`:
+
+```csharp
+using System.Collections.Frozen;
+using FrasiSquisite.Domain.Randomness;
+
+namespace FrasiSquisite.Domain.Filling;
+
+/// <summary>
+/// Dizionario compilato nel binario. Deve funzionare senza rete e senza AI:
+/// è la garanzia che una partita non si blocchi mai (spec §8.5).
+/// </summary>
+public sealed class StaticWordPool : IWordPool
+{
+    private static readonly FrozenDictionary<string, string[]> PerRuolo =
+        new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Soggetto"] = ["Il notaio", "La pantofola", "Un tram", "Il vescovo", "La zuppa", "Un ombrello"],
+            ["Aggettivo"] = ["distratto", "elettrico", "sbilenco", "solenne", "tiepido", "invisibile"],
+            ["Verbo"] = ["divora", "sussurra", "scavalca", "dimentica", "corteggia", "rimpiange"],
+            ["Complemento"] = ["il tramonto", "una scala", "il silenzio", "tre valigie", "la domenica", "un lampione"],
+            ["Avverbio"] = ["lentamente", "di nascosto", "per sbaglio", "controvoglia", "all'improvviso"],
+        }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
+
+    private static readonly string[] Generico =
+        ["qualcosa", "un tale", "altrove", "comunque", "una cosa", "chissà"];
+
+    public string Take(string ruolo, IRandomSource random)
+    {
+        ArgumentNullException.ThrowIfNull(random);
+
+        var parole = PerRuolo.TryGetValue(ruolo, out var perRuolo) ? perRuolo : Generico;
+
+        return parole[random.Next(parole.Length)];
+    }
+}
+```
+
+- [ ] **Step 5: Modificare il motore**
+
+In `src/FrasiSquisite.Domain/Engine/GameEngine.cs`, cambia il costruttore e aggiungi gli using:
+
+```csharp
+using FrasiSquisite.Domain.Filling;
+using FrasiSquisite.Domain.Randomness;
+```
+
+```csharp
+public sealed class GameEngine(IGameMode mode, IWordPool pool, IRandomSource random) : IGameEngine
+{
+    public const int MinPlayers = 2;
+
+    private readonly IGameMode _mode = mode;
+    private readonly IWordPool _pool = pool;
+    private readonly IRandomSource _random = random;
+```
+
+Sostituisci `OnPlayerLeft` (che era `static`; ora non può esserlo più) con:
+
+```csharp
+    private EngineResult OnPlayerLeft(GameState state, PlayerLeft e)
+    {
+        var uscente = state.FindPlayer(e.PlayerId);
+        if (uscente is null)
+        {
+            return EngineResult.NoChange(state);
+        }
+
+        // In lobby si esce davvero: N non è ancora fissato.
+        if (state.Phase == RoomPhase.Lobby)
+        {
+            var rimasti = state.Players.Where(p => p.Id != e.PlayerId).ToList();
+
+            var host = state.HostId == e.PlayerId
+                ? rimasti.OrderBy(p => p.JoinOrder).FirstOrDefault()?.Id ?? Guid.Empty
+                : state.HostId;
+
+            var senza = state with { Players = rimasti, HostId = host };
+
+            return new EngineResult(senza, [new BroadcastToRoom(RoomState(senza))]);
+        }
+
+        // A partita iniziata il posto resta occupato: N è fissato (spec §2.2).
+        // Il giocatore viene marcato disconnesso e da qui in poi gioca il bot.
+        if (!uscente.IsConnected)
+        {
+            return EngineResult.NoChange(state);
+        }
+
+        var giocatori = state.Players
+            .Select(p => p.Id == e.PlayerId ? p with { IsConnected = false } : p)
+            .ToList();
+
+        var nuovoHost = state.HostId == e.PlayerId
+            ? giocatori.Where(p => p.IsConnected).OrderBy(p => p.JoinOrder).FirstOrDefault()?.Id ?? state.HostId
+            : state.HostId;
+
+        var aggiornato = state with { Players = giocatori, HostId = nuovoHost };
+
+        List<Effect> effetti = [new BroadcastToRoom(RoomState(aggiornato))];
+
+        if (aggiornato.Phase == RoomPhase.Writing)
+        {
+            return FillDisconnected(aggiornato, effetti);
+        }
+
+        return new EngineResult(aggiornato, effetti);
+    }
+```
+
+Aggiungi i due metodi di riempimento:
+
+```csharp
+    /// <summary>
+    /// Riempie con il bot la casella di ogni giocatore disconnesso che non ha
+    /// ancora inviato in questo round, e fa avanzare il round se con questo
+    /// tutti hanno una casella. Nessuno resta mai in attesa di chi non c'è.
+    /// </summary>
+    private EngineResult FillDisconnected(GameState state, List<Effect> effetti)
+    {
+        var corrente = state;
+
+        foreach (var giocatore in state.Players.Where(p => !p.IsConnected))
+        {
+            if (corrente.SubmittedThisRound.Contains(giocatore.Id))
+            {
+                continue;
+            }
+
+            corrente = ApplySlot(corrente, giocatore.Id, BotWord(corrente, giocatore.Id));
+        }
+
+        if (corrente.SubmittedThisRound.Count < corrente.Players.Count)
+        {
+            effetti.Add(new BroadcastToRoom(new RoundProgressMessage(
+                corrente.Round, corrente.SubmittedThisRound.Count, corrente.Players.Count)));
+
+            return new EngineResult(corrente, effetti);
+        }
+
+        var avanzato = AdvanceRound(corrente);
+
+        return new EngineResult(avanzato.State, [.. effetti, .. avanzato.Effects]);
+    }
+
+    private string BotWord(GameState state, Guid playerId)
+    {
+        var indice = state.IndexOfPlayer(playerId);
+        var assegnazione = _mode.AssignSlot(state.Round, indice, state.Players.Count, state.Schema);
+
+        return _pool.Take(state.Schema.Caselle[assegnazione.SlotIndex].Ruolo, _random);
+    }
+```
+
+Estrai da `OnSlotSubmitted` la scrittura della casella in un metodo riusabile, e usalo da entrambe le strade:
+
+```csharp
+    private GameState ApplySlot(GameState state, Guid playerId, string testoNormalizzato)
+    {
+        var indice = state.IndexOfPlayer(playerId);
+        var assegnazione = _mode.AssignSlot(state.Round, indice, state.Players.Count, state.Schema);
+
+        var frasi = state.Phrases.ToArray();
+        frasi[assegnazione.PhraseIndex] = frasi[assegnazione.PhraseIndex]
+            .With(assegnazione.SlotIndex, new Slot(playerId, testoNormalizzato));
+
+        return state with
+        {
+            Phrases = frasi,
+            SubmittedThisRound = new HashSet<Guid>(state.SubmittedThisRound) { playerId },
+        };
+    }
+```
+
+Il corpo di `OnSlotSubmitted`, dopo la validazione, diventa:
+
+```csharp
+        var nuovo = ApplySlot(state, e.PlayerId, esito.Normalized);
+
+        if (nuovo.SubmittedThisRound.Count < nuovo.Players.Count)
+        {
+            return new EngineResult(nuovo, [
+                new BroadcastToRoom(new RoundProgressMessage(
+                    nuovo.Round, nuovo.SubmittedThisRound.Count, nuovo.Players.Count)),
+            ]);
+        }
+
+        return AdvanceRound(nuovo);
+```
+
+Infine, in `AdvanceRound`, dopo aver costruito lo stato del round successivo e prima di emettere le richieste di casella, riempi subito chi è già disconnesso — altrimenti al round nuovo la partita tornerebbe ad aspettarlo:
+
+```csharp
+    private EngineResult AdvanceRound(GameState state)
+    {
+        var prossimo = state with
+        {
+            Round = state.Round + 1,
+            SubmittedThisRound = new HashSet<Guid>(),
+        };
+
+        if (_mode.IsComplete(prossimo))
+        {
+            var reveal = prossimo with
+            {
+                Phase = RoomPhase.Reveal,
+                RevealPhraseIndex = 0,
+                RevealSlotCount = 0,
+            };
+
+            return new EngineResult(reveal, [new BroadcastToRoom(RoomState(reveal))]);
+        }
+
+        List<Effect> effetti = [
+            new BroadcastToRoom(new RoundProgressMessage(state.Round, state.Players.Count, state.Players.Count)),
+        ];
+        effetti.AddRange(SlotRequests(prossimo));
+
+        if (prossimo.Players.Any(p => !p.IsConnected))
+        {
+            return FillDisconnected(prossimo, effetti);
+        }
+
+        return new EngineResult(prossimo, effetti);
+    }
+```
+
+`SlotRequests` continua a inviare la richiesta a tutti, disconnessi inclusi: il messaggio semplicemente non raggiunge nessuno, e mantenere il ciclo uniforme evita un ramo condizionale in più nel punto più delicato del motore.
+
+- [ ] **Step 6: Aggiornare la costruzione del motore nei test esistenti**
+
+In `LobbyTests.cs`, `RoundTests.cs` e `SecretezzaTests.cs` sostituisci
+
+```csharp
+    private readonly IGameEngine _motore = new GameEngine(new RoleSchemaMode());
+```
+
+con
+
+```csharp
+    private readonly IGameEngine _motore =
+        new GameEngine(new RoleSchemaMode(), new StaticWordPool(), new SeededRandomSource(1));
+```
+
+aggiungendo gli using `FrasiSquisite.Domain.Filling` e `FrasiSquisite.Domain.Randomness`.
+
+Attenzione a `LobbyTests.QuandoEsceLHostIlRuoloPassaAlPresenteDaPiuTempo` e `QuandoEsceUnNonHostLHostNonCambia`: restano validi perché operano in `Lobby`, dove uscire rimuove ancora davvero il giocatore.
+
+- [ ] **Step 7: Eseguire i test e verificare che passino**
+
+Run: `dotnet test tests/FrasiSquisite.Domain.Tests --nologo`
+
+Expected: PASS, 306 test superati (284 precedenti + 9 `AbbandonoTests` + 13 `StaticWordPoolTests`).
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add src/FrasiSquisite.Domain tests/FrasiSquisite.Domain.Tests
+git commit -m "fix(domain): il bot subentra a chi abbandona invece di rimuoverlo"
+```
+
+---
+
 ## Task 7: Motore — reveal
 
 **Files:**
@@ -1994,8 +2550,10 @@ Crea `tests/FrasiSquisite.Domain.Tests/Engine/RevealTests.cs`:
 
 ```csharp
 using FrasiSquisite.Domain.Engine;
+using FrasiSquisite.Domain.Filling;
 using FrasiSquisite.Domain.Model;
 using FrasiSquisite.Domain.Modes;
+using FrasiSquisite.Domain.Randomness;
 using FrasiSquisite.Shared.Protocol;
 using Xunit;
 
@@ -2006,7 +2564,8 @@ public class RevealTests
     private const int N = 3;
     private const int K = 3;
 
-    private readonly IGameEngine _motore = new GameEngine(new RoleSchemaMode());
+    private readonly IGameEngine _motore =
+        new GameEngine(new RoleSchemaMode(), new StaticWordPool(), new SeededRandomSource(1));
 
     private static Guid Giocatore(int i) => Guid.Parse($"00000000-0000-0000-0000-{i:D12}");
 
@@ -2199,7 +2758,7 @@ e aggiungi il metodo:
 
 Run: `dotnet test tests/FrasiSquisite.Domain.Tests --nologo`
 
-Expected: PASS, 289 test superati.
+Expected: PASS, 311 test superati.
 
 - [ ] **Step 5: Commit**
 
@@ -2861,6 +3420,7 @@ Sostituisci `src/FrasiSquisite.Server/Program.cs` con:
 
 ```csharp
 using FrasiSquisite.Domain.Engine;
+using FrasiSquisite.Domain.Filling;
 using FrasiSquisite.Domain.Modes;
 using FrasiSquisite.Domain.Randomness;
 using FrasiSquisite.Server.Realtime;
@@ -2873,6 +3433,7 @@ builder.Services.AddSignalR();
 
 builder.Services.AddSingleton<ISchemaCatalog, EmbeddedSchemaCatalog>();
 builder.Services.AddSingleton<IRandomSource, SystemRandomSource>();
+builder.Services.AddSingleton<IWordPool, StaticWordPool>();
 builder.Services.AddSingleton<IGameMode, RoleSchemaMode>();
 builder.Services.AddSingleton<IGameEngine, GameEngine>();
 builder.Services.AddSingleton<RoomCodeGenerator>();
