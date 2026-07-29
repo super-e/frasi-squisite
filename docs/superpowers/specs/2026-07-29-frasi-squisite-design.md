@@ -86,8 +86,7 @@ L'autore di ciascuna casella viene rivelato solo **dopo** che la frase è
 completa, mai durante lo scoprimento: sapere chi ha scritto la casella
 successiva ne anticiperebbe il contenuto.
 
-Poi ogni giocatore umano vota la frase preferita (non la propria, se la
-riconosce — non c'è modo di impedirlo né serve). I bot non votano. Si proclama
+Poi ogni giocatore umano vota la frase preferita. I bot non votano. Si proclama
 la frase vincitrice e, se l'AI è disponibile, se ne genera un'illustrazione.
 
 ---
@@ -536,4 +535,4 @@ Ogni fase produce qualcosa di **già giocabile**.
   form.
 - **iOS:** fuori scope. MAUI lo renderebbe possibile, ma nessuna scelta viene
   presa per agevolarlo.
-- **Esposizione pubblica del server:** fuori scope della v1.
+- **Esposizione pubblica del server:** fuori scope della v1, da considerare reverse-proxy dalla v2. Da valutare TOR.
