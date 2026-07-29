@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\FrasiSquisite.Server\FrasiSquisite.Server.csproj" />
+    <ProjectReference Include="..\..\src\FrasiSquisite.Domain\FrasiSquisite.Domain.csproj" />
   </ItemGroup>
 
 </Project>
