@@ -538,7 +538,7 @@ git commit -m "feat(shared): validazione del testo di una casella"
 - Produces (tutti in `FrasiSquisite.Shared.Protocol`):
   - `static class ProtocolVersion { const int Current = 1; }`
   - `static class ProtocolJson { static JsonSerializerOptions Options { get; } }`
-  - Client → server: `CreateRoomRequest(int ProtocolVersion, Guid PlayerId, string Nickname)`, `JoinRoomRequest(int ProtocolVersion, Guid PlayerId, string Nickname, string RoomCode)`, `StartGameRequest`, `SubmitSlotRequest(string Text)`
+  - Client → server: `CreateRoomRequest(int ProtocolVersion, Guid PlayerId, string Nickname)`, `JoinRoomRequest(int ProtocolVersion, Guid PlayerId, string Nickname, string RoomCode)`, `StartGameRequest(string RoomCode)`, `SubmitSlotRequest(string RoomCode, string Text)`
   - Server → client: `PlayerView(Guid Id, string Nickname, bool IsHost, bool IsConnected)`, `RoomStateMessage(string RoomCode, string Phase, IReadOnlyList<PlayerView> Players, string SchemaId, int SlotCount)`, `SlotRequestMessage(int Round, int TotalRounds, string Ruolo, string Prompt, string Esempio)`, `RoundProgressMessage(int Round, int Submitted, int Total)`, `RevealStepMessage(int PhraseIndex, int TotalPhrases, IReadOnlyList<string> RevealedSlots, bool PhraseComplete, IReadOnlyList<string> Authors)`, `GameFinishedMessage(IReadOnlyList<string> Phrases)`, `ErrorMessage(string Code, string Message)`, `ProtocolRejectedMessage(int ServerVersion, string Message)`
 
 **Nota sul contenuto di `SlotRequestMessage`:** contiene solo round, ruolo, prompt ed esempio. **Non** contiene l'indice della frase su cui si sta scrivendo né alcun testo già inserito. È il vincolo di segretezza della spec §2.3 espresso nel tipo: se il campo non esiste, non può trapelare.
