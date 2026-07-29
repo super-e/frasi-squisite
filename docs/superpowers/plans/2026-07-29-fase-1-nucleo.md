@@ -872,23 +872,49 @@ public class RoleSchemaModeTests
         }
     }
 
+    /// <summary>
+    /// Ogni giocatore copre tutte le K caselle dello schema, una per round.
+    /// Asserisce sulle assegnazioni restituite, non sul numero di iterazioni
+    /// del ciclo — altrimenti il test passerebbe qualunque cosa restituisca
+    /// AssignSlot.
+    /// </summary>
     [Theory]
     [MemberData(nameof(GiocatoriECaselle))]
-    public void OgniGiocatoreScriveEsattamenteKVolte(int n, int k)
+    public void OgniGiocatoreCopreTutteLeCaselleUnaVoltaCiascuna(int n, int k)
     {
         var schema = TestSchemas.WithSlots(k);
-        var scritture = new int[n];
 
-        for (var round = 0; round < k; round++)
+        for (var giocatore = 0; giocatore < n; giocatore++)
         {
-            for (var giocatore = 0; giocatore < n; giocatore++)
-            {
-                _ = _modalita.AssignSlot(round, giocatore, n, schema);
-                scritture[giocatore]++;
-            }
-        }
+            var caselleScritte = Enumerable.Range(0, k)
+                .Select(round => _modalita.AssignSlot(round, giocatore, n, schema).SlotIndex)
+                .OrderBy(i => i)
+                .ToList();
 
-        Assert.All(scritture, s => Assert.Equal(k, s));
+            Assert.Equal(Enumerable.Range(0, k), caselleScritte);
+        }
+    }
+
+    /// <summary>
+    /// Finché le caselle non superano i giocatori, nessuno scrive due volte
+    /// sulla stessa frase: è ciò che rende varie le frasi risultanti.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(GiocatoriECaselle))]
+    public void UnGiocatoreNonTornaSullaStessaFraseFinchePuo(int n, int k)
+    {
+        var schema = TestSchemas.WithSlots(k);
+        var frasiDistinteAttese = Math.Min(n, k);
+
+        for (var giocatore = 0; giocatore < n; giocatore++)
+        {
+            var frasi = Enumerable.Range(0, k)
+                .Select(round => _modalita.AssignSlot(round, giocatore, n, schema).PhraseIndex)
+                .Distinct()
+                .Count();
+
+            Assert.Equal(frasiDistinteAttese, frasi);
+        }
     }
 
     [Theory]
@@ -1154,7 +1180,7 @@ public sealed class RoleSchemaMode : IGameMode
 
 Run: `dotnet test tests/FrasiSquisite.Domain.Tests --nologo`
 
-Expected: PASS, 199 test superati (66 combinazioni × 3 test di proprietà + 1).
+Expected: PASS, 265 test superati (66 combinazioni × 4 test di proprietà + 1 fact).
 
 - [ ] **Step 6: Commit**
 
@@ -1514,7 +1540,7 @@ public sealed class GameEngine(IGameMode mode) : IGameEngine
 
 Run: `dotnet test tests/FrasiSquisite.Domain.Tests --nologo`
 
-Expected: PASS, 207 test superati.
+Expected: PASS, 273 test superati.
 
 - [ ] **Step 6: Commit**
 
@@ -1939,7 +1965,7 @@ using FrasiSquisite.Shared.Validation;
 
 Run: `dotnet test tests/FrasiSquisite.Domain.Tests --nologo`
 
-Expected: PASS, 218 test superati.
+Expected: PASS, 284 test superati.
 
 - [ ] **Step 6: Commit**
 
@@ -2173,7 +2199,7 @@ e aggiungi il metodo:
 
 Run: `dotnet test tests/FrasiSquisite.Domain.Tests --nologo`
 
-Expected: PASS, 223 test superati.
+Expected: PASS, 289 test superati.
 
 - [ ] **Step 5: Commit**
 
