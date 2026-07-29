@@ -82,6 +82,14 @@ public partial class GameSessionViewModel : ObservableObject
     [ObservableProperty]
     private string _errorText = string.Empty;
 
+    // Regola unica per lo svuotamento del banner d'errore: qualunque
+    // transizione di schermata azzera ErrorText, perché un errore appartiene
+    // alla schermata che lo ha prodotto e non deve sopravvivere in quella
+    // successiva (es. un NOT_HOST durante StartGame non deve restare visibile
+    // in Reveal o Finished). Meglio un unico punto che tanti
+    // "ErrorText = string.Empty" sparsi nei singoli case dei messaggi.
+    partial void OnScreenChanged(ScreenState value) => ErrorText = string.Empty;
+
     public ObservableCollection<PlayerView> Players { get; } = [];
 
     public ObservableCollection<string> RevealedSlots { get; } = [];
@@ -168,7 +176,6 @@ public partial class GameSessionViewModel : ObservableObject
                 Round = richiesta.Round + 1;
                 TotalRounds = richiesta.TotalRounds;
                 SlotText = string.Empty;
-                ErrorText = string.Empty;
                 Screen = ScreenState.Writing;
                 break;
 

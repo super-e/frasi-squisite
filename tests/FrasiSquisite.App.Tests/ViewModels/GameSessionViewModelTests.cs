@@ -142,4 +142,21 @@ public class GameSessionViewModelTests
 
         Assert.Equal("Solo chi ha creato la stanza può avviare.", vm.ErrorText);
     }
+
+    [Fact]
+    public void UnErroreNonSopravviveAlCambioDiSchermata()
+    {
+        var (vm, conn) = Crea();
+
+        conn.Emit(new ErrorMessage("NOT_HOST", "Solo chi ha creato la stanza può avviare."));
+        Assert.False(string.IsNullOrEmpty(vm.ErrorText));
+
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [new PlayerView(Anna, "Anna", true, true)],
+            "surrealista-classico", 5));
+
+        Assert.Equal(ScreenState.Lobby, vm.Screen);
+        Assert.Equal(string.Empty, vm.ErrorText);
+    }
 }

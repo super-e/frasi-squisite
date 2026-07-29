@@ -1,6 +1,7 @@
 using System.Text.Json;
 using FrasiSquisite.Shared.Protocol;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Maui.ApplicationModel;
 
 namespace FrasiSquisite.App.Services;
 
@@ -28,11 +29,34 @@ public sealed class SignalRGameConnection : IGameConnection, IAsyncDisposable
         {
             if (Deserializza(type, payload) is { } messaggio)
             {
-                MessageReceived?.Invoke(messaggio);
+                SollevaMessageReceived(messaggio);
             }
         });
 
         await _connection.StartAsync(ct);
+    }
+
+    // Il callback di SignalR arriva su un thread di background del client hub,
+    // ma GameSessionViewModel aggiorna proprietà bindate e ObservableCollection
+    // lette da CollectionView/Label in GamePage.xaml: mutarle fuori dal thread
+    // UI rischia su Android un crash da accesso cross-thread alla view, ad ogni
+    // singolo messaggio push del server. Il marshalling va fatto qui - la
+    // ViewModel non può conoscere MAUI, quindi è la connessione (che sa di
+    // girare su una piattaforma con un thread UI) a doversene occupare per
+    // tutti i suoi consumatori. Non "semplificare" rimuovendo questo dispatch.
+    private void SollevaMessageReceived(object messaggio)
+    {
+        try
+        {
+            MainThread.BeginInvokeOnMainThread(() => MessageReceived?.Invoke(messaggio));
+        }
+        catch (Exception)
+        {
+            // Nessun dispatcher disponibile (es. fuori da un contesto applicativo
+            // MAUI, come in test o strumenti diagnostici): meglio consegnare
+            // comunque il messaggio piuttosto che far crashare il processo.
+            MessageReceived?.Invoke(messaggio);
+        }
     }
 
     public Task<string> CreateRoomAsync(Guid playerId, string nickname) =>

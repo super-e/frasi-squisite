@@ -45,15 +45,24 @@ public static class PlayerIdentity
 
     public static Guid Current()
     {
-        var salvato = SecureStorage.Default.GetAsync(Key).GetAwaiter().GetResult();
-
-        if (Guid.TryParse(salvato, out var esistente))
+        // SecureStorage.GetAsync/SetAsync possono catturare il
+        // SynchronizationContext corrente; bloccare su di essi con
+        // GetAwaiter().GetResult() dallo stesso contesto (qui, durante
+        // CreateMauiApp) è il classico scenario di deadlock di MAUI. Eseguendo
+        // l'intero lavoro async dentro Task.Run, gira su un thread del thread
+        // pool senza contesto catturato, quindi il blocco esterno è sicuro.
+        return Task.Run(async () =>
         {
-            return esistente;
-        }
+            var salvato = await SecureStorage.Default.GetAsync(Key);
 
-        var nuovo = Guid.NewGuid();
-        SecureStorage.Default.SetAsync(Key, nuovo.ToString()).GetAwaiter().GetResult();
-        return nuovo;
+            if (Guid.TryParse(salvato, out var esistente))
+            {
+                return esistente;
+            }
+
+            var nuovo = Guid.NewGuid();
+            await SecureStorage.Default.SetAsync(Key, nuovo.ToString());
+            return nuovo;
+        }).GetAwaiter().GetResult();
     }
 }
