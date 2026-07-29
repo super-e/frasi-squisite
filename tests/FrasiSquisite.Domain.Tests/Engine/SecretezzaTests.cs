@@ -39,15 +39,20 @@ public class SecretezzaTests
             for (var g = 0; g < n; g++)
             {
                 var segreto = $"SEGRETO-r{round}-g{g}";
+                var faseCorrente = stato.Phase;
                 var risultato = _motore.Handle(stato, new SlotSubmitted(Giocatore(g), segreto));
                 stato = risultato.State;
 
                 testiSegreti.Add(segreto);
 
-                // Ogni messaggio emesso finché siamo in scrittura non deve
-                // contenere nessuno dei testi inviati, incluso quello appena
-                // scritto: la fuga tipica è un broadcast che lo rimbalza.
-                if (stato.Phase == RoomPhase.Writing)
+                // Ogni messaggio emesso da un invio fatto durante la scrittura
+                // non deve contenere nessuno dei testi inviati, incluso quello
+                // appena scritto: la fuga tipica è un broadcast che lo
+                // rimbalza. Si guarda la fase precedente alla chiamata, non
+                // quella successiva, altrimenti l'invio che fa uscire
+                // dalla scrittura (compreso l'ultimo, che passa a Reveal)
+                // non verrebbe mai ispezionato.
+                if (faseCorrente == RoomPhase.Writing)
                 {
                     var serializzati = risultato.AllMessages()
                         .Select(m => System.Text.Json.JsonSerializer.Serialize(m))
