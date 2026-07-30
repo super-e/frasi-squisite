@@ -11,6 +11,21 @@ public sealed class GameEngine(IGameMode mode, IWordPool pool, IRandomSource ran
 {
     public const int MinPlayers = 2;
 
+    /// <summary>
+    /// Dal design: il pulsante "aggiungi bot" scompare a 9 giocatori
+    /// (lotto-b-brief.md).
+    /// </summary>
+    public const int MaxPlayers = 9;
+
+    /// <summary>
+    /// Nomi assegnati ai bot, in ordine, deterministicamente: primo libero
+    /// della lista, mai casuale (lotto-b-brief.md, punto 2). Otto voci perché
+    /// con <see cref="MaxPlayers"/> a 9 e almeno un host umano, otto bot sono
+    /// il massimo possibile in una stanza.
+    /// </summary>
+    private static readonly string[] BotNames =
+        ["Bot Ada", "Bot Bruno", "Bot Chiara", "Bot Delia", "Bot Enzo", "Bot Fiamma", "Bot Gigi", "Bot Ivo"];
+
     private readonly IGameMode _mode = mode;
     private readonly IWordPool _pool = pool;
     private readonly IRandomSource _random = random;
@@ -22,6 +37,9 @@ public sealed class GameEngine(IGameMode mode, IWordPool pool, IRandomSource ran
         GameStartRequested e => OnGameStartRequested(state, e),
         SlotSubmitted e => OnSlotSubmitted(state, e),
         RevealAdvanceRequested e => OnRevealAdvance(state, e),
+        BotAdded e => OnBotAdded(state, e),
+        BotRemoved e => OnBotRemoved(state, e),
+        BotRenamed e => OnBotRenamed(state, e),
         _ => EngineResult.NoChange(state),
     };
 
@@ -62,8 +80,12 @@ public sealed class GameEngine(IGameMode mode, IWordPool pool, IRandomSource ran
         {
             var rimasti = state.Players.Where(p => p.Id != e.PlayerId).ToList();
 
+            // Filtrato su IsConnected come nel ramo Writing sotto: un bot non
+            // è mai connesso, quindi non deve mai ereditare l'host solo
+            // perché è il rimasto con JoinOrder più basso (lotto-b-brief.md:
+            // "un bot non può mai diventare host").
             var host = state.HostId == e.PlayerId
-                ? rimasti.OrderBy(p => p.JoinOrder).FirstOrDefault()?.Id ?? Guid.Empty
+                ? rimasti.Where(p => p.IsConnected).OrderBy(p => p.JoinOrder).FirstOrDefault()?.Id ?? Guid.Empty
                 : state.HostId;
 
             var senza = state with { Players = rimasti, HostId = host };
@@ -135,6 +157,17 @@ public sealed class GameEngine(IGameMode mode, IWordPool pool, IRandomSource ran
 
         List<Effect> effetti = [new BroadcastToRoom(RoomState(nuovo))];
         effetti.AddRange(SlotRequests(nuovo));
+
+        // Punto 1 del brief: un bot presente al kick-off non è mai connesso,
+        // e senza questo richiamo nessuno riempirebbe la sua casella del
+        // round 0 - il round non si completerebbe mai e la partita
+        // resterebbe bloccata al primo turno. AdvanceRound fa già lo stesso
+        // controllo per i round successivi; StartGame deve farlo per il
+        // round 0 esattamente allo stesso modo.
+        if (nuovo.Players.Any(p => !p.IsConnected))
+        {
+            return FillDisconnected(nuovo, effetti);
+        }
 
         return new EngineResult(nuovo, effetti);
     }
@@ -354,6 +387,108 @@ public sealed class GameEngine(IGameMode mode, IWordPool pool, IRandomSource ran
         ]);
     }
 
+    private static EngineResult OnBotAdded(GameState state, BotAdded e)
+    {
+        if (state.Phase != RoomPhase.Lobby)
+        {
+            return Error(state, e.RequestedBy, "NOT_LOBBY", "I bot si aggiungono solo in lobby.");
+        }
+
+        if (state.HostId != e.RequestedBy)
+        {
+            return Error(state, e.RequestedBy, "NOT_HOST", "Solo chi ha creato la stanza può aggiungere un bot.");
+        }
+
+        if (state.Players.Count >= MaxPlayers)
+        {
+            return Error(state, e.RequestedBy, "ROOM_FULL", $"La stanza ospita al massimo {MaxPlayers} giocatori.");
+        }
+
+        var bot = new Player(e.BotId, NextBotName(state), IsBot: true, state.NextJoinOrder, IsConnected: false);
+
+        var nuovo = state with
+        {
+            Players = [.. state.Players, bot],
+            NextJoinOrder = state.NextJoinOrder + 1,
+        };
+
+        return new EngineResult(nuovo, [new BroadcastToRoom(RoomState(nuovo))]);
+    }
+
+    private static EngineResult OnBotRemoved(GameState state, BotRemoved e)
+    {
+        if (state.Phase != RoomPhase.Lobby)
+        {
+            return Error(state, e.RequestedBy, "NOT_LOBBY", "I bot si rimuovono solo in lobby.");
+        }
+
+        if (state.HostId != e.RequestedBy)
+        {
+            return Error(state, e.RequestedBy, "NOT_HOST", "Solo chi ha creato la stanza può rimuovere un bot.");
+        }
+
+        var bersaglio = state.FindPlayer(e.BotId);
+        if (bersaglio is null)
+        {
+            return Error(state, e.RequestedBy, "NO_SUCH_PLAYER", "Questo giocatore non esiste più.");
+        }
+
+        if (!bersaglio.IsBot)
+        {
+            return Error(state, e.RequestedBy, "NOT_A_BOT", "Solo i bot si possono rimuovere così.");
+        }
+
+        var nuovo = state with { Players = [.. state.Players.Where(p => p.Id != e.BotId)] };
+
+        return new EngineResult(nuovo, [new BroadcastToRoom(RoomState(nuovo))]);
+    }
+
+    private static EngineResult OnBotRenamed(GameState state, BotRenamed e)
+    {
+        if (state.Phase != RoomPhase.Lobby)
+        {
+            return Error(state, e.RequestedBy, "NOT_LOBBY", "I bot si rinominano solo in lobby.");
+        }
+
+        if (state.HostId != e.RequestedBy)
+        {
+            return Error(state, e.RequestedBy, "NOT_HOST", "Solo chi ha creato la stanza può rinominare un bot.");
+        }
+
+        var bersaglio = state.FindPlayer(e.BotId);
+        if (bersaglio is null)
+        {
+            return Error(state, e.RequestedBy, "NO_SUCH_PLAYER", "Questo giocatore non esiste più.");
+        }
+
+        if (!bersaglio.IsBot)
+        {
+            return Error(state, e.RequestedBy, "NOT_A_BOT", "Solo i bot si possono rinominare così.");
+        }
+
+        // Stesso validatore del client: server e client non possono divergere.
+        var esito = NicknameValidator.Validate(e.Nickname);
+        if (!esito.IsValid)
+        {
+            return Error(state, e.RequestedBy, "INVALID_NICKNAME", esito.Error!);
+        }
+
+        var giocatori = state.Players
+            .Select(p => p.Id == e.BotId ? p with { Nickname = esito.Normalized } : p)
+            .ToList();
+
+        var nuovo = state with { Players = giocatori };
+
+        return new EngineResult(nuovo, [new BroadcastToRoom(RoomState(nuovo))]);
+    }
+
+    /// <summary>Primo nome libero della lista fissa: nessuna casualità, nessuna collisione.</summary>
+    private static string NextBotName(GameState state) =>
+        BotNames.FirstOrDefault(nome => state.Players.All(p => p.Nickname != nome))
+            // Irraggiungibile: con MaxPlayers a 9 e otto nomi, il controllo
+            // ROOM_FULL blocca sempre prima che gli otto nomi finiscano tutti.
+            ?? throw new InvalidOperationException("Nessun nome disponibile per il bot.");
+
     private static EngineResult Error(GameState state, Guid playerId, string code, string message) =>
         new(state, [new SendToPlayer(playerId, new ErrorMessage(code, message))]);
 
@@ -361,7 +496,7 @@ public sealed class GameEngine(IGameMode mode, IWordPool pool, IRandomSource ran
         new(
             state.RoomCode,
             state.Phase.ToString(),
-            [.. state.Players.Select(p => new PlayerView(p.Id, p.Nickname, p.Id == state.HostId, p.IsConnected))],
+            [.. state.Players.Select(p => new PlayerView(p.Id, p.Nickname, p.Id == state.HostId, p.IsConnected, p.IsBot))],
             state.Schema.Id,
             state.Schema.SlotCount);
 }

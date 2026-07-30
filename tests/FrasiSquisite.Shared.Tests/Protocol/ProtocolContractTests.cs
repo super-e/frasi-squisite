@@ -6,10 +6,21 @@ namespace FrasiSquisite.Shared.Tests.Protocol;
 
 public class ProtocolContractTests
 {
+    // Il Lotto B aggiunge IsBot a PlayerView: un campo in più a un record è
+    // tollerato dalla serializzazione in entrambe le direzioni, ma un client
+    // v1 non saprebbe mostrare i controlli dei bot. Meglio un rifiuto
+    // esplicito ("aggiorna l'app") che una lobby incompleta senza dirlo
+    // (lotto-b-brief.md).
     [Fact]
-    public void LaVersioneDiProtocolloDellaFaseUnoE1()
+    public void LaVersioneDiProtocolloDelLottoBE2()
     {
-        Assert.Equal(1, ProtocolVersion.Current);
+        Assert.Equal(2, ProtocolVersion.Current);
+    }
+
+    [Fact]
+    public void UnClientDellaVersionePrecedenteNonECompatibile()
+    {
+        Assert.False(ProtocolVersion.IsCompatible(1));
     }
 
     [Fact]
@@ -54,7 +65,7 @@ public class ProtocolContractTests
         var originale = new RoomStateMessage(
             RoomCode: "ABCD",
             Phase: "Lobby",
-            Players: [new PlayerView(Guid.Parse("11111111-1111-1111-1111-111111111111"), "Enrico", true, true)],
+            Players: [new PlayerView(Guid.Parse("11111111-1111-1111-1111-111111111111"), "Enrico", true, true, false)],
             SchemaId: "surrealista-classico",
             SlotCount: 5);
 
@@ -67,6 +78,17 @@ public class ProtocolContractTests
         Assert.Equal(originale.SchemaId, ricostruito.SchemaId);
         Assert.Equal(originale.SlotCount, ricostruito.SlotCount);
         Assert.Equal(originale.Players, ricostruito.Players);
+    }
+
+    [Fact]
+    public void RoundtripDiPlayerViewConIsBot()
+    {
+        var originale = new PlayerView(Guid.NewGuid(), "Bot Ada", false, false, true);
+
+        var json = JsonSerializer.Serialize(originale, ProtocolJson.Options);
+        var ricostruito = JsonSerializer.Deserialize<PlayerView>(json, ProtocolJson.Options);
+
+        Assert.Equal(originale, ricostruito);
     }
 
     [Fact]

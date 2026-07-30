@@ -1,6 +1,6 @@
 namespace FrasiSquisite.Shared.Protocol;
 
-public sealed record PlayerView(Guid Id, string Nickname, bool IsHost, bool IsConnected);
+public sealed record PlayerView(Guid Id, string Nickname, bool IsHost, bool IsConnected, bool IsBot);
 
 public sealed record RoomStateMessage(
     string RoomCode,
