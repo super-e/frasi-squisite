@@ -549,4 +549,219 @@ public class GameSessionViewModelTests
 
         Assert.True(vm.CanAddBot);
     }
+
+    // Punto 1 della revisione: con due bot in collezione, aprire la modifica
+    // sul secondo deve chiudere quella (eventualmente) aperta sul primo -
+    // EditingBotName è condiviso da tutte le righe, quindi due IsEditing
+    // contemporaneamente farebbero disaccordare testo e riga. Nessun test
+    // precedente aveva più di un bot, per questo il bug era passato inosservato.
+    [Fact]
+    public void ModificareUnSecondoBotChiudeLaModificaDelPrimo()
+    {
+        var (vm, conn) = Crea();
+        var adaId = Guid.NewGuid();
+        var brunoId = Guid.NewGuid();
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [
+                new PlayerView(Anna, "Anna", true, true, false),
+                new PlayerView(adaId, "Bot Ada", false, false, true),
+                new PlayerView(brunoId, "Bot Bruno", false, false, true),
+            ],
+            "surrealista-classico", 5));
+        var ada = vm.Players.Single(p => p.Id == adaId);
+        var bruno = vm.Players.Single(p => p.Id == brunoId);
+
+        vm.StartEditBotCommand.Execute(ada);
+        Assert.True(ada.IsEditing);
+
+        vm.StartEditBotCommand.Execute(bruno);
+
+        Assert.False(ada.IsEditing);
+        Assert.True(bruno.IsEditing);
+        Assert.Equal("Bot Bruno", vm.EditingBotName);
+    }
+
+    // Riproduce esattamente lo scenario del punto 1: ✏ su Ada, poi ✏ su
+    // Bruno, poi ✓ sulla riga di Ada. Prima della correzione questo
+    // rinominava Ada in "Bot Bruno" (il testo digitato per l'altra riga).
+    [Fact]
+    public async Task ConfermareLaRigaChiusaDopoAverApertoUnAltraNonRinominaNulla()
+    {
+        var (vm, conn) = Crea();
+        vm.RoomCode = "ABCD";
+        var adaId = Guid.NewGuid();
+        var brunoId = Guid.NewGuid();
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [
+                new PlayerView(Anna, "Anna", true, true, false),
+                new PlayerView(adaId, "Bot Ada", false, false, true),
+                new PlayerView(brunoId, "Bot Bruno", false, false, true),
+            ],
+            "surrealista-classico", 5));
+        var ada = vm.Players.Single(p => p.Id == adaId);
+        var bruno = vm.Players.Single(p => p.Id == brunoId);
+
+        vm.StartEditBotCommand.Execute(ada);
+        vm.StartEditBotCommand.Execute(bruno);
+
+        await vm.ConfirmEditBotCommand.ExecuteAsync(ada);
+
+        Assert.DoesNotContain(conn.Calls, c => c.StartsWith("RenameBot", StringComparison.Ordinal));
+    }
+
+    // Punto 2 della revisione: una RoomStateMessage (es. un altro giocatore
+    // che entra) ricostruisce Players da zero. Senza preservare la modifica
+    // per id, la riga tornerebbe non-editing e il testo digitato sparirebbe
+    // dallo schermo alla prossima ricostruzione (StartEditBot lo
+    // sovrascriverebbe con il nickname corrente).
+    [Fact]
+    public void UnaRoomStateMessageDuranteLaModificaDiUnBotNeConservaLoStato()
+    {
+        var (vm, conn) = Crea();
+        var adaId = Guid.NewGuid();
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [new PlayerView(Anna, "Anna", true, true, false), new PlayerView(adaId, "Bot Ada", false, false, true)],
+            "surrealista-classico", 5));
+        var ada = vm.Players.Single(p => p.Id == adaId);
+        vm.StartEditBotCommand.Execute(ada);
+        vm.EditingBotName = "Testo a metà";
+
+        // Bruno entra: il server manda una nuova RoomStateMessage con tre
+        // giocatori, che ricostruisce l'intera collezione Players.
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [
+                new PlayerView(Anna, "Anna", true, true, false),
+                new PlayerView(adaId, "Bot Ada", false, false, true),
+                new PlayerView(Guid.NewGuid(), "Bruno", false, true, false),
+            ],
+            "surrealista-classico", 5));
+
+        var rigaDopo = vm.Players.Single(p => p.Id == adaId);
+        Assert.True(rigaDopo.IsEditing);
+        Assert.Equal("Testo a metà", vm.EditingBotName);
+    }
+
+    // Punto 2, l'altro corno: se il bot in modifica sparisce (rimosso da un
+    // altro client) non c'è più a chi riattaccare la modifica - va annullata
+    // esplicitamente invece di lasciare il testo digitato appeso a un id morto.
+    [Fact]
+    public void UnaRoomStateMessageSenzaPiuIlBotInModificaAnnullaLaModifica()
+    {
+        var (vm, conn) = Crea();
+        var adaId = Guid.NewGuid();
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [new PlayerView(Anna, "Anna", true, true, false), new PlayerView(adaId, "Bot Ada", false, false, true)],
+            "surrealista-classico", 5));
+        var ada = vm.Players.Single(p => p.Id == adaId);
+        vm.StartEditBotCommand.Execute(ada);
+        vm.EditingBotName = "Testo a metà";
+
+        // Ada è stata rimossa da un altro client: la nuova RoomStateMessage
+        // non la contiene più.
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [new PlayerView(Anna, "Anna", true, true, false)],
+            "surrealista-classico", 5));
+
+        Assert.Equal(string.Empty, vm.EditingBotName);
+        Assert.DoesNotContain(vm.Players, p => p.IsEditing);
+    }
+
+    // Punto 3 della revisione: ShowBotControls era IsBot && !IsEditing, senza
+    // gate sull'host - a differenza di CanAddBot, già gated. Un non-host che
+    // guarda la lobby non deve vedere matita e ✕ sulle righe dei bot.
+    [Fact]
+    public void UnNonHostNonVedeIControlliDelBot()
+    {
+        var (vm, conn) = Crea();
+        var hostId = Guid.NewGuid();
+        var botId = Guid.NewGuid();
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [
+                new PlayerView(hostId, "Anna", true, true, false),
+                new PlayerView(Anna, "Bruno", false, true, false),
+                new PlayerView(botId, "Bot Ada", false, false, true),
+            ],
+            "surrealista-classico", 5));
+
+        Assert.False(vm.IsHost);
+        var riga = vm.Players.Single(p => p.IsBot);
+        Assert.False(riga.ShowBotControls);
+    }
+
+    [Fact]
+    public void LHostVedeIControlliDelBot()
+    {
+        var (vm, conn) = Crea();
+        var botId = Guid.NewGuid();
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [
+                new PlayerView(Anna, "Anna", true, true, false),
+                new PlayerView(botId, "Bot Ada", false, false, true),
+            ],
+            "surrealista-classico", 5));
+
+        Assert.True(vm.IsHost);
+        var riga = vm.Players.Single(p => p.IsBot);
+        Assert.True(riga.ShowBotControls);
+    }
+
+    // ================= Validazione nickname lato client (punto 6) =================
+
+    [Fact]
+    public async Task CreareUnaStanzaConNicknameNonValidoVieneRifiutatoSenzaChiamareLaConnessione()
+    {
+        var (vm, conn) = Crea();
+        vm.Nickname = "   ";
+
+        await vm.CreateRoomCommand.ExecuteAsync(null);
+
+        Assert.DoesNotContain(conn.Calls, c => c.StartsWith("CreateRoom", StringComparison.Ordinal));
+        Assert.False(string.IsNullOrEmpty(vm.ErrorText));
+    }
+
+    [Fact]
+    public async Task CreareUnaStanzaNormalizzaIlNicknamePrimaDiInviarlo()
+    {
+        var (vm, conn) = Crea();
+        vm.Nickname = "  Anna   Banana  ";
+
+        await vm.CreateRoomCommand.ExecuteAsync(null);
+
+        Assert.Equal("Anna Banana", vm.Nickname);
+        Assert.Contains("CreateRoom(Anna Banana)", conn.Calls);
+    }
+
+    [Fact]
+    public async Task EntrareInUnaStanzaConNicknameNonValidoVieneRifiutatoSenzaChiamareLaConnessione()
+    {
+        var (vm, conn) = Crea();
+        vm.Nickname = "   ";
+        vm.JoinCode = "ABCD";
+
+        await vm.JoinRoomCommand.ExecuteAsync(null);
+
+        Assert.DoesNotContain(conn.Calls, c => c.StartsWith("JoinRoom", StringComparison.Ordinal));
+        Assert.False(string.IsNullOrEmpty(vm.ErrorText));
+    }
+
+    [Fact]
+    public async Task EntrareInUnaStanzaNormalizzaIlNicknamePrimaDiInviarlo()
+    {
+        var (vm, conn) = Crea();
+        vm.Nickname = "  Bruno   Verdi  ";
+        vm.JoinCode = "abcd";
+
+        await vm.JoinRoomCommand.ExecuteAsync(null);
+
+        Assert.Equal("Bruno Verdi", vm.Nickname);
+        Assert.Contains("JoinRoom(Bruno Verdi,ABCD)", conn.Calls);
+    }
 }

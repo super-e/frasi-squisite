@@ -196,7 +196,11 @@
                                     </Label.GestureRecognizers>
                                 </Label>
 
-                                <!-- Bot in modifica: campo di testo, ✓ (conferma), ✕ (annulla). -->
+                                <!-- Bot in modifica: campo di testo, ✓ (conferma), ✕ (annulla).
+                                     MaxLength duplica NicknameValidator.MaxLength (FrasiSquisite.Shared):
+                                     XAML non può referenziare quella costante, va tenuto allineato
+                                     manualmente all'originale (lotto-b-brief.md), come già fa
+                                     GameSessionViewModel.MaxPlayers per GameEngine.MaxPlayers. -->
                                 <Entry Grid.Column="0" Grid.ColumnSpan="3" MaxLength="20"
                                        IsVisible="{Binding IsEditing}"
                                        Text="{Binding Source={x:Reference RootPage}, Path=BindingContext.EditingBotName}" />

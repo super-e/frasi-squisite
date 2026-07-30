@@ -160,6 +160,17 @@ public partial class GameSessionViewModel : ObservableObject
     private string _editingBotName = string.Empty;
 
     /// <summary>
+    /// Id del bot la cui riga ha attualmente l'Entry aperta, o null se
+    /// nessuna. <see cref="EditingBotName"/> da solo non basta a sapere QUALE
+    /// riga sta modificando: due righe potrebbero entrambe avere
+    /// <c>IsEditing</c> a true (bug corretto qui) e comunque servirebbe
+    /// sapere quale sopravvive a una ricostruzione di <see cref="Players"/>
+    /// (RoomStateMessage). Questo campo è la fonte di verità per entrambe le
+    /// cose.
+    /// </summary>
+    private Guid? _editingBotId;
+
+    /// <summary>
     /// Vero solo se si è host, la fase è lobby e i giocatori sono meno di
     /// <see cref="MaxPlayers"/>: dal design, il pulsante "+ Aggiungi bot"
     /// scompare oltre quella soglia (lotto-b-brief.md).
@@ -242,8 +253,23 @@ public partial class GameSessionViewModel : ObservableObject
     [RelayCommand]
     private void StartEditBot(PlayerRowView riga)
     {
+        // Solo una riga alla volta può essere in modifica: EditingBotName è
+        // un'unica proprietà condivisa da tutte le Entry (vedi GamePage.xaml),
+        // quindi due righe entrambe IsEditing finirebbero per mostrare - ed
+        // eventualmente confermare - lo stesso testo sulla riga sbagliata.
+        // Toccare la matita su una riga chiude quindi qualunque altra fosse
+        // aperta.
+        foreach (var altra in Players)
+        {
+            if (altra.IsEditing && altra != riga)
+            {
+                altra.IsEditing = false;
+            }
+        }
+
         riga.IsEditing = true;
         EditingBotName = riga.Nickname;
+        _editingBotId = riga.Id;
     }
 
     [RelayCommand]
@@ -251,11 +277,23 @@ public partial class GameSessionViewModel : ObservableObject
     {
         riga.IsEditing = false;
         EditingBotName = string.Empty;
+        _editingBotId = null;
     }
 
     [RelayCommand]
     private Task ConfirmEditBotAsync(PlayerRowView riga) => EseguiComandoAsync(async () =>
     {
+        if (_editingBotId != riga.Id)
+        {
+            // La riga toccata non è (più) quella in modifica: capita se
+            // StartEditBot ne ha aperta un'altra nel frattempo (che chiude
+            // sempre la precedente) o se Players è stato ricostruito senza
+            // che questa riga fosse quella preservata. Ignorare invece di
+            // rinominarla con il testo digitato per un'altra riga (punto 1
+            // della revisione: EditingBotName era condiviso da tutte).
+            return;
+        }
+
         var esito = NicknameValidator.Validate(EditingBotName);
         if (!esito.IsValid)
         {
@@ -266,6 +304,7 @@ public partial class GameSessionViewModel : ObservableObject
         await _connection.RenameBotAsync(RoomCode, riga.Id, esito.Normalized);
         riga.IsEditing = false;
         EditingBotName = string.Empty;
+        _editingBotId = null;
     });
 
     [RelayCommand]
@@ -401,13 +440,46 @@ public partial class GameSessionViewModel : ObservableObject
         {
             case RoomStateMessage stato:
                 RoomCode = stato.RoomCode;
+
+                // Calcolato prima di ricostruire le righe: ShowBotControls di
+                // ogni riga dipende da chi guarda, non da chi è quella riga
+                // (vedi PlayerRowView.ViewerIsHost), quindi serve pronto per
+                // il costruttore invece che assegnato dopo.
+                var eroHost = stato.Players.Any(p => p.Id == _playerId && p.IsHost);
+
                 Players.Clear();
                 foreach (var giocatore in stato.Players)
                 {
-                    Players.Add(new PlayerRowView(giocatore));
+                    var riga = new PlayerRowView(giocatore, eroHost);
+
+                    // La ricostruzione delle righe (ogni RoomStateMessage ne
+                    // crea di nuove) perderebbe altrimenti la modifica in
+                    // corso di un bot - ad es. un altro giocatore che si
+                    // unisce mentre l'host sta rinominando un bot
+                    // cancellerebbe silenziosamente il testo digitato.
+                    // EditingBotName non viene toccato qui: sopravvive già
+                    // da solo, serve solo far ricomparire il campo su questa
+                    // nuova riga.
+                    if (_editingBotId == giocatore.Id && giocatore.IsBot)
+                    {
+                        riga.IsEditing = true;
+                    }
+
+                    Players.Add(riga);
                 }
 
-                IsHost = stato.Players.Any(p => p.Id == _playerId && p.IsHost);
+                // Il bot in modifica non esiste più in questo stato (rimosso
+                // da un altro client, o non è più un bot): niente a cui
+                // riattaccare la modifica, quindi la si annulla esplicitamente
+                // invece di lasciare il testo digitato appeso a un id morto.
+                if (_editingBotId is { } idInModifica
+                    && !stato.Players.Any(p => p.Id == idInModifica && p.IsBot))
+                {
+                    _editingBotId = null;
+                    EditingBotName = string.Empty;
+                }
+
+                IsHost = eroHost;
                 PlayerCount = stato.Players.Count;
                 SlotCount = stato.SlotCount;
                 SchemaId = stato.SchemaId;

@@ -11,9 +11,10 @@ namespace FrasiSquisite.App.ViewModels;
 /// </summary>
 public sealed partial class PlayerRowView : ObservableObject
 {
-    public PlayerRowView(PlayerView player)
+    public PlayerRowView(PlayerView player, bool viewerIsHost)
     {
         Player = player;
+        ViewerIsHost = viewerIsHost;
     }
 
     public PlayerView Player { get; }
@@ -28,14 +29,26 @@ public sealed partial class PlayerRowView : ObservableObject
 
     public bool IsBot => Player.IsBot;
 
+    /// <summary>
+    /// Vero se chi guarda questa riga (il giocatore locale) è l'host della
+    /// stanza. Non è <see cref="IsHost"/>, che dice se QUESTA riga è l'host:
+    /// serve un valore separato per gate-are matita e ✕ come già fa
+    /// <c>CanAddBot</c> nella ViewModel, altrimenti un non-host che tocca ✏
+    /// riceverebbe solo un banner NOT_HOST invece di non vedere affatto i
+    /// controlli. Fissato alla costruzione: la riga viene ricreata a ogni
+    /// RoomStateMessage, quindi non serve renderlo osservabile.
+    /// </summary>
+    public bool ViewerIsHost { get; }
+
     [ObservableProperty]
     private bool _isEditing;
 
     /// <summary>
     /// Matita e ✕ della riga normale: visibili solo per un bot non in
-    /// modifica. I giocatori umani non li mostrano mai (lotto-b-brief.md).
+    /// modifica, e solo per chi è host (lotto-b-brief.md). I giocatori umani
+    /// non li mostrano mai, né li mostra un non-host per un bot altrui.
     /// </summary>
-    public bool ShowBotControls => IsBot && !IsEditing;
+    public bool ShowBotControls => IsBot && !IsEditing && ViewerIsHost;
 
     partial void OnIsEditingChanged(bool value) => OnPropertyChanged(nameof(ShowBotControls));
 }
