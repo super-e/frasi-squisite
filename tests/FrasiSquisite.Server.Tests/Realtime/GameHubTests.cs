@@ -344,6 +344,53 @@ public sealed class GameHubTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SetSchemaConUnIdInesistenteDaNoSuchSchema()
+    {
+        await using var anna = await ConnettiAsync();
+
+        var codice = await anna.Connection.InvokeAsync<string>(
+            "CreateRoom", new CreateRoomRequest(ProtocolVersion.Current, Guid.NewGuid(), "Anna"));
+        await anna.WaitFor<RoomStateMessage>(TimeSpan.FromSeconds(5));
+
+        // L'id non esiste: il motore non deve nemmeno vedere l'evento (spec
+        // del lotto), quindi non arriva un secondo RoomStateMessage - solo
+        // l'errore al chiamante.
+        await anna.Connection.InvokeAsync("SetSchema", new SetSchemaRequest(codice, "schema-che-non-esiste"));
+        await anna.WaitFor<ErrorMessage>(TimeSpan.FromSeconds(5));
+
+        Assert.Equal("NO_SUCH_SCHEMA", anna.Last<ErrorMessage>().Code);
+        Assert.Equal(1, anna.CountOf<RoomStateMessage>());
+    }
+
+    [Fact]
+    public async Task SetSchemaConUnIdValidoAggiornaLoStatoDiTutti()
+    {
+        await using var anna = await ConnettiAsync();
+        await using var bruno = await ConnettiAsync();
+
+        var codice = await anna.Connection.InvokeAsync<string>(
+            "CreateRoom", new CreateRoomRequest(ProtocolVersion.Current, Guid.NewGuid(), "Anna"));
+
+        await bruno.Connection.InvokeAsync(
+            "JoinRoom", new JoinRoomRequest(ProtocolVersion.Current, Guid.NewGuid(), "Bruno", codice));
+        await bruno.WaitFor<RoomStateMessage>(TimeSpan.FromSeconds(5));
+
+        var primoStato = anna.Last<RoomStateMessage>();
+        Assert.Contains(primoStato.AvailableSchemas, s => s.Id == "proverbio");
+
+        await anna.Connection.InvokeAsync("SetSchema", new SetSchemaRequest(codice, "proverbio"));
+
+        // Deve arrivare a entrambi, non solo a chi ha fatto la richiesta.
+        await anna.WaitForCount<RoomStateMessage>(2, TimeSpan.FromSeconds(5));
+        await bruno.WaitForCount<RoomStateMessage>(2, TimeSpan.FromSeconds(5));
+
+        Assert.Equal("proverbio", anna.Last<RoomStateMessage>().SchemaId);
+        Assert.Equal(3, anna.Last<RoomStateMessage>().SlotCount);
+        Assert.Equal("proverbio", bruno.Last<RoomStateMessage>().SchemaId);
+        Assert.Equal(3, bruno.Last<RoomStateMessage>().SlotCount);
+    }
+
+    [Fact]
     public async Task SubmitSlotSuUnaStanzaInesistenteSegnalaErroreAlClient()
     {
         await using var anna = await ConnettiAsync();

@@ -40,6 +40,7 @@ public sealed class GameEngine(IGameMode mode, IWordPool pool, IRandomSource ran
         BotAdded e => OnBotAdded(state, e),
         BotRemoved e => OnBotRemoved(state, e),
         BotRenamed e => OnBotRenamed(state, e),
+        SchemaSelected e => OnSchemaSelected(state, e),
         _ => EngineResult.NoChange(state),
     };
 
@@ -505,6 +506,29 @@ public sealed class GameEngine(IGameMode mode, IWordPool pool, IRandomSource ran
     }
 
     /// <summary>
+    /// Sostituisce <see cref="GameState.Schema"/> con quello già risolto
+    /// dall'hub. Solo in lobby (nessuna partita in corso, quindi niente frasi
+    /// o round da azzerare) e solo per l'host: stesse guardie di
+    /// <see cref="OnBotAdded"/>.
+    /// </summary>
+    private static EngineResult OnSchemaSelected(GameState state, SchemaSelected e)
+    {
+        if (state.Phase != RoomPhase.Lobby)
+        {
+            return Error(state, e.RequestedBy, "NOT_LOBBY", "Lo schema si cambia solo in lobby.");
+        }
+
+        if (state.HostId != e.RequestedBy)
+        {
+            return Error(state, e.RequestedBy, "NOT_HOST", "Solo chi ha creato la stanza può cambiare lo schema.");
+        }
+
+        var nuovo = state with { Schema = e.Schema };
+
+        return new EngineResult(nuovo, [new BroadcastToRoom(RoomState(nuovo))]);
+    }
+
+    /// <summary>
     /// Primo nome libero della lista fissa: nessuna casualità, nessuna
     /// collisione. Null se sono tutti già in uso (vedi il chiamante).
     /// </summary>
@@ -520,5 +544,6 @@ public sealed class GameEngine(IGameMode mode, IWordPool pool, IRandomSource ran
             state.Phase.ToString(),
             [.. state.Players.Select(p => new PlayerView(p.Id, p.Nickname, p.Id == state.HostId, p.IsConnected, p.IsBot))],
             state.Schema.Id,
-            state.Schema.SlotCount);
+            state.Schema.SlotCount,
+            state.AvailableSchemas);
 }

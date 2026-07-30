@@ -13,3 +13,5 @@ public sealed record AddBotRequest(string RoomCode);
 public sealed record RemoveBotRequest(string RoomCode, Guid BotId);
 
 public sealed record RenameBotRequest(string RoomCode, Guid BotId, string Nickname);
+
+public sealed record SetSchemaRequest(string RoomCode, string SchemaId);

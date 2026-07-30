@@ -2,12 +2,13 @@ using FrasiSquisite.Domain.Engine;
 using FrasiSquisite.Domain.Model;
 using FrasiSquisite.Server.Rooms;
 using FrasiSquisite.Shared.Protocol;
+using FrasiSquisite.Shared.Schemas;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 
 namespace FrasiSquisite.Server.Realtime;
 
-public sealed class GameHub(GameHost host, IRoomRegistry rooms, ILogger<GameHub> logger) : Hub
+public sealed class GameHub(GameHost host, IRoomRegistry rooms, ISchemaCatalog schemas, ILogger<GameHub> logger) : Hub
 {
     private const string RoomKey = "room";
     private const string PlayerKey = "player";
@@ -69,6 +70,31 @@ public sealed class GameHub(GameHost host, IRoomRegistry rooms, ILogger<GameHub>
 
     public Task RenameBot(RenameBotRequest request) =>
         host.DispatchAsync(request.RoomCode, new BotRenamed(request.BotId, request.Nickname, GiocatoreCorrente()));
+
+    // A differenza degli altri metodi, la risoluzione dell'id può fallire
+    // PRIMA di raggiungere il motore: il motore non conosce il catalogo
+    // (spec del lotto, niente ISchemaCatalog in Domain), quindi tocca
+    // all'hub risolvere l'identificativo. Un id inesistente non genera
+    // nessun evento - non c'è nulla da chiedere al motore di rifiutare - e
+    // la risposta va solo al chiamante, mai alla stanza intera.
+    public async Task SetSchema(SetSchemaRequest request)
+    {
+        Schema schema;
+        try
+        {
+            schema = schemas.Get(request.SchemaId);
+        }
+        catch (KeyNotFoundException)
+        {
+            await Clients.Caller.SendAsync(
+                "ReceiveMessage",
+                nameof(ErrorMessage),
+                new ErrorMessage("NO_SUCH_SCHEMA", $"Lo schema '{request.SchemaId}' non esiste."));
+            return;
+        }
+
+        await host.DispatchAsync(request.RoomCode, new SchemaSelected(schema, GiocatoreCorrente()));
+    }
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {

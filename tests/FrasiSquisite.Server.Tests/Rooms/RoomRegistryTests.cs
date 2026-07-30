@@ -50,6 +50,22 @@ public class RoomRegistryTests
         Assert.Empty(stato.Players);
     }
 
+    /// <summary>
+    /// Il motore non conosce il catalogo (lotto-c-brief.md): è chi crea la
+    /// stanza a doverla seminare con l'elenco completo degli schemi
+    /// disponibili, così l'hub non deve interrogare il catalogo a ogni
+    /// RoomStateMessage.
+    /// </summary>
+    [Fact]
+    public void CreaUnaStanzaConTuttiGliSchemiDelCatalogoDisponibili()
+    {
+        var catalogo = new EmbeddedSchemaCatalog();
+        var stato = Registro().Create();
+
+        Assert.Equal(catalogo.All.Count, stato.AvailableSchemas.Count);
+        Assert.All(catalogo.All, s => Assert.Contains(stato.AvailableSchemas, v => v.Id == s.Id && v.SlotCount == s.SlotCount));
+    }
+
     [Fact]
     public void LaStanzaCreataERecuperabilePerCodice()
     {

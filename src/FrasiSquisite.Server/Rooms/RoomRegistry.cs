@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using FrasiSquisite.Domain.Model;
+using FrasiSquisite.Shared.Protocol;
 using FrasiSquisite.Shared.Schemas;
 
 namespace FrasiSquisite.Server.Rooms;
@@ -17,10 +18,18 @@ public sealed class RoomRegistry(RoomCodeGenerator codes, ISchemaCatalog schemas
     {
         var schema = schemas.Get(Schema.DefaultId);
 
+        // Il motore non conosce il catalogo (spec del lotto): è chi crea la
+        // stanza a doverlo seminare con l'elenco degli schemi disponibili,
+        // proiettato una volta sola qui invece che risolto a ogni
+        // RoomStateMessage.
+        var schemiDisponibili = schemas.All
+            .Select(s => new SchemaView(s.Id, s.Nome, s.SlotCount))
+            .ToList();
+
         for (var tentativo = 0; tentativo < MaxCodeAttempts; tentativo++)
         {
             var codice = codes.Next();
-            var stato = GameState.NewRoom(codice, schema);
+            var stato = GameState.NewRoom(codice, schema, schemiDisponibili);
 
             if (_rooms.TryAdd(codice, stato))
             {

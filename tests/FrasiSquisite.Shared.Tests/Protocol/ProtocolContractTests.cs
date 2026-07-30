@@ -6,21 +6,21 @@ namespace FrasiSquisite.Shared.Tests.Protocol;
 
 public class ProtocolContractTests
 {
-    // Il Lotto B aggiunge IsBot a PlayerView: un campo in più a un record è
-    // tollerato dalla serializzazione in entrambe le direzioni, ma un client
-    // v1 non saprebbe mostrare i controlli dei bot. Meglio un rifiuto
-    // esplicito ("aggiorna l'app") che una lobby incompleta senza dirlo
-    // (lotto-b-brief.md).
+    // Il Lotto C aggiunge AvailableSchemas a RoomStateMessage: un campo in
+    // più a un record è tollerato dalla serializzazione in entrambe le
+    // direzioni, ma un client v2 non saprebbe mostrare il selettore di
+    // schema. Meglio un rifiuto esplicito ("aggiorna l'app") che una lobby
+    // incompleta senza dirlo (lotto-c-brief.md).
     [Fact]
-    public void LaVersioneDiProtocolloDelLottoBE2()
+    public void LaVersioneDiProtocolloDelLottoCE3()
     {
-        Assert.Equal(2, ProtocolVersion.Current);
+        Assert.Equal(3, ProtocolVersion.Current);
     }
 
     [Fact]
     public void UnClientDellaVersionePrecedenteNonECompatibile()
     {
-        Assert.False(ProtocolVersion.IsCompatible(1));
+        Assert.False(ProtocolVersion.IsCompatible(2));
     }
 
     [Fact]

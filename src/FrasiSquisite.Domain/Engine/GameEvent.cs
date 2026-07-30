@@ -1,3 +1,5 @@
+using FrasiSquisite.Shared.Schemas;
+
 namespace FrasiSquisite.Domain.Engine;
 
 public abstract record GameEvent;
@@ -23,3 +25,12 @@ public sealed record BotAdded(Guid BotId, Guid RequestedBy) : GameEvent;
 public sealed record BotRemoved(Guid BotId, Guid RequestedBy) : GameEvent;
 
 public sealed record BotRenamed(Guid BotId, string Nickname, Guid RequestedBy) : GameEvent;
+
+/// <summary>
+/// Cambia lo schema della stanza in lobby. Porta lo <see cref="Schema"/> già
+/// risolto, non un id: il motore non conosce il catalogo (niente
+/// <c>ISchemaCatalog</c> qui dentro, spec del lotto), quindi è l'hub a
+/// risolvere l'identificativo prima di generare questo evento — esattamente
+/// come già fa generando l'id dei bot in <see cref="BotAdded"/>.
+/// </summary>
+public sealed record SchemaSelected(Schema Schema, Guid RequestedBy) : GameEvent;
