@@ -300,6 +300,50 @@ public sealed class GameHubTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AggiungereRinominareERimuovereUnBotFunzionaViaSignalR()
+    {
+        await using var anna = await ConnettiAsync();
+
+        var codice = await anna.Connection.InvokeAsync<string>(
+            "CreateRoom", new CreateRoomRequest(ProtocolVersion.Current, Guid.NewGuid(), "Anna"));
+        await anna.WaitFor<RoomStateMessage>(TimeSpan.FromSeconds(5));
+
+        await anna.Connection.InvokeAsync("AddBot", new AddBotRequest(codice));
+        await anna.WaitForCount<RoomStateMessage>(2, TimeSpan.FromSeconds(5));
+
+        var statoConBot = anna.Last<RoomStateMessage>();
+        var bot = Assert.Single(statoConBot.Players, p => p.IsBot);
+        Assert.False(bot.IsConnected);
+
+        await anna.Connection.InvokeAsync("RenameBot", new RenameBotRequest(codice, bot.Id, "Bot Ribattezzato"));
+        await anna.WaitForCount<RoomStateMessage>(3, TimeSpan.FromSeconds(5));
+        Assert.Equal("Bot Ribattezzato", Assert.Single(anna.Last<RoomStateMessage>().Players, p => p.IsBot).Nickname);
+
+        await anna.Connection.InvokeAsync("RemoveBot", new RemoveBotRequest(codice, bot.Id));
+        await anna.WaitForCount<RoomStateMessage>(4, TimeSpan.FromSeconds(5));
+        Assert.DoesNotContain(anna.Last<RoomStateMessage>().Players, p => p.IsBot);
+    }
+
+    [Fact]
+    public async Task UnNonHostCheProvaAdAggiungereUnBotRiceveNotHost()
+    {
+        await using var anna = await ConnettiAsync();
+        await using var bruno = await ConnettiAsync();
+
+        var codice = await anna.Connection.InvokeAsync<string>(
+            "CreateRoom", new CreateRoomRequest(ProtocolVersion.Current, Guid.NewGuid(), "Anna"));
+
+        await bruno.Connection.InvokeAsync(
+            "JoinRoom", new JoinRoomRequest(ProtocolVersion.Current, Guid.NewGuid(), "Bruno", codice));
+        await bruno.WaitFor<RoomStateMessage>(TimeSpan.FromSeconds(5));
+
+        await bruno.Connection.InvokeAsync("AddBot", new AddBotRequest(codice));
+        await bruno.WaitFor<ErrorMessage>(TimeSpan.FromSeconds(5));
+
+        Assert.Equal("NOT_HOST", bruno.Last<ErrorMessage>().Code);
+    }
+
+    [Fact]
     public async Task SubmitSlotSuUnaStanzaInesistenteSegnalaErroreAlClient()
     {
         await using var anna = await ConnettiAsync();
