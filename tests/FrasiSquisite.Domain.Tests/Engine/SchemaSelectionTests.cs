@@ -80,7 +80,13 @@ public class SchemaSelectionTests
     [Fact]
     public void CambiareSchemaInLobbyNonAlteraNientAltroDelloStato()
     {
-        var stato = StanzaVuota();
+        // AvailableSchemas popolato (non la lista vuota di default di
+        // StanzaVuota): una IReadOnlyList<T> vuota da collection expression
+        // si abbassa sempre alla stessa istanza cache Array.Empty<T>(), quindi
+        // Assert.Same passerebbe anche se il motore ricostruisse una lista
+        // vuota nuova - non proverebbe che il campo è rimasto intoccato.
+        var schemiDisponibili = new[] { new SchemaView("test-5", "Test 5", 5) };
+        var stato = GameState.NewRoom("ABCD", TestSchemas.WithSlots(5), schemiDisponibili);
         stato = _motore.Handle(stato, new PlayerJoined(Anna, "Anna")).State;
         stato = _motore.Handle(stato, new PlayerJoined(Bruno, "Bruno")).State;
         stato = _motore.Handle(stato, new BotAdded(Giocatore(99), Anna)).State;

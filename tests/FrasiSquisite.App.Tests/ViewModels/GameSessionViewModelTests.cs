@@ -799,7 +799,10 @@ public class GameSessionViewModelTests
     /// <summary>
     /// Schemi diversi hanno lunghezze diverse (lotto-c-brief.md): il
     /// conteggio mostrato deve seguire lo schema effettivamente selezionato
-    /// nell'ultima RoomStateMessage, non un valore scritto a mano.
+    /// nell'ultima RoomStateMessage, non un valore scritto a mano. "Mostrato"
+    /// va inteso alla lettera: oltre a SlotCount (il dato) si verifica anche
+    /// SchemaSummary (il testo che il non-host legge davvero), altrimenti il
+    /// nome del test prometterebbe più di quanto le asserzioni controllino.
     /// </summary>
     [Fact]
     public void IlConteggioDelleCaselleSeguiLoSchemaSelezionato()
@@ -816,6 +819,7 @@ public class GameSessionViewModelTests
             [new PlayerView(Anna, "Anna", true, true, false)],
             "surrealista-classico", 5, schemiDisponibili));
         Assert.Equal(5, vm.SlotCount);
+        Assert.Equal("Surrealista classico — 5 caselle", vm.SchemaSummary);
 
         conn.Emit(new RoomStateMessage(
             "ABCD", "Lobby",
@@ -824,6 +828,92 @@ public class GameSessionViewModelTests
 
         Assert.Equal(3, vm.SlotCount);
         Assert.Equal("proverbio", vm.SchemaId);
+        Assert.Equal("Proverbio della nonna — 3 caselle", vm.SchemaSummary);
+    }
+
+    /// <summary>
+    /// Lotto C (revisione): SchemaSummary non aveva alcuna copertura. Prima di
+    /// ricevere una RoomStateMessage, SchemaNome è ancora la stringa vuota di
+    /// default: il ramo vuoto di SchemaSummary deve restituire
+    /// string.Empty, non "" — "N caselle" già a schermo prima di sapere
+    /// quale schema è selezionato.
+    /// </summary>
+    [Fact]
+    public void SchemaSummaryEVuotaPrimaDiRicevereUnaRoomStateMessage()
+    {
+        var (vm, _) = Crea();
+
+        Assert.Equal(string.Empty, vm.SchemaSummary);
+    }
+
+    /// <summary>
+    /// Il formato esatto "{Nome} — {N} caselle" che il design mostra a chi
+    /// non è host, accanto al segnaposto del QR (lotto-c-brief.md).
+    /// </summary>
+    [Fact]
+    public void SchemaSummaryComponeNomeTrattinoENumeroDiCaselle()
+    {
+        var (vm, conn) = Crea();
+        var schemiDisponibili = new[] { new SchemaView("proverbio", "Proverbio della nonna", 3) };
+
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [new PlayerView(Anna, "Anna", true, true, false)],
+            "proverbio", 3, schemiDisponibili));
+
+        Assert.Equal("Proverbio della nonna — 3 caselle", vm.SchemaSummary);
+    }
+
+    /// <summary>
+    /// SchemaNome e SlotCount notificano entrambi SchemaSummary (vedi
+    /// OnSchemaNomeChanged/OnSlotCountChanged): senza quella notifica
+    /// l'etichetta in lobby resterebbe quella dello schema precedente anche
+    /// dopo che l'host ne ha scelto un altro, un bug che non romperebbe la
+    /// build né farebbe fallire alcun test che guardi solo SchemaId/SlotCount.
+    /// </summary>
+    [Fact]
+    public void CambiareLoSchemaNotificaSchemaSummary()
+    {
+        var (vm, conn) = Crea();
+        var schemiDisponibili = new[]
+        {
+            new SchemaView("surrealista-classico", "Surrealista classico", 5),
+            new SchemaView("proverbio", "Proverbio della nonna", 3),
+        };
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [new PlayerView(Anna, "Anna", true, true, false)],
+            "surrealista-classico", 5, schemiDisponibili));
+
+        var proprietaNotificate = new List<string>();
+        vm.PropertyChanged += (_, e) => proprietaNotificate.Add(e.PropertyName!);
+
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [new PlayerView(Anna, "Anna", true, true, false)],
+            "proverbio", 3, schemiDisponibili));
+
+        Assert.Contains(nameof(GameSessionViewModel.SchemaSummary), proprietaNotificate);
+    }
+
+    /// <summary>
+    /// AvailableSchemas arriva vuoto in ogni fixture di test preesistente (e
+    /// nella realtà finché la RoomStateMessage con il catalogo non è ancora
+    /// arrivata): SchemaNome deve comunque ripiegare sull'id dello schema
+    /// invece di restare vuoto, altrimenti SchemaSummary sparirebbe del tutto
+    /// (vedi il fallback "?? stato.SchemaId" in GameSessionViewModel).
+    /// </summary>
+    [Fact]
+    public void SenzaSchemiDisponibiliIlRiepilogoRipiegaSullId()
+    {
+        var (vm, conn) = Crea();
+
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [new PlayerView(Anna, "Anna", true, true, false)],
+            "surrealista-classico", 5));
+
+        Assert.Equal("surrealista-classico — 5 caselle", vm.SchemaSummary);
     }
 
     [Fact]

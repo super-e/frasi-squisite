@@ -23,6 +23,15 @@ public class ProtocolContractTests
         Assert.False(ProtocolVersion.IsCompatible(2));
     }
 
+    // Un client v1 (prima ancora del lotto precedente) è incompatibile tanto
+    // quanto uno v2: il caso non va perso quando la versione corrente avanza,
+    // altrimenti una regressione che accettasse "solo" v1 passerebbe inosservata.
+    [Fact]
+    public void UnClientDiDueVersioniPrimaNonECompatibile()
+    {
+        Assert.False(ProtocolVersion.IsCompatible(1));
+    }
+
     [Fact]
     public void SlotRequestSiSerializzaInCamelCase()
     {
