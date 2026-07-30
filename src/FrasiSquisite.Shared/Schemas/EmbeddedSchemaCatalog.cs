@@ -30,8 +30,18 @@ public sealed class EmbeddedSchemaCatalog : ISchemaCatalog
         // mostrerebbe un ordine arbitrario, potenzialmente diverso da una
         // build all'altra. Ordine deterministico: il classico per primo (è il
         // default), gli altri in ordine alfabetico di nome.
+        //
+        // SingleOrDefault + messaggio esplicito invece di .Single(): se lo
+        // schema di default sparisse dagli embedded (rinominato o rimosso),
+        // .Single() farebbe fallire la DI del server con un bare
+        // InvalidOperationException "Sequence contains no matching element",
+        // senza dire quale schema manca. Stesso testo di Get() qui sotto, per
+        // coerenza: un catalogo senza il suo default è comunque un errore
+        // "schema non trovato".
+        var predefinito = schemi.SingleOrDefault(s => s.Id == Schema.DefaultId)
+            ?? throw new InvalidOperationException($"Schema '{Schema.DefaultId}' non trovato.");
         All = [
-            schemi.Single(s => s.Id == Schema.DefaultId),
+            predefinito,
             .. schemi.Where(s => s.Id != Schema.DefaultId).OrderBy(s => s.Nome, StringComparer.Ordinal),
         ];
         _perId = schemi.ToImmutableDictionary(s => s.Id, StringComparer.Ordinal);
