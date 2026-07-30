@@ -1,0 +1,11 @@
+{
+  "id": "proverbio",
+  "version": 1,
+  "nome": "Proverbio della nonna",
+  "template": "{0} {1} {2}",
+  "caselle": [
+    { "ruolo": "Premessa",    "prompt": "\"Chi\" più un verbo", "esempio": "Chi va piano" },
+    { "ruolo": "Conseguenza", "prompt": "Cosa gli capita",      "esempio": "mangia le pere" },
+    { "ruolo": "Rincaro",     "prompt": "E in più",             "esempio": "e non ringrazia" }
+  ]
+}

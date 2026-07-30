@@ -25,7 +25,15 @@ public sealed class EmbeddedSchemaCatalog : ISchemaCatalog
             .Select(nome => Leggi(assembly, nome))
             .ToList();
 
-        All = [.. schemi];
+        // GetManifestResourceNames() non garantisce alcun ordine: con un solo
+        // schema era innocuo, ma con più di uno il selettore in lobby
+        // mostrerebbe un ordine arbitrario, potenzialmente diverso da una
+        // build all'altra. Ordine deterministico: il classico per primo (è il
+        // default), gli altri in ordine alfabetico di nome.
+        All = [
+            schemi.Single(s => s.Id == Schema.DefaultId),
+            .. schemi.Where(s => s.Id != Schema.DefaultId).OrderBy(s => s.Nome, StringComparer.Ordinal),
+        ];
         _perId = schemi.ToImmutableDictionary(s => s.Id, StringComparer.Ordinal);
     }
 

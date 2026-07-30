@@ -1,0 +1,12 @@
+{
+  "id": "titolo-di-giornale",
+  "version": 1,
+  "nome": "Titolo di giornale",
+  "template": "{0} {1} {2} {3}",
+  "caselle": [
+    { "ruolo": "Soggetto",     "prompt": "Chi o cosa fa notizia",  "esempio": "Il sindaco" },
+    { "ruolo": "Verbo",        "prompt": "Un verbo al passato prossimo", "esempio": "ha inaugurato" },
+    { "ruolo": "Complemento",  "prompt": "L'oggetto della notizia", "esempio": "una rotonda" },
+    { "ruolo": "Circostanza",  "prompt": "Dove, quando o come",    "esempio": "in pigiama" }
+  ]
+}

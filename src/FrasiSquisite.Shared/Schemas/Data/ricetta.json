@@ -1,0 +1,13 @@
+{
+  "id": "ricetta",
+  "version": 1,
+  "nome": "Ricetta d'autore",
+  "template": "{0} {1} {2} {3} {4}",
+  "caselle": [
+    { "ruolo": "Ingrediente", "prompt": "Un ingrediente, con la quantità", "esempio": "Tre cipolle" },
+    { "ruolo": "Azione",      "prompt": "Cosa farci",                     "esempio": "vanno frullate" },
+    { "ruolo": "Modo",        "prompt": "Con quale spirito",              "esempio": "con rabbia" },
+    { "ruolo": "Aggiunta",    "prompt": "Poi si aggiunge",                "esempio": "del bicarbonato" },
+    { "ruolo": "Servizio",    "prompt": "Si serve",                       "esempio": "tiepido, ai nemici" }
+  ]
+}

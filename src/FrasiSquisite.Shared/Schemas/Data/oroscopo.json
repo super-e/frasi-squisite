@@ -1,0 +1,13 @@
+{
+  "id": "oroscopo",
+  "version": 1,
+  "nome": "Oroscopo del giorno",
+  "template": "{0} {1} {2} {3} {4}",
+  "caselle": [
+    { "ruolo": "Segno",       "prompt": "Un segno zodiacale, o inventane uno", "esempio": "Vergine" },
+    { "ruolo": "Previsione",  "prompt": "Cosa ti aspetta",                     "esempio": "un incontro inatteso" },
+    { "ruolo": "Luogo",       "prompt": "Dove succederà",                      "esempio": "in ascensore" },
+    { "ruolo": "Consiglio",   "prompt": "Il consiglio delle stelle",           "esempio": "non fidarti dei mercoledì" },
+    { "ruolo": "Numero",      "prompt": "Il numero fortunato",                 "esempio": "il 47" }
+  ]
+}
