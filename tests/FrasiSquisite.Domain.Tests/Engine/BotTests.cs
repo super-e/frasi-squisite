@@ -239,4 +239,131 @@ public class BotTests
         var esito = SlotTextValidator.Validate(testoBot);
         Assert.True(esito.IsValid);
     }
+
+    // ================= Guardie non ancora coperte (revisione lotto B) =================
+
+    [Fact]
+    public void NonSiPuoRimuovereUnBotFuoriDallaLobby()
+    {
+        var stato = GameState.NewRoom("ABCD", TestSchemas.WithSlots(5));
+        stato = _motore.Handle(stato, new PlayerJoined(Giocatore(0), "Anna")).State;
+        stato = _motore.Handle(stato, new PlayerJoined(Giocatore(1), "Bruno")).State;
+        stato = _motore.Handle(stato, new BotAdded(Bot(0), Giocatore(0))).State;
+        stato = _motore.Handle(stato, new GameStartRequested(Giocatore(0))).State;
+
+        var risultato = _motore.Handle(stato, new BotRemoved(Bot(0), Giocatore(0)));
+
+        var errore = Assert.Single(risultato.MessagesTo<ErrorMessage>(Giocatore(0)));
+        Assert.Equal("NOT_LOBBY", errore.Code);
+        Assert.NotNull(risultato.State.FindPlayer(Bot(0)));
+    }
+
+    [Fact]
+    public void NonSiPuoRinominareUnBotFuoriDallaLobby()
+    {
+        var stato = GameState.NewRoom("ABCD", TestSchemas.WithSlots(5));
+        stato = _motore.Handle(stato, new PlayerJoined(Giocatore(0), "Anna")).State;
+        stato = _motore.Handle(stato, new PlayerJoined(Giocatore(1), "Bruno")).State;
+        stato = _motore.Handle(stato, new BotAdded(Bot(0), Giocatore(0))).State;
+        var nomeOriginale = stato.FindPlayer(Bot(0))!.Nickname;
+        stato = _motore.Handle(stato, new GameStartRequested(Giocatore(0))).State;
+
+        var risultato = _motore.Handle(stato, new BotRenamed(Bot(0), "Nuovo", Giocatore(0)));
+
+        var errore = Assert.Single(risultato.MessagesTo<ErrorMessage>(Giocatore(0)));
+        Assert.Equal("NOT_LOBBY", errore.Code);
+        Assert.Equal(nomeOriginale, risultato.State.FindPlayer(Bot(0))!.Nickname);
+    }
+
+    [Fact]
+    public void RinominareUnIdInesistenteRestituisceNoSuchPlayer()
+    {
+        var stato = GameState.NewRoom("ABCD", TestSchemas.WithSlots(5));
+        stato = _motore.Handle(stato, new PlayerJoined(Giocatore(0), "Anna")).State;
+
+        var risultato = _motore.Handle(stato, new BotRenamed(Guid.NewGuid(), "Nuovo", Giocatore(0)));
+
+        var errore = Assert.Single(risultato.MessagesTo<ErrorMessage>(Giocatore(0)));
+        Assert.Equal("NO_SUCH_PLAYER", errore.Code);
+    }
+
+    [Fact]
+    public void RinominareUnUmanoConRenameBotVieneRifiutatoConNotABot()
+    {
+        var stato = GameState.NewRoom("ABCD", TestSchemas.WithSlots(5));
+        stato = _motore.Handle(stato, new PlayerJoined(Giocatore(0), "Anna")).State;
+        stato = _motore.Handle(stato, new PlayerJoined(Giocatore(1), "Bruno")).State;
+
+        var risultato = _motore.Handle(stato, new BotRenamed(Giocatore(1), "Nuovo", Giocatore(0)));
+
+        var errore = Assert.Single(risultato.MessagesTo<ErrorMessage>(Giocatore(0)));
+        Assert.Equal("NOT_A_BOT", errore.Code);
+        Assert.Equal("Bruno", risultato.State.FindPlayer(Giocatore(1))!.Nickname);
+    }
+
+    // Punto 4 della revisione: BotRenamed non controllava l'unicità del nome.
+    // Innocuo per il motore (gli id restano la chiave) ma vanifica la lista
+    // di nomi senza collisioni e confonde la lista in lobby.
+    [Fact]
+    public void RinominareUnBotConIlNomeDiUnAltroGiocatoreVieneRifiutato()
+    {
+        var stato = GameState.NewRoom("ABCD", TestSchemas.WithSlots(5));
+        stato = _motore.Handle(stato, new PlayerJoined(Giocatore(0), "Anna")).State;
+        stato = _motore.Handle(stato, new BotAdded(Bot(0), Giocatore(0))).State;
+        stato = _motore.Handle(stato, new BotAdded(Bot(1), Giocatore(0))).State;
+        var nomeBot1 = stato.FindPlayer(Bot(1))!.Nickname;
+
+        var risultato = _motore.Handle(stato, new BotRenamed(Bot(0), nomeBot1, Giocatore(0)));
+
+        var errore = Assert.Single(risultato.MessagesTo<ErrorMessage>(Giocatore(0)));
+        Assert.Equal("INVALID_NICKNAME", errore.Code);
+        Assert.Equal("Bot Ada", risultato.State.FindPlayer(Bot(0))!.Nickname);
+    }
+
+    // Punto 4: rinominare un bot con il proprio nome attuale non è una
+    // collisione con "un altro giocatore" e deve continuare a funzionare.
+    [Fact]
+    public void RinominareUnBotConLoStessoNomeCheHaGiaFunziona()
+    {
+        var stato = GameState.NewRoom("ABCD", TestSchemas.WithSlots(5));
+        stato = _motore.Handle(stato, new PlayerJoined(Giocatore(0), "Anna")).State;
+        stato = _motore.Handle(stato, new BotAdded(Bot(0), Giocatore(0))).State;
+
+        var risultato = _motore.Handle(stato, new BotRenamed(Bot(0), "Bot Ada", Giocatore(0)));
+
+        Assert.Empty(risultato.MessagesTo<ErrorMessage>(Giocatore(0)));
+        Assert.Equal("Bot Ada", risultato.State.FindPlayer(Bot(0))!.Nickname);
+    }
+
+    // Punto 5 della revisione: NextBotName non deve più lanciare quando la
+    // lista di otto nomi è esaurita. Il commento originale la definiva
+    // "irraggiungibile" perché confrontava solo con MaxPlayers, ma
+    // NextBotName confronta con TUTTI i nickname (anche umani): otto umani
+    // con nickname uguali ai nomi della lista bastano a raggiungerla anche
+    // con meno di MaxPlayers giocatori in stanza.
+    [Fact]
+    public void AggiungereUnBotSenzaNomiDisponibiliRestituisceUnErrorePulito()
+    {
+        // Esattamente otto umani, ognuno con un nickname della lista bot: la
+        // lista si esaurisce con SOLO 8 giocatori in stanza, ben sotto
+        // MaxPlayers (9) - quindi il guard ROOM_FULL non scatta prima, ed è
+        // NextBotName da solo a dover restituire un errore pulito.
+        var nomi = new[] { "Bot Ada", "Bot Bruno", "Bot Chiara", "Bot Delia", "Bot Enzo", "Bot Fiamma", "Bot Gigi", "Bot Ivo" };
+        var host = Giocatore(0);
+
+        var stato = GameState.NewRoom("ABCD", TestSchemas.WithSlots(5));
+        for (var i = 0; i < nomi.Length; i++)
+        {
+            stato = _motore.Handle(stato, new PlayerJoined(i == 0 ? host : Guid.NewGuid(), nomi[i])).State;
+        }
+
+        Assert.Equal(nomi.Length, stato.Players.Count);
+        Assert.True(stato.Players.Count < GameEngine.MaxPlayers);
+
+        var risultato = _motore.Handle(stato, new BotAdded(Bot(0), host));
+
+        var errore = Assert.Single(risultato.MessagesTo<ErrorMessage>(host));
+        Assert.Equal("NO_BOT_NAMES_LEFT", errore.Code);
+        Assert.DoesNotContain(risultato.State.Players, p => p.IsBot);
+    }
 }

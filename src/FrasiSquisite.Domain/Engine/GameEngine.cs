@@ -404,7 +404,21 @@ public sealed class GameEngine(IGameMode mode, IWordPool pool, IRandomSource ran
             return Error(state, e.RequestedBy, "ROOM_FULL", $"La stanza ospita al massimo {MaxPlayers} giocatori.");
         }
 
-        var bot = new Player(e.BotId, NextBotName(state), IsBot: true, state.NextJoinOrder, IsConnected: false);
+        var nome = NextBotName(state);
+        if (nome is null)
+        {
+            // Non è "irraggiungibile": NextBotName confronta con i nickname di
+            // TUTTI i giocatori, umani inclusi. Con meno di MaxPlayers persone
+            // già in stanza (quindi ROOM_FULL non è scattato) ma otto di loro
+            // con un nickname che combacia esattamente con la lista dei nomi
+            // bot, la lista si esaurisce comunque. Improbabile, ma un errore
+            // pulito verso il client è comunque dovuto invece di un'eccezione
+            // non gestita che risalirebbe fuori da Handle.
+            return Error(state, e.RequestedBy, "NO_BOT_NAMES_LEFT",
+                "Nessun nome disponibile per il bot: troppi giocatori hanno già un nome della lista.");
+        }
+
+        var bot = new Player(e.BotId, nome, IsBot: true, state.NextJoinOrder, IsConnected: false);
 
         var nuovo = state with
         {
@@ -473,6 +487,14 @@ public sealed class GameEngine(IGameMode mode, IWordPool pool, IRandomSource ran
             return Error(state, e.RequestedBy, "INVALID_NICKNAME", esito.Error!);
         }
 
+        // Innocuo per il motore (gli id restano la chiave), ma vanificherebbe
+        // la lista di nomi senza collisioni e confonderebbe la lista in
+        // lobby: due righe con lo stesso nome sembrerebbero un bug.
+        if (state.Players.Any(p => p.Id != e.BotId && p.Nickname == esito.Normalized))
+        {
+            return Error(state, e.RequestedBy, "INVALID_NICKNAME", "Questo nome è già usato da un altro giocatore.");
+        }
+
         var giocatori = state.Players
             .Select(p => p.Id == e.BotId ? p with { Nickname = esito.Normalized } : p)
             .ToList();
@@ -482,12 +504,12 @@ public sealed class GameEngine(IGameMode mode, IWordPool pool, IRandomSource ran
         return new EngineResult(nuovo, [new BroadcastToRoom(RoomState(nuovo))]);
     }
 
-    /// <summary>Primo nome libero della lista fissa: nessuna casualità, nessuna collisione.</summary>
-    private static string NextBotName(GameState state) =>
-        BotNames.FirstOrDefault(nome => state.Players.All(p => p.Nickname != nome))
-            // Irraggiungibile: con MaxPlayers a 9 e otto nomi, il controllo
-            // ROOM_FULL blocca sempre prima che gli otto nomi finiscano tutti.
-            ?? throw new InvalidOperationException("Nessun nome disponibile per il bot.");
+    /// <summary>
+    /// Primo nome libero della lista fissa: nessuna casualità, nessuna
+    /// collisione. Null se sono tutti già in uso (vedi il chiamante).
+    /// </summary>
+    private static string? NextBotName(GameState state) =>
+        BotNames.FirstOrDefault(nome => state.Players.All(p => p.Nickname != nome));
 
     private static EngineResult Error(GameState state, Guid playerId, string code, string message) =>
         new(state, [new SendToPlayer(playerId, new ErrorMessage(code, message))]);
