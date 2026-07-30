@@ -15,3 +15,7 @@ public sealed record RemoveBotRequest(string RoomCode, Guid BotId);
 public sealed record RenameBotRequest(string RoomCode, Guid BotId, string Nickname);
 
 public sealed record SetSchemaRequest(string RoomCode, string SchemaId);
+
+public sealed record NewGameRequest(string RoomCode);
+
+public sealed record BackToLobbyRequest(string RoomCode);

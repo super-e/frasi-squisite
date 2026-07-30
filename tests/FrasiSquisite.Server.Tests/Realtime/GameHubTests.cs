@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using FrasiSquisite.Domain.Model;
 using FrasiSquisite.Server.Rooms;
 using FrasiSquisite.Shared.Protocol;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -262,6 +263,118 @@ public sealed class GameHubTests : IAsyncLifetime
         Assert.Equal(0, passo.PhraseIndex);
         Assert.Equal(2, passo.TotalPhrases);
         Assert.Single(passo.RevealedSlots);
+    }
+
+    /// <summary>
+    /// Porta la partita di anna e bruno fino alla GameFinishedMessage:
+    /// avvio, tutti i round scritti, reveal avanzato fino in fondo. Usata
+    /// dai test del Lotto D ("Nuova partita" / "Torna alla lobby"), che
+    /// hanno bisogno di una stanza già in <see cref="RoomPhase.Finished"/>
+    /// prima di poter cominciare.
+    /// </summary>
+    private static async Task<int> GiocaFinoAllaFineAsync(Client anna, Client bruno, string codice)
+    {
+        await anna.Connection.InvokeAsync("StartGame", new StartGameRequest(codice));
+        await anna.WaitFor<SlotRequestMessage>(TimeSpan.FromSeconds(5));
+        await bruno.WaitFor<SlotRequestMessage>(TimeSpan.FromSeconds(5));
+
+        var totalRounds = anna.Last<SlotRequestMessage>().TotalRounds;
+
+        for (var round = 0; round < totalRounds; round++)
+        {
+            await anna.Connection.InvokeAsync("SubmitSlot", new SubmitSlotRequest(codice, $"anna{round}"));
+            await bruno.Connection.InvokeAsync("SubmitSlot", new SubmitSlotRequest(codice, $"bruno{round}"));
+        }
+
+        // Un AdvanceReveal alla volta finché non arriva la GameFinishedMessage
+        // (spec §2.4: una casella scoperta per avanzamento).
+        while (anna.CountOf<GameFinishedMessage>() == 0)
+        {
+            var passiPrima = anna.CountOf<RevealStepMessage>();
+            await anna.Connection.InvokeAsync("AdvanceReveal", codice);
+            await anna.WaitForCount<RevealStepMessage>(passiPrima + 1, TimeSpan.FromSeconds(5));
+        }
+
+        await anna.WaitFor<GameFinishedMessage>(TimeSpan.FromSeconds(5));
+
+        return totalRounds;
+    }
+
+    [Fact]
+    public async Task DopoLaFineLHostPuoIniziareSubitoUnaNuovaPartita()
+    {
+        await using var anna = await ConnettiAsync();
+        await using var bruno = await ConnettiAsync();
+
+        var codice = await anna.Connection.InvokeAsync<string>(
+            "CreateRoom", new CreateRoomRequest(ProtocolVersion.Current, Guid.NewGuid(), "Anna"));
+        await bruno.Connection.InvokeAsync(
+            "JoinRoom", new JoinRoomRequest(ProtocolVersion.Current, Guid.NewGuid(), "Bruno", codice));
+        await bruno.WaitFor<RoomStateMessage>(TimeSpan.FromSeconds(5));
+
+        var totalRounds = await GiocaFinoAllaFineAsync(anna, bruno, codice);
+
+        // "Nuova partita": riparte subito, senza passare dalla lobby -
+        // arriva dritta a una nuova SlotRequestMessage per il round 0
+        // (lotto-d-brief.md).
+        await anna.Connection.InvokeAsync("NewGame", new NewGameRequest(codice));
+
+        await anna.WaitForCount<SlotRequestMessage>(totalRounds + 1, TimeSpan.FromSeconds(5));
+        await bruno.WaitForCount<SlotRequestMessage>(totalRounds + 1, TimeSpan.FromSeconds(5));
+
+        Assert.Equal(0, anna.Last<SlotRequestMessage>().Round);
+        Assert.Equal(0, bruno.Last<SlotRequestMessage>().Round);
+    }
+
+    [Fact]
+    public async Task DopoLaFineLHostPuoTornareAllaLobbyEDaLiRiavviareComeSempre()
+    {
+        await using var anna = await ConnettiAsync();
+        await using var bruno = await ConnettiAsync();
+
+        var codice = await anna.Connection.InvokeAsync<string>(
+            "CreateRoom", new CreateRoomRequest(ProtocolVersion.Current, Guid.NewGuid(), "Anna"));
+        await bruno.Connection.InvokeAsync(
+            "JoinRoom", new JoinRoomRequest(ProtocolVersion.Current, Guid.NewGuid(), "Bruno", codice));
+        await bruno.WaitFor<RoomStateMessage>(TimeSpan.FromSeconds(5));
+
+        await GiocaFinoAllaFineAsync(anna, bruno, codice);
+
+        var statiPrimaDiTornare = anna.CountOf<RoomStateMessage>();
+        await anna.Connection.InvokeAsync("BackToLobby", new BackToLobbyRequest(codice));
+        await anna.WaitForCount<RoomStateMessage>(statiPrimaDiTornare + 1, TimeSpan.FromSeconds(5));
+
+        Assert.Equal(nameof(RoomPhase.Lobby), anna.Last<RoomStateMessage>().Phase);
+
+        // Da qui GameStartRequested funziona come sempre (brief del lotto).
+        var richiesteCaselePrima = anna.CountOf<SlotRequestMessage>();
+        await anna.Connection.InvokeAsync("StartGame", new StartGameRequest(codice));
+        await anna.WaitForCount<SlotRequestMessage>(richiesteCaselePrima + 1, TimeSpan.FromSeconds(5));
+        Assert.Equal(0, anna.Last<SlotRequestMessage>().Round);
+    }
+
+    [Fact]
+    public async Task UnNonHostCheProvaNewGameOBackToLobbyRiceveNotHost()
+    {
+        await using var anna = await ConnettiAsync();
+        await using var bruno = await ConnettiAsync();
+
+        var codice = await anna.Connection.InvokeAsync<string>(
+            "CreateRoom", new CreateRoomRequest(ProtocolVersion.Current, Guid.NewGuid(), "Anna"));
+        await bruno.Connection.InvokeAsync(
+            "JoinRoom", new JoinRoomRequest(ProtocolVersion.Current, Guid.NewGuid(), "Bruno", codice));
+        await bruno.WaitFor<RoomStateMessage>(TimeSpan.FromSeconds(5));
+
+        await GiocaFinoAllaFineAsync(anna, bruno, codice);
+
+        await bruno.Connection.InvokeAsync("NewGame", new NewGameRequest(codice));
+        await bruno.WaitFor<ErrorMessage>(TimeSpan.FromSeconds(5));
+        Assert.Equal("NOT_HOST", bruno.Last<ErrorMessage>().Code);
+
+        var erroriPrima = bruno.CountOf<ErrorMessage>();
+        await bruno.Connection.InvokeAsync("BackToLobby", new BackToLobbyRequest(codice));
+        await bruno.WaitForCount<ErrorMessage>(erroriPrima + 1, TimeSpan.FromSeconds(5));
+        Assert.Equal("NOT_HOST", bruno.Last<ErrorMessage>().Code);
     }
 
     [Fact]

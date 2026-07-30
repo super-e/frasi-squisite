@@ -6,28 +6,38 @@ namespace FrasiSquisite.Shared.Tests.Protocol;
 
 public class ProtocolContractTests
 {
-    // Il Lotto C aggiunge AvailableSchemas a RoomStateMessage: un campo in
-    // più a un record è tollerato dalla serializzazione in entrambe le
-    // direzioni, ma un client v2 non saprebbe mostrare il selettore di
-    // schema. Meglio un rifiuto esplicito ("aggiorna l'app") che una lobby
-    // incompleta senza dirlo (lotto-c-brief.md).
+    // Il Lotto D aggiunge NewGameRequest/BackToLobbyRequest: un client v3
+    // resterebbe bloccato per sempre nella schermata finale (lotto-d-brief.md,
+    // il difetto che questo lotto corregge), quindi anche qui il rifiuto
+    // esplicito ("aggiorna l'app") è il comportamento giusto, non un
+    // effetto collaterale da tollerare.
     [Fact]
-    public void LaVersioneDiProtocolloDelLottoCE3()
+    public void LaVersioneDiProtocolloDelLottoDE4()
     {
-        Assert.Equal(3, ProtocolVersion.Current);
+        Assert.Equal(4, ProtocolVersion.Current);
     }
 
     [Fact]
     public void UnClientDellaVersionePrecedenteNonECompatibile()
     {
+        Assert.False(ProtocolVersion.IsCompatible(3));
+    }
+
+    // Un client v2 (del lotto precedente) è incompatibile tanto quanto uno
+    // v3: il caso non va perso quando la versione corrente avanza, altrimenti
+    // una regressione che accettasse "solo" v2 passerebbe inosservata.
+    [Fact]
+    public void UnClientDiDueVersioniPrimaNonECompatibile()
+    {
         Assert.False(ProtocolVersion.IsCompatible(2));
     }
 
-    // Un client v1 (prima ancora del lotto precedente) è incompatibile tanto
-    // quanto uno v2: il caso non va perso quando la versione corrente avanza,
-    // altrimenti una regressione che accettasse "solo" v1 passerebbe inosservata.
+    // Stessa cautela per v1 (prima ancora del lotto C): la catena di
+    // incompatibilità pregresse resta tutta coperta man mano che la versione
+    // corrente avanza (spec del progetto: "i test che asseriscono
+    // ProtocolVersion vanno aggiornati... tenendo anche i casi vecchi").
     [Fact]
-    public void UnClientDiDueVersioniPrimaNonECompatibile()
+    public void UnClientDiTreVersioniPrimaNonECompatibile()
     {
         Assert.False(ProtocolVersion.IsCompatible(1));
     }

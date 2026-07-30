@@ -59,6 +59,12 @@ public sealed class GameHub(GameHost host, IRoomRegistry rooms, ISchemaCatalog s
     public Task AdvanceReveal(string roomCode) =>
         host.DispatchAsync(roomCode, new RevealAdvanceRequested(GiocatoreCorrente()));
 
+    public Task NewGame(NewGameRequest request) =>
+        host.DispatchAsync(request.RoomCode, new NewGameRequested(GiocatoreCorrente()));
+
+    public Task BackToLobby(BackToLobbyRequest request) =>
+        host.DispatchAsync(request.RoomCode, new BackToLobbyRequested(GiocatoreCorrente()));
+
     // L'id del bot lo genera l'hub, mai il motore (Domain non produce GUID:
     // niente nondeterminismo, vedi lotto-b-brief.md punto 2). Gli altri due
     // metodi inoltrano un id già esistente, scelto da chi ha aggiunto il bot.
