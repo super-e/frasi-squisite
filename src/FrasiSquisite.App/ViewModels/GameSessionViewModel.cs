@@ -74,8 +74,16 @@ public partial class GameSessionViewModel : ObservableObject
     [ObservableProperty]
     private ScreenState _screen = ScreenState.Home;
 
+    /// <summary>
+    /// Il server pubblico del gioco. Resta modificabile per poter puntare a
+    /// un'istanza locale durante lo sviluppo; quando quell'esigenza cadrà, il
+    /// campo in Impostazioni sparisce e questo diventa l'unico indirizzo
+    /// possibile.
+    /// </summary>
+    public const string DefaultServerUrl = "https://frasisquisite.carraraenri.co/";
+
     [ObservableProperty]
-    private string _serverUrl = "http://10.0.2.2:5000";
+    private string _serverUrl = DefaultServerUrl;
 
     [ObservableProperty]
     private string _nickname = string.Empty;
