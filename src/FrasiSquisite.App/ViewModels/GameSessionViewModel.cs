@@ -11,6 +11,7 @@ namespace FrasiSquisite.App.ViewModels;
 public enum ScreenState
 {
     Home,
+    Settings,
     Lobby,
     Writing,
     Waiting,
@@ -27,11 +28,32 @@ public partial class GameSessionViewModel : ObservableObject
 {
     private readonly IGameConnection _connection;
     private readonly Guid _playerId;
+    private readonly IThemeService _themeService;
 
-    public GameSessionViewModel(IGameConnection connection, Guid playerId)
+    /// <summary>
+    /// Autori della frase completata dall'ultimo passo di reveal, tenuti in
+    /// disparte finché l'host non tocca di nuovo (battito "Chi l'ha scritta?"
+    /// separato, vedi <see cref="AdvanceRevealAsync"/>). Il server li manda già
+    /// insieme alla casella che completa la frase: nessun secondo giro dal
+    /// server serve per mostrarli, quindi non è un [ObservableProperty].
+    /// </summary>
+    private IReadOnlyList<string> _autoriInAttesa = [];
+
+    private bool _fraseCompleta;
+    private bool _autoriMostratiPerQuestoPasso;
+
+    public GameSessionViewModel(IGameConnection connection, Guid playerId, IThemeService themeService)
     {
         _connection = connection;
         _playerId = playerId;
+        _themeService = themeService;
+
+        _selectedTheme = themeService.Current;
+        // Il tema può cambiare solo da Impostazioni, che passa sempre da
+        // SelectThemeCommand qui sotto; questa sottoscrizione tiene comunque
+        // SelectedTheme sincronizzato con la fonte di verità (IThemeService)
+        // invece di duplicarne lo stato.
+        _themeService.ThemeChanged += tema => SelectedTheme = tema;
 
         // Sottoscrizione nel costruttore: la ViewModel deve reagire ai messaggi
         // fin dal primo istante, anche prima che l'utente tocchi qualcosa.
@@ -54,8 +76,43 @@ public partial class GameSessionViewModel : ObservableObject
     [ObservableProperty]
     private string _joinCode = string.Empty;
 
+    /// <summary>
+    /// Home: false mostra "Crea una stanza"/"Ho un codice", true li sostituisce
+    /// con il campo del codice, "Entra" e "Indietro".
+    /// </summary>
+    [ObservableProperty]
+    private bool _isJoiningByCode;
+
     [ObservableProperty]
     private bool _isHost;
+
+    [ObservableProperty]
+    private ThemeChoice _selectedTheme;
+
+    /// <summary>
+    /// Caselle dello schema per frase: arriva con <see cref="RoomStateMessage"/>
+    /// (Domain, spec) e serve al reveal per sapere quante caselle "···" mostrare
+    /// oltre a quelle già scoperte.
+    /// </summary>
+    [ObservableProperty]
+    private int _slotCount;
+
+    /// <summary>
+    /// Arriva già con <see cref="RoomStateMessage"/> (spec) ma il client lo
+    /// ignorava: la Lobby del design vuole il testo dello schema accanto al
+    /// segnaposto del QR.
+    /// </summary>
+    [ObservableProperty]
+    private string _schemaId = string.Empty;
+
+    [ObservableProperty]
+    private int _phraseNumber;
+
+    [ObservableProperty]
+    private int _totalPhrases;
+
+    [ObservableProperty]
+    private string _revealButtonLabel = "Rivela la prossima parola";
 
     [ObservableProperty]
     private string _ruolo = string.Empty;
@@ -89,11 +146,31 @@ public partial class GameSessionViewModel : ObservableObject
 
     public ObservableCollection<PlayerView> Players { get; } = [];
 
-    public ObservableCollection<string> RevealedSlots { get; } = [];
+    /// <summary>
+    /// Lunga sempre <see cref="SlotCount"/>: le caselle non ancora scoperte ci
+    /// sono già, come segnaposto "···" (<see cref="RevealSlotView.IsRevealed"/>
+    /// false), invece di apparire solo quando arrivano.
+    /// </summary>
+    public ObservableCollection<RevealSlotView> RevealSlots { get; } = [];
 
+    /// <summary>
+    /// Vuota finché l'host non tocca il pulsante nello stato "Chi l'ha
+    /// scritta?": si popola da <see cref="_autoriInAttesa"/>, non da un nuovo
+    /// messaggio del server.
+    /// </summary>
     public ObservableCollection<string> RevealAuthors { get; } = [];
 
     public ObservableCollection<string> FinalPhrases { get; } = [];
+
+    /// <summary>
+    /// "Scritta da: A · B · C", vuota finché <see cref="RevealAuthors"/> non è
+    /// popolata. Non è un [ObservableProperty] perché dipende da una
+    /// collezione, non da un campo: la notifica parte da
+    /// <see cref="MostraAutori"/>, l'unico punto che modifica RevealAuthors.
+    /// </summary>
+    public string AuthorsFootnote => RevealAuthors.Count == 0
+        ? string.Empty
+        : $"Scritta da: {string.Join(" · ", RevealAuthors)}";
 
     [RelayCommand]
     private Task CreateRoomAsync() => EseguiComandoAsync(async () =>
@@ -116,6 +193,25 @@ public partial class GameSessionViewModel : ObservableObject
     private Task StartGameAsync() => EseguiComandoAsync(() => _connection.StartGameAsync(RoomCode));
 
     [RelayCommand]
+    private void ShowJoinByCode() => IsJoiningByCode = true;
+
+    [RelayCommand]
+    private void HideJoinByCode()
+    {
+        IsJoiningByCode = false;
+        JoinCode = string.Empty;
+    }
+
+    [RelayCommand]
+    private void OpenSettings() => Screen = ScreenState.Settings;
+
+    [RelayCommand]
+    private void CloseSettings() => Screen = ScreenState.Home;
+
+    [RelayCommand]
+    private void SelectTheme(ThemeChoice tema) => _themeService.SetTheme(tema);
+
+    [RelayCommand]
     private Task SubmitSlotAsync() => EseguiComandoAsync(async () =>
     {
         // Stesso validatore che riapplica il server: feedback immediato senza
@@ -133,8 +229,27 @@ public partial class GameSessionViewModel : ObservableObject
         Screen = ScreenState.Waiting;
     });
 
+    /// <summary>
+    /// Un solo comando per i tre stati del pulsante di reveal (spec del lotto):
+    /// "Rivela la prossima parola" e "Prossima frase" chiamano il server,
+    /// "Chi l'ha scritta?" no - mostra solo gli autori che il server ha già
+    /// mandato nel passo che ha completato la frase (vedi <see cref="_autoriInAttesa"/>).
+    /// Un'unica Command invece di tre evita alla view di dover scegliere quale
+    /// invocare: la scelta segue lo stesso stato che decide l'etichetta.
+    /// </summary>
     [RelayCommand]
-    private Task AdvanceRevealAsync() => EseguiComandoAsync(() => _connection.AdvanceRevealAsync(RoomCode));
+    private Task AdvanceRevealAsync() => EseguiComandoAsync(async () =>
+    {
+        if (_fraseCompleta && !_autoriMostratiPerQuestoPasso)
+        {
+            MostraAutori(_autoriInAttesa);
+            _autoriMostratiPerQuestoPasso = true;
+            AggiornaEtichettaRevealButton();
+            return;
+        }
+
+        await _connection.AdvanceRevealAsync(RoomCode);
+    });
 
     private async Task EnsureConnectedAsync()
     {
@@ -218,6 +333,8 @@ public partial class GameSessionViewModel : ObservableObject
 
                 IsHost = stato.Players.Any(p => p.Id == _playerId && p.IsHost);
                 PlayerCount = stato.Players.Count;
+                SlotCount = stato.SlotCount;
+                SchemaId = stato.SchemaId;
 
                 // "Writing" NON va mappato qui, di proposito: una RoomStateMessage
                 // arriva anche a partita in corso (es. qualcuno si disconnette), e
@@ -255,17 +372,31 @@ public partial class GameSessionViewModel : ObservableObject
                 break;
 
             case RevealStepMessage passo:
-                RevealedSlots.Clear();
-                foreach (var testo in passo.RevealedSlots)
+                PhraseNumber = passo.PhraseIndex + 1;
+                TotalPhrases = passo.TotalPhrases;
+
+                // SlotCount arriva con la RoomStateMessage che precede sempre
+                // il reveal nel flusso reale; il fallback alle sole caselle
+                // ricevute copre solo il caso (di solo test) in cui non sia
+                // ancora nota, senza inventare segnaposto in più.
+                var totaleCaselle = SlotCount > 0 ? SlotCount : passo.RevealedSlots.Count;
+                RevealSlots.Clear();
+                for (var i = 0; i < totaleCaselle; i++)
                 {
-                    RevealedSlots.Add(testo);
+                    RevealSlots.Add(i < passo.RevealedSlots.Count
+                        ? new RevealSlotView(passo.RevealedSlots[i], true)
+                        : new RevealSlotView("···", false));
                 }
 
-                RevealAuthors.Clear();
-                foreach (var autore in passo.Authors)
-                {
-                    RevealAuthors.Add(autore);
-                }
+                // Gli autori di QUESTO passo restano in disparte: si mostrano
+                // solo al tocco successivo (vedi AdvanceRevealAsync). Qui si
+                // svuota anche la vista di quelli mostrati per il passo
+                // precedente, altrimenti resterebbero appesi sotto la nuova frase.
+                MostraAutori([]);
+                _autoriInAttesa = passo.Authors;
+                _fraseCompleta = passo.PhraseComplete;
+                _autoriMostratiPerQuestoPasso = false;
+                AggiornaEtichettaRevealButton();
 
                 Screen = ScreenState.Reveal;
                 break;
@@ -284,5 +415,27 @@ public partial class GameSessionViewModel : ObservableObject
                 ErrorText = errore.Message;
                 break;
         }
+    }
+
+    private void MostraAutori(IReadOnlyList<string> autori)
+    {
+        RevealAuthors.Clear();
+        foreach (var autore in autori)
+        {
+            RevealAuthors.Add(autore);
+        }
+
+        // RevealAuthors è una ObservableCollection: la sua notifica non fa
+        // scattare da sola quella di AuthorsFootnote, che ne dipende.
+        OnPropertyChanged(nameof(AuthorsFootnote));
+    }
+
+    private void AggiornaEtichettaRevealButton()
+    {
+        RevealButtonLabel = !_fraseCompleta
+            ? "Rivela la prossima parola"
+            : _autoriMostratiPerQuestoPasso
+                ? "Prossima frase"
+                : "Chi l'ha scritta?";
     }
 }

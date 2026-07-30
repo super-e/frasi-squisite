@@ -38,7 +38,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<IThemeService, ThemeService>();
         builder.Services.AddSingleton(sp => new GameSessionViewModel(
             sp.GetRequiredService<IGameConnection>(),
-            PlayerIdentity.Current()));
+            PlayerIdentity.Current(),
+            sp.GetRequiredService<IThemeService>()));
         builder.Services.AddSingleton<GamePage>();
 
         return builder.Build();

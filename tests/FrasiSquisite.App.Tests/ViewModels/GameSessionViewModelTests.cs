@@ -1,3 +1,4 @@
+using FrasiSquisite.App.Services;
 using FrasiSquisite.App.ViewModels;
 using FrasiSquisite.Shared.Protocol;
 using Microsoft.AspNetCore.SignalR;
@@ -12,8 +13,16 @@ public class GameSessionViewModelTests
     private static (GameSessionViewModel Vm, FakeGameConnection Conn) Crea()
     {
         var connessione = new FakeGameConnection();
-        var vm = new GameSessionViewModel(connessione, Anna) { ServerUrl = "http://test" };
+        var vm = new GameSessionViewModel(connessione, Anna, new FakeThemeService()) { ServerUrl = "http://test" };
         return (vm, connessione);
+    }
+
+    private static (GameSessionViewModel Vm, FakeGameConnection Conn, FakeThemeService Tema) CreaConTema()
+    {
+        var connessione = new FakeGameConnection();
+        var tema = new FakeThemeService();
+        var vm = new GameSessionViewModel(connessione, Anna, tema) { ServerUrl = "http://test" };
+        return (vm, connessione, tema);
     }
 
     [Fact]
@@ -50,6 +59,8 @@ public class GameSessionViewModelTests
         Assert.Equal(ScreenState.Lobby, vm.Screen);
         Assert.Equal(2, vm.Players.Count);
         Assert.True(vm.IsHost);
+        Assert.Equal("surrealista-classico", vm.SchemaId);
+        Assert.Equal(5, vm.SlotCount);
     }
 
     // C1: senza il ramo "Reveal", una RoomStateMessage di fine partita non
@@ -133,19 +144,94 @@ public class GameSessionViewModelTests
     }
 
     [Fact]
-    public void IlPassoDiRevealPopolaCaselleEAutori()
+    public void IlPassoDiRevealPopolaLeCaselleScoperteELascaCoperteLeRestanti()
     {
         var (vm, conn) = Crea();
 
-        conn.Emit(new RevealStepMessage(0, 3, ["Il cadavere", "squisito"], false, []));
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Reveal",
+            [new PlayerView(Anna, "Anna", true, true)],
+            "surrealista-classico", 3));
+
+        conn.Emit(new RevealStepMessage(0, 1, ["Il cadavere", "squisito"], false, []));
 
         Assert.Equal(ScreenState.Reveal, vm.Screen);
-        Assert.Equal(2, vm.RevealedSlots.Count);
+        Assert.Equal(3, vm.RevealSlots.Count);
+        Assert.Equal(("Il cadavere", true), (vm.RevealSlots[0].Text, vm.RevealSlots[0].IsRevealed));
+        Assert.Equal(("squisito", true), (vm.RevealSlots[1].Text, vm.RevealSlots[1].IsRevealed));
+        Assert.Equal(("···", false), (vm.RevealSlots[2].Text, vm.RevealSlots[2].IsRevealed));
+    }
+
+    [Fact]
+    public void FraseNDiMRiflettePhraseIndexETotalPhrasesDelPasso()
+    {
+        var (vm, conn) = Crea();
+
+        conn.Emit(new RevealStepMessage(1, 3, ["berrà"], false, []));
+
+        Assert.Equal(2, vm.PhraseNumber);
+        Assert.Equal(3, vm.TotalPhrases);
+    }
+
+    // Il server manda gli autori insieme alla casella che completa la frase,
+    // ma la ViewModel li trattiene: mostrarli súbito brucerebbe il battito
+    // "Chi l'ha scritta?" voluto dal design (lotto-a-brief.md).
+    [Fact]
+    public void GliAutoriRestanoNascostiFinchéNonSiTocaDiNuovoIlPulsante()
+    {
+        var (vm, conn) = Crea();
+        vm.RoomCode = "ABCD";
+
+        conn.Emit(new RevealStepMessage(0, 2, ["Il cadavere", "squisito"], true, ["Anna", "Bruno"]));
+
+        Assert.Empty(vm.RevealAuthors);
+        Assert.Equal(string.Empty, vm.AuthorsFootnote);
+    }
+
+    // Le tre etichette del pulsante di reveal, nell'ordine in cui il design le
+    // vuole: "Rivela la prossima parola" mentre restano caselle coperte, poi
+    // "Chi l'ha scritta?" alla frase completa, poi "Prossima frase" dopo che
+    // gli autori sono stati mostrati.
+    [Fact]
+    public async Task LEtichettaDelPulsanteDiRevealSeguiILTreStati()
+    {
+        var (vm, conn) = Crea();
+        vm.RoomCode = "ABCD";
+
+        conn.Emit(new RevealStepMessage(0, 2, ["Il cadavere"], false, []));
+        Assert.Equal("Rivela la prossima parola", vm.RevealButtonLabel);
+
+        conn.Emit(new RevealStepMessage(0, 2, ["Il cadavere", "squisito"], true, ["Anna", "Bruno"]));
+        Assert.Equal("Chi l'ha scritta?", vm.RevealButtonLabel);
         Assert.Empty(vm.RevealAuthors);
 
-        conn.Emit(new RevealStepMessage(0, 3, ["Il cadavere", "squisito", "berrà"], true, ["Anna", "Bruno", "Carla"]));
+        // Stato "Chi l'ha scritta?": tocco locale, nessuna chiamata al server.
+        await vm.AdvanceRevealCommand.ExecuteAsync(null);
+        Assert.Equal("Prossima frase", vm.RevealButtonLabel);
+        Assert.Equal(["Anna", "Bruno"], vm.RevealAuthors);
+        Assert.Equal("Scritta da: Anna · Bruno", vm.AuthorsFootnote);
+        Assert.DoesNotContain(conn.Calls, c => c.StartsWith("AdvanceReveal", StringComparison.Ordinal));
 
-        Assert.Equal(3, vm.RevealAuthors.Count);
+        // Stato "Prossima frase": questo sì chiama il server.
+        await vm.AdvanceRevealCommand.ExecuteAsync(null);
+        Assert.Contains("AdvanceReveal(ABCD)", conn.Calls);
+    }
+
+    // Il passo successivo (nuova frase) deve ripulire gli autori mostrati per
+    // quella precedente: altrimenti resterebbero appesi sotto la frase nuova.
+    [Fact]
+    public async Task UnNuovoPassoDiRevealNascondeGliAutoriDellaFrasePrecedente()
+    {
+        var (vm, conn) = Crea();
+
+        conn.Emit(new RevealStepMessage(0, 2, ["Il cadavere"], true, ["Anna"]));
+        await vm.AdvanceRevealCommand.ExecuteAsync(null);
+        Assert.NotEmpty(vm.RevealAuthors);
+
+        conn.Emit(new RevealStepMessage(1, 2, ["squisito"], false, []));
+
+        Assert.Empty(vm.RevealAuthors);
+        Assert.Equal(string.Empty, vm.AuthorsFootnote);
     }
 
     [Fact]
@@ -278,5 +364,53 @@ public class GameSessionViewModelTests
         conn.EmitConnectionInterrupted();
 
         Assert.False(string.IsNullOrEmpty(vm.ConnectionBanner));
+    }
+
+    // Home: "Ho un codice" sostituisce Crea/Ho-un-codice con CodeEntry, Entra,
+    // Indietro (lotto-a-brief.md); "Indietro" torna allo stato iniziale e
+    // pulisce quanto scritto, così non resta un codice a metà se si riapre.
+    [Fact]
+    public void HoUnCodiceMostraIlCampoDelCodiceEIndietroLoNasconde()
+    {
+        var (vm, _) = Crea();
+
+        Assert.False(vm.IsJoiningByCode);
+
+        vm.ShowJoinByCodeCommand.Execute(null);
+        Assert.True(vm.IsJoiningByCode);
+
+        vm.JoinCode = "ABCD";
+        vm.HideJoinByCodeCommand.Execute(null);
+
+        Assert.False(vm.IsJoiningByCode);
+        Assert.Equal(string.Empty, vm.JoinCode);
+    }
+
+    [Fact]
+    public void LIngranaggioApreImpostazioniEIndietroTornaAllaHome()
+    {
+        var (vm, _) = Crea();
+
+        vm.OpenSettingsCommand.Execute(null);
+        Assert.Equal(ScreenState.Settings, vm.Screen);
+
+        vm.CloseSettingsCommand.Execute(null);
+        Assert.Equal(ScreenState.Home, vm.Screen);
+    }
+
+    // Toccare una card del tema in Impostazioni deve cambiare tema subito
+    // (lotto-a-brief.md: "toccarle cambia tema immediatamente"), passando dal
+    // servizio - mai da uno stato locale che potrebbe disallinearsi da quello
+    // davvero applicato alla UI.
+    [Fact]
+    public void SelezionareUnTemaLoInoltraAlServizioEAggiornaSelectedTheme()
+    {
+        var (vm, _, tema) = CreaConTema();
+
+        vm.SelectThemeCommand.Execute(ThemeChoice.NotteDiGioco);
+
+        Assert.Equal(ThemeChoice.NotteDiGioco, tema.Current);
+        Assert.Equal([ThemeChoice.NotteDiGioco], tema.Impostati);
+        Assert.Equal(ThemeChoice.NotteDiGioco, vm.SelectedTheme);
     }
 }
