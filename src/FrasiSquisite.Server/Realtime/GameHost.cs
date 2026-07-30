@@ -17,7 +17,18 @@ public sealed class GameHost(
     IHubContext<GameHub> hub,
     ILogger<GameHost> logger)
 {
-    private static readonly ConcurrentDictionary<string, SemaphoreSlim> Locks =
+    /// <summary>
+    /// Un lucchetto per codice stanza. <b>Deve restare un campo d'istanza, non
+    /// statico:</b> protegge lo stato tenuto da <see cref="IRoomRegistry"/>,
+    /// che vive nel container di dipendenze, quindi deve avere lo stesso
+    /// ambito. Da <c>static</c> la tabella sopravviveva al container e veniva
+    /// condivisa fra host diversi nello stesso processo — in produzione senza
+    /// conseguenze, perché <c>GameHost</c> è registrato come singleton e di
+    /// host ce n'è uno solo, ma nei test due host indipendenti che pescano lo
+    /// stesso codice stanza finivano per serializzarsi a vicenda pur non
+    /// avendo nulla in comune.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks =
         new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
@@ -31,7 +42,7 @@ public sealed class GameHost(
     /// </exception>
     public async Task DispatchAsync(string roomCode, GameEvent evt, CancellationToken ct = default)
     {
-        var gate = Locks.GetOrAdd(roomCode, _ => new SemaphoreSlim(1, 1));
+        var gate = _locks.GetOrAdd(roomCode, _ => new SemaphoreSlim(1, 1));
 
         await gate.WaitAsync(ct);
         try
