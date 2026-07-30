@@ -53,7 +53,7 @@ public class GameSessionViewModelTests
 
         conn.Emit(new RoomStateMessage(
             "ABCD", "Lobby",
-            [new PlayerView(Anna, "Anna", true, true), new PlayerView(Guid.NewGuid(), "Bruno", false, true)],
+            [new PlayerView(Anna, "Anna", true, true, false), new PlayerView(Guid.NewGuid(), "Bruno", false, true, false)],
             "surrealista-classico", 5));
 
         Assert.Equal(ScreenState.Lobby, vm.Screen);
@@ -82,7 +82,7 @@ public class GameSessionViewModelTests
 
         conn.Emit(new RoomStateMessage(
             "ABCD", fase,
-            [new PlayerView(Anna, "Anna", true, true)],
+            [new PlayerView(Anna, "Anna", true, true, false)],
             "surrealista-classico", 5));
 
         Assert.Equal(atteso, vm.Screen);
@@ -150,7 +150,7 @@ public class GameSessionViewModelTests
 
         conn.Emit(new RoomStateMessage(
             "ABCD", "Reveal",
-            [new PlayerView(Anna, "Anna", true, true)],
+            [new PlayerView(Anna, "Anna", true, true, false)],
             "surrealista-classico", 3));
 
         conn.Emit(new RevealStepMessage(0, 1, ["Il cadavere", "squisito"], false, []));
@@ -265,7 +265,7 @@ public class GameSessionViewModelTests
 
         conn.Emit(new RoomStateMessage(
             "ABCD", "Lobby",
-            [new PlayerView(Anna, "Anna", true, true)],
+            [new PlayerView(Anna, "Anna", true, true, false)],
             "surrealista-classico", 5));
 
         Assert.Equal(ScreenState.Lobby, vm.Screen);
@@ -327,6 +327,7 @@ public class GameSessionViewModelTests
     {
         var (vm, conn) = Crea();
         conn.NextFailure = new HubException("Stanza non trovata.");
+        vm.Nickname = "Bruno";
         vm.JoinCode = "ABCD";
 
         await vm.JoinRoomCommand.ExecuteAsync(null);
@@ -412,5 +413,140 @@ public class GameSessionViewModelTests
         Assert.Equal(ThemeChoice.NotteDiGioco, tema.Current);
         Assert.Equal([ThemeChoice.NotteDiGioco], tema.Impostati);
         Assert.Equal(ThemeChoice.NotteDiGioco, vm.SelectedTheme);
+    }
+
+    // ================= Bot (lotto-b-brief.md) =================
+
+    [Fact]
+    public async Task AggiungereUnBotChiamaLaConnessione()
+    {
+        var (vm, conn) = Crea();
+        vm.RoomCode = "ABCD";
+
+        await vm.AddBotCommand.ExecuteAsync(null);
+
+        Assert.Contains("AddBot(ABCD)", conn.Calls);
+    }
+
+    [Fact]
+    public async Task RimuovereUnBotChiamaLaConnessioneConLIdDelBot()
+    {
+        var (vm, conn) = Crea();
+        vm.RoomCode = "ABCD";
+        var botId = Guid.NewGuid();
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [new PlayerView(Anna, "Anna", true, true, false), new PlayerView(botId, "Bot Ada", false, false, true)],
+            "surrealista-classico", 5));
+        var riga = vm.Players.Single(p => p.IsBot);
+
+        await vm.RemoveBotCommand.ExecuteAsync(riga);
+
+        Assert.Contains($"RemoveBot(ABCD,{botId})", conn.Calls);
+    }
+
+    [Fact]
+    public void LoStatoDiModificaEntraEEsceConStartECancel()
+    {
+        var (vm, conn) = Crea();
+        var botId = Guid.NewGuid();
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [new PlayerView(Anna, "Anna", true, true, false), new PlayerView(botId, "Bot Ada", false, false, true)],
+            "surrealista-classico", 5));
+        var riga = vm.Players.Single(p => p.IsBot);
+
+        vm.StartEditBotCommand.Execute(riga);
+        Assert.True(riga.IsEditing);
+        Assert.Equal("Bot Ada", vm.EditingBotName);
+
+        vm.CancelEditBotCommand.Execute(riga);
+        Assert.False(riga.IsEditing);
+        Assert.Equal(string.Empty, vm.EditingBotName);
+    }
+
+    [Fact]
+    public async Task ConfermareLaModificaChiamaLaConnessioneEEsceDallaModifica()
+    {
+        var (vm, conn) = Crea();
+        vm.RoomCode = "ABCD";
+        var botId = Guid.NewGuid();
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [new PlayerView(Anna, "Anna", true, true, false), new PlayerView(botId, "Bot Ada", false, false, true)],
+            "surrealista-classico", 5));
+        var riga = vm.Players.Single(p => p.IsBot);
+        vm.StartEditBotCommand.Execute(riga);
+        vm.EditingBotName = "Bot Nuovo";
+
+        await vm.ConfirmEditBotCommand.ExecuteAsync(riga);
+
+        Assert.Contains($"RenameBot(ABCD,{botId},Bot Nuovo)", conn.Calls);
+        Assert.False(riga.IsEditing);
+    }
+
+    [Fact]
+    public async Task ConfermareUnNomeNonValidoNonChiamaLaConnessione()
+    {
+        var (vm, conn) = Crea();
+        vm.RoomCode = "ABCD";
+        var botId = Guid.NewGuid();
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [new PlayerView(Anna, "Anna", true, true, false), new PlayerView(botId, "Bot Ada", false, false, true)],
+            "surrealista-classico", 5));
+        var riga = vm.Players.Single(p => p.IsBot);
+        vm.StartEditBotCommand.Execute(riga);
+        vm.EditingBotName = "   ";
+
+        await vm.ConfirmEditBotCommand.ExecuteAsync(riga);
+
+        Assert.DoesNotContain(conn.Calls, c => c.StartsWith("RenameBot", StringComparison.Ordinal));
+        Assert.False(string.IsNullOrEmpty(vm.ErrorText));
+    }
+
+    [Fact]
+    public void CanAddBotEFalsoPerUnNonHost()
+    {
+        var (vm, conn) = Crea();
+
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [new PlayerView(Guid.NewGuid(), "Anna", true, true, false), new PlayerView(Anna, "Bruno", false, true, false)],
+            "surrealista-classico", 5));
+
+        Assert.False(vm.IsHost);
+        Assert.False(vm.CanAddBot);
+    }
+
+    [Fact]
+    public void CanAddBotEFalsoAStanzaPiena()
+    {
+        var (vm, conn) = Crea();
+
+        var giocatori = new List<PlayerView> { new(Anna, "Anna", true, true, false) };
+        for (var i = 1; i < GameSessionViewModel.MaxPlayers; i++)
+        {
+            giocatori.Add(new PlayerView(Guid.NewGuid(), $"Bot {i}", false, false, true));
+        }
+
+        conn.Emit(new RoomStateMessage("ABCD", "Lobby", giocatori, "surrealista-classico", 5));
+
+        Assert.True(vm.IsHost);
+        Assert.Equal(GameSessionViewModel.MaxPlayers, vm.PlayerCount);
+        Assert.False(vm.CanAddBot);
+    }
+
+    [Fact]
+    public void CanAddBotEVeroPerHostInLobbyConPostoLibero()
+    {
+        var (vm, conn) = Crea();
+
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [new PlayerView(Anna, "Anna", true, true, false)],
+            "surrealista-classico", 5));
+
+        Assert.True(vm.CanAddBot);
     }
 }

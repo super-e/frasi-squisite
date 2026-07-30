@@ -33,5 +33,11 @@ public interface IGameConnection
 
     Task AdvanceRevealAsync(string roomCode);
 
+    Task AddBotAsync(string roomCode);
+
+    Task RemoveBotAsync(string roomCode, Guid botId);
+
+    Task RenameBotAsync(string roomCode, Guid botId, string nickname);
+
     Task DisconnectAsync();
 }

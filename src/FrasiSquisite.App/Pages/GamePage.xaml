@@ -3,9 +3,9 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:FrasiSquisite.App.ViewModels"
              xmlns:services="clr-namespace:FrasiSquisite.App.Services"
-             xmlns:proto="clr-namespace:FrasiSquisite.Shared.Protocol;assembly=FrasiSquisite.Shared"
              xmlns:sys="clr-namespace:System;assembly=netstandard"
              x:Class="FrasiSquisite.App.Pages.GamePage"
+             x:Name="RootPage"
              x:DataType="vm:GameSessionViewModel"
              Shell.NavBarIsVisible="False"
              Title="Frasi Squisite">
@@ -161,19 +161,69 @@
 
                 <CollectionView ItemsSource="{Binding Players}">
                     <CollectionView.ItemTemplate>
-                        <DataTemplate x:DataType="proto:PlayerView">
-                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12" Padding="0,6">
-                                <Border Grid.Column="0" Style="{StaticResource Avatar}">
+                        <DataTemplate x:DataType="vm:PlayerRowView">
+                            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="12" Padding="0,6">
+
+                                <!-- Riga normale: avatar, nome, badge "host" se presente.
+                                     Nascosta durante la modifica del bot, sostituita dal
+                                     campo di testo sotto. -->
+                                <Border Grid.Column="0" Style="{StaticResource Avatar}"
+                                        IsVisible="{Binding IsEditing, Converter={StaticResource InvertBool}}">
                                     <Label Text="{Binding Nickname, Converter={StaticResource Initial}}" Style="{StaticResource AvatarInitial}" />
                                 </Border>
-                                <Label Grid.Column="1" Text="{Binding Nickname}" Style="{StaticResource H3Label}" VerticalOptions="Center" />
+                                <Label Grid.Column="1" Text="{Binding Nickname}" Style="{StaticResource H3Label}" VerticalOptions="Center"
+                                       IsVisible="{Binding IsEditing, Converter={StaticResource InvertBool}}" />
                                 <Border Grid.Column="2" Style="{StaticResource Chip}" IsVisible="{Binding IsHost}" VerticalOptions="Center">
                                     <Label Text="host" Style="{StaticResource ChipLabel}" />
                                 </Border>
+
+                                <!-- Bot, non in modifica: matita (rinomina) e ✕ (rimuovi).
+                                     Mai visibili per un giocatore umano. -->
+                                <Label Grid.Column="3" Text="✏" FontSize="16" VerticalOptions="Center"
+                                       IsVisible="{Binding ShowBotControls}">
+                                    <Label.GestureRecognizers>
+                                        <TapGestureRecognizer
+                                            Command="{Binding Source={x:Reference RootPage}, Path=BindingContext.StartEditBotCommand}"
+                                            CommandParameter="{Binding .}" />
+                                    </Label.GestureRecognizers>
+                                </Label>
+                                <Label Grid.Column="4" Text="✕" FontSize="16" VerticalOptions="Center"
+                                       IsVisible="{Binding ShowBotControls}">
+                                    <Label.GestureRecognizers>
+                                        <TapGestureRecognizer
+                                            Command="{Binding Source={x:Reference RootPage}, Path=BindingContext.RemoveBotCommand}"
+                                            CommandParameter="{Binding .}" />
+                                    </Label.GestureRecognizers>
+                                </Label>
+
+                                <!-- Bot in modifica: campo di testo, ✓ (conferma), ✕ (annulla). -->
+                                <Entry Grid.Column="0" Grid.ColumnSpan="3" MaxLength="20"
+                                       IsVisible="{Binding IsEditing}"
+                                       Text="{Binding Source={x:Reference RootPage}, Path=BindingContext.EditingBotName}" />
+                                <Label Grid.Column="3" Text="✓" FontSize="16" VerticalOptions="Center"
+                                       IsVisible="{Binding IsEditing}">
+                                    <Label.GestureRecognizers>
+                                        <TapGestureRecognizer
+                                            Command="{Binding Source={x:Reference RootPage}, Path=BindingContext.ConfirmEditBotCommand}"
+                                            CommandParameter="{Binding .}" />
+                                    </Label.GestureRecognizers>
+                                </Label>
+                                <Label Grid.Column="4" Text="✕" FontSize="16" VerticalOptions="Center"
+                                       IsVisible="{Binding IsEditing}">
+                                    <Label.GestureRecognizers>
+                                        <TapGestureRecognizer
+                                            Command="{Binding Source={x:Reference RootPage}, Path=BindingContext.CancelEditBotCommand}"
+                                            CommandParameter="{Binding .}" />
+                                    </Label.GestureRecognizers>
+                                </Label>
+
                             </Grid>
                         </DataTemplate>
                     </CollectionView.ItemTemplate>
                 </CollectionView>
+
+                <Button Text="+ Aggiungi bot" Style="{StaticResource SecondaryButton}"
+                        Command="{Binding AddBotCommand}" IsVisible="{Binding CanAddBot}" />
 
                 <Button Text="Inizia partita" Style="{StaticResource PrimaryButton}"
                         Command="{Binding StartGameCommand}" IsVisible="{Binding IsHost}" />

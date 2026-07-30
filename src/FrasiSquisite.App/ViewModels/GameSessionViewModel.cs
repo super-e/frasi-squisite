@@ -26,6 +26,16 @@ public enum ScreenState
 /// </summary>
 public partial class GameSessionViewModel : ObservableObject
 {
+    /// <summary>
+    /// Duplica GameEngine.MaxPlayers (FrasiSquisite.Domain.Engine): l'App
+    /// referenzia solo Shared, non Domain (che è motore per il server), quindi
+    /// la costante non è raggiungibile da qui e va tenuta manualmente allineata
+    /// all'originale (lotto-b-brief.md). Non un <c>cref</c> apposta: il progetto
+    /// Domain non è nella closure di riferimenti dell'App, quindi non si
+    /// risolverebbe.
+    /// </summary>
+    public const int MaxPlayers = 9;
+
     private readonly IGameConnection _connection;
     private readonly Guid _playerId;
     private readonly IThemeService _themeService;
@@ -144,7 +154,17 @@ public partial class GameSessionViewModel : ObservableObject
     [ObservableProperty]
     private string _connectionBanner = string.Empty;
 
-    public ObservableCollection<PlayerView> Players { get; } = [];
+    public ObservableCollection<PlayerRowView> Players { get; } = [];
+
+    [ObservableProperty]
+    private string _editingBotName = string.Empty;
+
+    /// <summary>
+    /// Vero solo se si è host, la fase è lobby e i giocatori sono meno di
+    /// <see cref="MaxPlayers"/>: dal design, il pulsante "+ Aggiungi bot"
+    /// scompare oltre quella soglia (lotto-b-brief.md).
+    /// </summary>
+    public bool CanAddBot => IsHost && Screen == ScreenState.Lobby && PlayerCount < MaxPlayers;
 
     /// <summary>
     /// Lunga sempre <see cref="SlotCount"/>: le caselle non ancora scoperte ci
@@ -176,6 +196,18 @@ public partial class GameSessionViewModel : ObservableObject
     private Task CreateRoomAsync() => EseguiComandoAsync(async () =>
     {
         ErrorText = string.Empty;
+
+        // Stesso validatore che il motore riapplica per BotRenamed: client e
+        // server non possono divergere. Un nickname vuoto oggi produrrebbe
+        // una riga bianca nella lobby di tutti (lotto-b-brief.md).
+        var esito = NicknameValidator.Validate(Nickname);
+        if (!esito.IsValid)
+        {
+            ErrorText = esito.Error!;
+            return;
+        }
+
+        Nickname = esito.Normalized;
         await EnsureConnectedAsync();
         RoomCode = await _connection.CreateRoomAsync(_playerId, Nickname);
     });
@@ -184,6 +216,15 @@ public partial class GameSessionViewModel : ObservableObject
     private Task JoinRoomAsync() => EseguiComandoAsync(async () =>
     {
         ErrorText = string.Empty;
+
+        var esito = NicknameValidator.Validate(Nickname);
+        if (!esito.IsValid)
+        {
+            ErrorText = esito.Error!;
+            return;
+        }
+
+        Nickname = esito.Normalized;
         await EnsureConnectedAsync();
         RoomCode = JoinCode.Trim().ToUpperInvariant();
         await _connection.JoinRoomAsync(_playerId, Nickname, RoomCode);
@@ -191,6 +232,41 @@ public partial class GameSessionViewModel : ObservableObject
 
     [RelayCommand]
     private Task StartGameAsync() => EseguiComandoAsync(() => _connection.StartGameAsync(RoomCode));
+
+    [RelayCommand]
+    private Task AddBotAsync() => EseguiComandoAsync(() => _connection.AddBotAsync(RoomCode));
+
+    [RelayCommand]
+    private Task RemoveBotAsync(PlayerRowView riga) => EseguiComandoAsync(() => _connection.RemoveBotAsync(RoomCode, riga.Id));
+
+    [RelayCommand]
+    private void StartEditBot(PlayerRowView riga)
+    {
+        riga.IsEditing = true;
+        EditingBotName = riga.Nickname;
+    }
+
+    [RelayCommand]
+    private void CancelEditBot(PlayerRowView riga)
+    {
+        riga.IsEditing = false;
+        EditingBotName = string.Empty;
+    }
+
+    [RelayCommand]
+    private Task ConfirmEditBotAsync(PlayerRowView riga) => EseguiComandoAsync(async () =>
+    {
+        var esito = NicknameValidator.Validate(EditingBotName);
+        if (!esito.IsValid)
+        {
+            ErrorText = esito.Error!;
+            return;
+        }
+
+        await _connection.RenameBotAsync(RoomCode, riga.Id, esito.Normalized);
+        riga.IsEditing = false;
+        EditingBotName = string.Empty;
+    });
 
     [RelayCommand]
     private void ShowJoinByCode() => IsJoiningByCode = true;
@@ -328,7 +404,7 @@ public partial class GameSessionViewModel : ObservableObject
                 Players.Clear();
                 foreach (var giocatore in stato.Players)
                 {
-                    Players.Add(giocatore);
+                    Players.Add(new PlayerRowView(giocatore));
                 }
 
                 IsHost = stato.Players.Any(p => p.Id == _playerId && p.IsHost);
@@ -438,4 +514,13 @@ public partial class GameSessionViewModel : ObservableObject
                 ? "Prossima frase"
                 : "Chi l'ha scritta?";
     }
+
+    // CanAddBot dipende da questi tre campi: nessuno dei tre notifica da solo
+    // la proprietà calcolata, quindi lo fanno questi hook generati dal
+    // toolkit per ogni [ObservableProperty] coinvolto.
+    partial void OnIsHostChanged(bool value) => OnPropertyChanged(nameof(CanAddBot));
+
+    partial void OnScreenChanged(ScreenState value) => OnPropertyChanged(nameof(CanAddBot));
+
+    partial void OnPlayerCountChanged(int value) => OnPropertyChanged(nameof(CanAddBot));
 }

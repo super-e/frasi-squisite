@@ -110,6 +110,15 @@ public sealed class SignalRGameConnection : IGameConnection, IAsyncDisposable
     public Task AdvanceRevealAsync(string roomCode) =>
         Hub.InvokeAsync("AdvanceReveal", roomCode);
 
+    public Task AddBotAsync(string roomCode) =>
+        Hub.InvokeAsync("AddBot", new AddBotRequest(roomCode));
+
+    public Task RemoveBotAsync(string roomCode, Guid botId) =>
+        Hub.InvokeAsync("RemoveBot", new RemoveBotRequest(roomCode, botId));
+
+    public Task RenameBotAsync(string roomCode, Guid botId, string nickname) =>
+        Hub.InvokeAsync("RenameBot", new RenameBotRequest(roomCode, botId, nickname));
+
     public async Task DisconnectAsync()
     {
         if (_connection is not null)
