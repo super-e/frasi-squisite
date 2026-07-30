@@ -2,10 +2,12 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:FrasiSquisite.App.ViewModels"
+             xmlns:services="clr-namespace:FrasiSquisite.App.Services"
              xmlns:proto="clr-namespace:FrasiSquisite.Shared.Protocol;assembly=FrasiSquisite.Shared"
              xmlns:sys="clr-namespace:System;assembly=netstandard"
              x:Class="FrasiSquisite.App.Pages.GamePage"
              x:DataType="vm:GameSessionViewModel"
+             Shell.NavBarIsVisible="False"
              Title="Frasi Squisite">
 
     <ScrollView>
@@ -17,33 +19,171 @@
             <Label Text="{Binding ConnectionBanner}" TextColor="OrangeRed"
                    IsVisible="{Binding ConnectionBanner, Converter={StaticResource NotEmpty}}" />
 
-            <!-- Home -->
-            <VerticalStackLayout Spacing="12" IsVisible="{Binding Screen, Converter={StaticResource IsScreen}, ConverterParameter=Home}">
-                <Label Text="Frasi Squisite" FontSize="32" HorizontalOptions="Center" />
-                <Entry Placeholder="Server" Text="{Binding ServerUrl}" />
-                <Entry Placeholder="Il tuo nome" Text="{Binding Nickname}" />
-                <Button Text="Crea una stanza" Command="{Binding CreateRoomCommand}" />
-                <Entry Placeholder="Codice stanza" Text="{Binding JoinCode}" MaxLength="4" />
-                <Button Text="Entra" Command="{Binding JoinRoomCommand}" />
+            <!-- ================= Home ================= -->
+            <VerticalStackLayout Spacing="20" IsVisible="{Binding Screen, Converter={StaticResource IsScreen}, ConverterParameter=Home}">
+
+                <Label Text="&#9881;&#65039;" FontSize="22" HorizontalOptions="End">
+                    <Label.GestureRecognizers>
+                        <TapGestureRecognizer Command="{Binding OpenSettingsCommand}" />
+                    </Label.GestureRecognizers>
+                </Label>
+
+                <VerticalStackLayout Spacing="12" Margin="0,24">
+                    <Label Text="Gioco da tavolo, ma sul telefono" Style="{StaticResource EyebrowLabel}" HorizontalOptions="Center" />
+                    <Label Text="Frasi Squisite" Style="{StaticResource H1Label}" HorizontalOptions="Center" HorizontalTextAlignment="Center" />
+                    <Label Style="{StaticResource BodyLabel}" HorizontalOptions="Center" HorizontalTextAlignment="Center"
+                           Text="Riempi una casella. Non guardare le altre. Ridi delle conseguenze." />
+                </VerticalStackLayout>
+
+                <!-- Discreto: il mockup dà il nickname per già impostato altrove,
+                     noi non abbiamo quell'altrove, quindi resta qui un campo
+                     minimo invece di un'intera schermata di onboarding. -->
+                <Entry Placeholder="Il tuo nome" Text="{Binding Nickname}"
+                       FontSize="13" HorizontalTextAlignment="Center" />
+
+                <!-- Stato iniziale -->
+                <VerticalStackLayout Spacing="12">
+                    <VerticalStackLayout.Triggers>
+                        <DataTrigger TargetType="VerticalStackLayout" Binding="{Binding IsJoiningByCode}" Value="True">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </VerticalStackLayout.Triggers>
+                    <Button Text="Crea una stanza" Style="{StaticResource PrimaryButton}" Command="{Binding CreateRoomCommand}" />
+                    <Button Text="Ho un codice" Style="{StaticResource SecondaryButton}" Command="{Binding ShowJoinByCodeCommand}" />
+                </VerticalStackLayout>
+
+                <!-- "Ho un codice": sostituisce i due pulsanti sopra -->
+                <VerticalStackLayout Spacing="12" IsVisible="{Binding IsJoiningByCode}">
+                    <Border Style="{StaticResource CodeEntryFrame}">
+                        <Entry Style="{StaticResource CodeEntryText}" Placeholder="CODICE STANZA" MaxLength="4"
+                               Text="{Binding JoinCode, Converter={StaticResource Uppercase}}" />
+                    </Border>
+                    <Button Text="Entra" Style="{StaticResource PrimaryButton}" Command="{Binding JoinRoomCommand}" />
+                    <Button Text="Indietro" Style="{StaticResource SecondaryButton}" Command="{Binding HideJoinByCodeCommand}" />
+                </VerticalStackLayout>
+
+                <Label Style="{StaticResource FootnoteLabel}" IsVisible="{Binding Nickname, Converter={StaticResource NotEmpty}}">
+                    <Label.FormattedText>
+                        <FormattedString>
+                            <Span Text="Il tuo nickname: " />
+                            <Span Text="{Binding Nickname}" FontAttributes="Bold" />
+                        </FormattedString>
+                    </Label.FormattedText>
+                </Label>
+
             </VerticalStackLayout>
 
-            <!-- Lobby -->
-            <VerticalStackLayout Spacing="12" IsVisible="{Binding Screen, Converter={StaticResource IsScreen}, ConverterParameter=Lobby}">
-                <Label Text="{Binding RoomCode}" FontSize="48" HorizontalOptions="Center" />
-                <Label Text="Dettate questo codice agli altri" HorizontalOptions="Center" />
+            <!-- ================= Impostazioni ================= -->
+            <VerticalStackLayout Spacing="20" IsVisible="{Binding Screen, Converter={StaticResource IsScreen}, ConverterParameter=Settings}">
+
+                <Label Text="← Indietro" Style="{StaticResource H3Label}">
+                    <Label.GestureRecognizers>
+                        <TapGestureRecognizer Command="{Binding CloseSettingsCommand}" />
+                    </Label.GestureRecognizers>
+                </Label>
+
+                <Label Text="Impostazioni" Style="{StaticResource H2Label}" />
+
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Aspetto" Style="{StaticResource H3Label}" />
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+
+                        <Border Grid.Column="0" Style="{StaticResource Card}">
+                            <Border.Triggers>
+                                <DataTrigger TargetType="Border"
+                                             Binding="{Binding SelectedTheme, Converter={StaticResource IsTheme}, ConverterParameter=SurrealistaPop}"
+                                             Value="True">
+                                    <Setter Property="Stroke" Value="{DynamicResource ThemeAccentBrush}" />
+                                    <Setter Property="StrokeThickness" Value="2" />
+                                </DataTrigger>
+                            </Border.Triggers>
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer Command="{Binding SelectThemeCommand}"
+                                                       CommandParameter="{x:Static services:ThemeChoice.SurrealistaPop}" />
+                            </Border.GestureRecognizers>
+                            <VerticalStackLayout Spacing="8">
+                                <BoxView Color="#FAF6EF" HeightRequest="48" />
+                                <Label Text="Chiaro" Style="{StaticResource H3Label}" />
+                                <Label Text="Surrealista Pop" Style="{StaticResource FootnoteLabel}" />
+                            </VerticalStackLayout>
+                        </Border>
+
+                        <Border Grid.Column="1" Style="{StaticResource Card}">
+                            <Border.Triggers>
+                                <DataTrigger TargetType="Border"
+                                             Binding="{Binding SelectedTheme, Converter={StaticResource IsTheme}, ConverterParameter=NotteDiGioco}"
+                                             Value="True">
+                                    <Setter Property="Stroke" Value="{DynamicResource ThemeAccentBrush}" />
+                                    <Setter Property="StrokeThickness" Value="2" />
+                                </DataTrigger>
+                            </Border.Triggers>
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer Command="{Binding SelectThemeCommand}"
+                                                       CommandParameter="{x:Static services:ThemeChoice.NotteDiGioco}" />
+                            </Border.GestureRecognizers>
+                            <VerticalStackLayout Spacing="8">
+                                <BoxView Color="#0D0D12" HeightRequest="48" />
+                                <Label Text="Scuro" Style="{StaticResource H3Label}" />
+                                <Label Text="Notte di Gioco" Style="{StaticResource FootnoteLabel}" />
+                            </VerticalStackLayout>
+                        </Border>
+
+                    </Grid>
+                </VerticalStackLayout>
+
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Server" Style="{StaticResource H3Label}" />
+                    <Entry Text="{Binding ServerUrl}" Placeholder="Indirizzo del server" />
+                    <Label Text="Inserisci l'indirizzo del computer che ospita la partita."
+                           Style="{StaticResource FootnoteLabel}" HorizontalOptions="Start" HorizontalTextAlignment="Start" />
+                </VerticalStackLayout>
+
+            </VerticalStackLayout>
+
+            <!-- ================= Lobby ================= -->
+            <VerticalStackLayout Spacing="16" IsVisible="{Binding Screen, Converter={StaticResource IsScreen}, ConverterParameter=Lobby}">
+
+                <Label Text="Stanza" Style="{StaticResource EyebrowLabel}" HorizontalOptions="Center" />
+                <Label Text="{Binding RoomCode}" Style="{StaticResource RoomCodeLabel}" />
+
+                <HorizontalStackLayout Spacing="12" HorizontalOptions="Center">
+                    <Border WidthRequest="80" HeightRequest="80" StrokeThickness="1" StrokeDashArray="4,4"
+                            BackgroundColor="{DynamicResource ThemeSurfaceAlt}"
+                            Stroke="{DynamicResource ThemeInk33Brush}"
+                            StrokeShape="{DynamicResource ThemeRadiusSoftShape}">
+                        <Label Text="QR / codice" Style="{StaticResource FootnoteLabel}"
+                               HorizontalOptions="Center" VerticalOptions="Center" />
+                    </Border>
+                    <Label Text="{Binding SchemaId}" Style="{StaticResource BodyLabel}" VerticalOptions="Center" />
+                </HorizontalStackLayout>
+
+                <Label Text="{Binding PlayerCount, StringFormat='Giocatori ({0})'}" Style="{StaticResource H3Label}" />
+
                 <CollectionView ItemsSource="{Binding Players}">
                     <CollectionView.ItemTemplate>
                         <DataTemplate x:DataType="proto:PlayerView">
-                            <Label Text="{Binding Nickname}" FontSize="20" />
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12" Padding="0,6">
+                                <Border Grid.Column="0" Style="{StaticResource Avatar}">
+                                    <Label Text="{Binding Nickname, Converter={StaticResource Initial}}" Style="{StaticResource AvatarInitial}" />
+                                </Border>
+                                <Label Grid.Column="1" Text="{Binding Nickname}" Style="{StaticResource H3Label}" VerticalOptions="Center" />
+                                <Border Grid.Column="2" Style="{StaticResource Chip}" IsVisible="{Binding IsHost}" VerticalOptions="Center">
+                                    <Label Text="host" Style="{StaticResource ChipLabel}" />
+                                </Border>
+                            </Grid>
                         </DataTemplate>
                     </CollectionView.ItemTemplate>
                 </CollectionView>
-                <Button Text="Comincia" Command="{Binding StartGameCommand}" IsVisible="{Binding IsHost}" />
+
+                <Button Text="Inizia partita" Style="{StaticResource PrimaryButton}"
+                        Command="{Binding StartGameCommand}" IsVisible="{Binding IsHost}" />
+
             </VerticalStackLayout>
 
-            <!-- Scrittura -->
-            <VerticalStackLayout Spacing="12" IsVisible="{Binding Screen, Converter={StaticResource IsScreen}, ConverterParameter=Writing}">
-                <Label FontSize="14">
+            <!-- ================= Scrittura ================= -->
+            <VerticalStackLayout Spacing="20" IsVisible="{Binding Screen, Converter={StaticResource IsScreen}, ConverterParameter=Writing}">
+
+                <Label Style="{StaticResource BodyLabel}">
                     <Label.FormattedText>
                         <FormattedString>
                             <Span Text="Round " />
@@ -53,17 +193,38 @@
                         </FormattedString>
                     </Label.FormattedText>
                 </Label>
-                <Label Text="{Binding Ruolo}" FontSize="28" />
-                <Label Text="{Binding Prompt}" FontSize="16" />
-                <Label Text="{Binding Esempio}" FontSize="14" TextColor="Gray" />
-                <Entry Placeholder="Scrivi qui" Text="{Binding SlotText}" MaxLength="60" />
-                <Button Text="Invia" Command="{Binding SubmitSlotCommand}" />
+
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="{Binding Ruolo}" Style="{StaticResource EyebrowLabel}" HorizontalOptions="Center" />
+                    <Label Text="{Binding Prompt}" Style="{StaticResource H2Label}" HorizontalOptions="Center" HorizontalTextAlignment="Center" />
+                    <Label Style="{StaticResource ExampleLabel}" HorizontalOptions="Center" HorizontalTextAlignment="Center">
+                        <Label.FormattedText>
+                            <FormattedString>
+                                <Span Text="Es. " />
+                                <Span Text="{Binding Esempio}" />
+                            </FormattedString>
+                        </Label.FormattedText>
+                    </Label>
+
+                    <Border Style="{StaticResource SlotEditorFrame}">
+                        <Editor Style="{StaticResource SlotEditorText}" Placeholder="Scrivi qui" Text="{Binding SlotText}" MaxLength="60" />
+                    </Border>
+                </VerticalStackLayout>
+
+                <VerticalStackLayout Spacing="8">
+                    <Button Text="Invia" Style="{StaticResource PrimaryButton}" Command="{Binding SubmitSlotCommand}"
+                            IsEnabled="{Binding SlotText, Converter={StaticResource NotEmpty}}" />
+                    <Label Text="Le altre caselle restano segrete. Anche da te stesso, fra un minuto."
+                           Style="{StaticResource FootnoteLabel}" />
+                </VerticalStackLayout>
+
             </VerticalStackLayout>
 
-            <!-- Attesa -->
-            <VerticalStackLayout Spacing="12" IsVisible="{Binding Screen, Converter={StaticResource IsScreen}, ConverterParameter=Waiting}">
-                <Label Text="Aspettiamo gli altri…" FontSize="24" HorizontalOptions="Center" />
-                <Label HorizontalOptions="Center">
+            <!-- ================= Attesa ================= -->
+            <VerticalStackLayout Spacing="16" IsVisible="{Binding Screen, Converter={StaticResource IsScreen}, ConverterParameter=Waiting}">
+                <ActivityIndicator IsRunning="True" Color="{DynamicResource ThemeAccent}" HorizontalOptions="Center" />
+                <Label Text="In attesa…" Style="{StaticResource H2Label}" HorizontalOptions="Center" HorizontalTextAlignment="Center" />
+                <Label Style="{StaticResource BodyLabel}" HorizontalOptions="Center">
                     <Label.FormattedText>
                         <FormattedString>
                             <Span Text="{Binding SubmittedCount}" />
@@ -74,35 +235,66 @@
                 </Label>
             </VerticalStackLayout>
 
-            <!-- Reveal -->
-            <VerticalStackLayout Spacing="12" IsVisible="{Binding Screen, Converter={StaticResource IsScreen}, ConverterParameter=Reveal}">
-                <CollectionView ItemsSource="{Binding RevealedSlots}">
-                    <CollectionView.ItemTemplate>
-                        <DataTemplate x:DataType="sys:String">
-                            <Label Text="{Binding .}" FontSize="24" />
+            <!-- ================= Reveal ================= -->
+            <VerticalStackLayout Spacing="20" IsVisible="{Binding Screen, Converter={StaticResource IsScreen}, ConverterParameter=Reveal}">
+
+                <Label Style="{StaticResource BodyLabel}" HorizontalOptions="Center">
+                    <Label.FormattedText>
+                        <FormattedString>
+                            <Span Text="Frase " />
+                            <Span Text="{Binding PhraseNumber}" />
+                            <Span Text=" di " />
+                            <Span Text="{Binding TotalPhrases}" />
+                        </FormattedString>
+                    </Label.FormattedText>
+                </Label>
+
+                <FlexLayout Wrap="Wrap" JustifyContent="Center" AlignItems="Center"
+                            BindableLayout.ItemsSource="{Binding RevealSlots}">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="vm:RevealSlotView">
+                            <!-- Due Border alternativi (invece di uno con trigger)
+                                 perché "coperta" ha un bordo tratteggiato e
+                                 "rivelata" uno pieno: sovrascrivere lo
+                                 StrokeDashArray a runtime è più fragile che
+                                 scegliere fra due stili già corretti. -->
+                            <Grid>
+                                <Border Margin="4" Style="{StaticResource RevealSlotRevealedFrame}"
+                                        IsVisible="{Binding IsRevealed}">
+                                    <Label Text="{Binding Text}" Style="{StaticResource RevealSlotRevealedText}" />
+                                </Border>
+                                <Border Margin="4" Style="{StaticResource RevealSlotCoveredFrame}"
+                                        IsVisible="{Binding IsRevealed, Converter={StaticResource InvertBool}}">
+                                    <Label Text="{Binding Text}" Style="{StaticResource RevealSlotCoveredText}" />
+                                </Border>
+                            </Grid>
                         </DataTemplate>
-                    </CollectionView.ItemTemplate>
-                </CollectionView>
-                <CollectionView ItemsSource="{Binding RevealAuthors}">
-                    <CollectionView.ItemTemplate>
-                        <DataTemplate x:DataType="sys:String">
-                            <Label Text="{Binding .}" FontSize="14" TextColor="Gray" />
-                        </DataTemplate>
-                    </CollectionView.ItemTemplate>
-                </CollectionView>
-                <Button Text="Avanti" Command="{Binding AdvanceRevealCommand}" IsVisible="{Binding IsHost}" />
+                    </BindableLayout.ItemTemplate>
+                </FlexLayout>
+
+                <Label Text="{Binding AuthorsFootnote}" Style="{StaticResource FootnoteLabel}"
+                       IsVisible="{Binding AuthorsFootnote, Converter={StaticResource NotEmpty}}" />
+
+                <Button Text="{Binding RevealButtonLabel}" Style="{StaticResource PrimaryButton}"
+                        Command="{Binding AdvanceRevealCommand}" IsVisible="{Binding IsHost}" />
+
             </VerticalStackLayout>
 
-            <!-- Fine -->
-            <VerticalStackLayout Spacing="12" IsVisible="{Binding Screen, Converter={StaticResource IsScreen}, ConverterParameter=Finished}">
-                <Label Text="Ecco cosa è venuto fuori" FontSize="24" />
+            <!-- ================= Fine ================= -->
+            <VerticalStackLayout Spacing="16" IsVisible="{Binding Screen, Converter={StaticResource IsScreen}, ConverterParameter=Finished}">
+
+                <Label Text="Ecco cosa è venuto fuori" Style="{StaticResource EyebrowLabel}" HorizontalOptions="Center" />
+
                 <CollectionView ItemsSource="{Binding FinalPhrases}">
                     <CollectionView.ItemTemplate>
                         <DataTemplate x:DataType="sys:String">
-                            <Label Text="{Binding .}" FontSize="20" Margin="0,8" />
+                            <Border Style="{StaticResource Card}" Margin="0,8">
+                                <Label Text="{Binding .}" Style="{StaticResource H1WinnerLabel}" />
+                            </Border>
                         </DataTemplate>
                     </CollectionView.ItemTemplate>
                 </CollectionView>
+
             </VerticalStackLayout>
 
         </VerticalStackLayout>
