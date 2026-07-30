@@ -275,6 +275,17 @@ public partial class GameSessionViewModel : ObservableObject
     [RelayCommand]
     private void CancelEditBot(PlayerRowView riga)
     {
+        if (_editingBotId != riga.Id)
+        {
+            // La riga toccata non è (più) quella in modifica: stesso caso
+            // della guardia in ConfirmEditBotAsync, un ✕ già in volo su una
+            // riga che StartEditBot ha nel frattempo chiuso. Ignorare invece
+            // di azzerare _editingBotId/EditingBotName, che corromperebbe la
+            // riga effettivamente tracciata (rimarrebbe IsEditing == true ma
+            // senza id né testo, bloccata aperta).
+            return;
+        }
+
         riga.IsEditing = false;
         EditingBotName = string.Empty;
         _editingBotId = null;

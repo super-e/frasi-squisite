@@ -611,6 +611,46 @@ public class GameSessionViewModelTests
         Assert.DoesNotContain(conn.Calls, c => c.StartsWith("RenameBot", StringComparison.Ordinal));
     }
 
+    // Gemello simmetrico del test precedente, ma per l'annullamento: un tocco
+    // su ✕ per Ada già in volo (accodato prima che la sua riga si chiudesse
+    // visivamente) non deve corrompere la modifica tracciata di Bruno. Prima
+    // della correzione CancelEditBot azzerava _editingBotId ed EditingBotName
+    // incondizionatamente, lasciando la riga di Bruno con IsEditing true ma
+    // testo vuoto e nessun id tracciato: confermarla avrebbe centrato la
+    // guardia di ConfirmEditBotAsync (null != brunoId) e non avrebbe fatto
+    // nulla, con la riga bloccata aperta senza alcun feedback.
+    [Fact]
+    public async Task AnnullareLaRigaChiusaDopoAverApertoUnAltraNonCorrompeLaModificaTracciata()
+    {
+        var (vm, conn) = Crea();
+        vm.RoomCode = "ABCD";
+        var adaId = Guid.NewGuid();
+        var brunoId = Guid.NewGuid();
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [
+                new PlayerView(Anna, "Anna", true, true, false),
+                new PlayerView(adaId, "Bot Ada", false, false, true),
+                new PlayerView(brunoId, "Bot Bruno", false, false, true),
+            ],
+            "surrealista-classico", 5));
+        var ada = vm.Players.Single(p => p.Id == adaId);
+        var bruno = vm.Players.Single(p => p.Id == brunoId);
+
+        vm.StartEditBotCommand.Execute(ada);
+        vm.StartEditBotCommand.Execute(bruno);
+
+        vm.CancelEditBotCommand.Execute(ada);
+
+        Assert.True(bruno.IsEditing);
+        Assert.Equal("Bot Bruno", vm.EditingBotName);
+
+        await vm.ConfirmEditBotCommand.ExecuteAsync(bruno);
+
+        Assert.Contains($"RenameBot(ABCD,{brunoId},Bot Bruno)", conn.Calls);
+        Assert.False(bruno.IsEditing);
+    }
+
     // Punto 2 della revisione: una RoomStateMessage (es. un altro giocatore
     // che entra) ricostruisce Players da zero. Senza preservare la modifica
     // per id, la riga tornerebbe non-editing e il testo digitato sparirebbe
