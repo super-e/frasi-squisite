@@ -213,6 +213,14 @@ public partial class GameSessionViewModel : ObservableObject
     public bool CanChangeSchema => IsHost && Screen == ScreenState.Lobby;
 
     /// <summary>
+    /// "Nuova partita" e "Torna alla lobby" (lotto-d-brief.md): come per
+    /// "Inizia partita" e l'avanzamento del reveal, solo l'host li vede - un
+    /// pulsante che risponde NOT_HOST al tocco è peggio di un pulsante
+    /// assente. Chi non è host legge un avviso discreto al suo posto.
+    /// </summary>
+    public bool ShowFinishedActions => IsHost && Screen == ScreenState.Finished;
+
+    /// <summary>
     /// "Nome — N caselle", quello che il design mostra a chi non è host
     /// accanto al segnaposto del QR. Il conteggio non è scritto a mano:
     /// segue sempre <see cref="SlotCount"/>, che arriva dallo schema
@@ -424,6 +432,29 @@ public partial class GameSessionViewModel : ObservableObject
         }
 
         await _connection.AdvanceRevealAsync(RoomCode);
+    });
+
+    /// <summary>
+    /// "Nuova partita" (lotto-d-brief.md): riparte subito, stessi giocatori e
+    /// stesso schema. Ripulisce prima lo stato della partita appena conclusa,
+    /// come <see cref="BackToLobbyAsync"/>.
+    /// </summary>
+    [RelayCommand]
+    private Task NewGameAsync() => EseguiComandoAsync(async () =>
+    {
+        PulisciStatoDiPartitaConclusa();
+        await _connection.NewGameAsync(RoomCode);
+    });
+
+    /// <summary>
+    /// "Torna alla lobby" (lotto-d-brief.md): nessun avvio, solo ripulitura
+    /// dello stato della partita appena conclusa.
+    /// </summary>
+    [RelayCommand]
+    private Task BackToLobbyAsync() => EseguiComandoAsync(async () =>
+    {
+        PulisciStatoDiPartitaConclusa();
+        await _connection.BackToLobbyAsync(RoomCode);
     });
 
     private async Task EnsureConnectedAsync()
@@ -639,6 +670,25 @@ public partial class GameSessionViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Ripulisce lo stato accumulato dalla partita appena conclusa - frasi
+    /// finali, caselle rivelate, autori in attesa - prima di tornare alla
+    /// lobby o ricominciarne subito un'altra (lotto-d-brief.md). Il server
+    /// manda comunque stato nuovo, ma senza questa pulizia le collezioni
+    /// locali resterebbero appese: lo stesso genere di dimenticanza che
+    /// aveva lasciato il testo di un bot in modifica dopo una ricostruzione
+    /// della lista giocatori.
+    /// </summary>
+    private void PulisciStatoDiPartitaConclusa()
+    {
+        FinalPhrases.Clear();
+        RevealSlots.Clear();
+        MostraAutori([]);
+        _autoriInAttesa = [];
+        _fraseCompleta = false;
+        _autoriMostratiPerQuestoPasso = false;
+    }
+
     private void MostraAutori(IReadOnlyList<string> autori)
     {
         RevealAuthors.Clear();
@@ -668,12 +718,14 @@ public partial class GameSessionViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(CanAddBot));
         OnPropertyChanged(nameof(CanChangeSchema));
+        OnPropertyChanged(nameof(ShowFinishedActions));
     }
 
     partial void OnScreenChanged(ScreenState value)
     {
         OnPropertyChanged(nameof(CanAddBot));
         OnPropertyChanged(nameof(CanChangeSchema));
+        OnPropertyChanged(nameof(ShowFinishedActions));
     }
 
     partial void OnPlayerCountChanged(int value) => OnPropertyChanged(nameof(CanAddBot));

@@ -975,6 +975,133 @@ public class GameSessionViewModelTests
         Assert.False(string.IsNullOrEmpty(vm.ErrorText));
     }
 
+    // ================= Lotto D: "Nuova partita" / "Torna alla lobby" =================
+
+    [Fact]
+    public async Task NuovaPartitaChiamaLaConnessioneConIlCodiceStanza()
+    {
+        var (vm, conn) = Crea();
+        vm.RoomCode = "ABCD";
+
+        await vm.NewGameCommand.ExecuteAsync(null);
+
+        Assert.Contains("NewGame(ABCD)", conn.Calls);
+    }
+
+    [Fact]
+    public async Task TornaAllaLobbyChiamaLaConnessioneConIlCodiceStanza()
+    {
+        var (vm, conn) = Crea();
+        vm.RoomCode = "ABCD";
+
+        await vm.BackToLobbyCommand.ExecuteAsync(null);
+
+        Assert.Contains("BackToLobby(ABCD)", conn.Calls);
+    }
+
+    [Fact]
+    public void ShowFinishedActionsEVeroSoloPerLHostSullaSchermataFinale()
+    {
+        var (vm, conn) = Crea();
+
+        conn.Emit(new GameFinishedMessage(["Il cadavere squisito"]));
+        Assert.Equal(ScreenState.Finished, vm.Screen);
+
+        // Nessuna RoomStateMessage ancora emessa in questo test: IsHost resta
+        // al default (false), come capiterebbe a chi non ha mai creato né
+        // avviato la stanza.
+        Assert.False(vm.ShowFinishedActions);
+    }
+
+    [Fact]
+    public void ShowFinishedActionsEVeroPerLHostSullaSchermataFinale()
+    {
+        var (vm, conn) = Crea();
+
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [new PlayerView(Anna, "Anna", true, true, false)],
+            "surrealista-classico", 5));
+        conn.Emit(new GameFinishedMessage(["Il cadavere squisito"]));
+
+        Assert.True(vm.IsHost);
+        Assert.Equal(ScreenState.Finished, vm.Screen);
+        Assert.True(vm.ShowFinishedActions);
+    }
+
+    [Fact]
+    public void ShowFinishedActionsEFalsoPerUnNonHostSullaSchermataFinale()
+    {
+        var (vm, conn) = Crea();
+
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [new PlayerView(Guid.NewGuid(), "Anna", true, true, false), new PlayerView(Anna, "Bruno", false, true, false)],
+            "surrealista-classico", 5));
+        conn.Emit(new GameFinishedMessage(["Il cadavere squisito"]));
+
+        Assert.False(vm.IsHost);
+        Assert.Equal(ScreenState.Finished, vm.Screen);
+        Assert.False(vm.ShowFinishedActions);
+    }
+
+    [Fact]
+    public void ShowFinishedActionsEFalsoPerLHostFuoriDallaSchermataFinale()
+    {
+        var (vm, conn) = Crea();
+
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [new PlayerView(Anna, "Anna", true, true, false)],
+            "surrealista-classico", 5));
+
+        Assert.True(vm.IsHost);
+        Assert.Equal(ScreenState.Lobby, vm.Screen);
+        Assert.False(vm.ShowFinishedActions);
+    }
+
+    // "Tornando in lobby le collezioni di partita risultano vuote" (brief del
+    // lotto): senza questa pulizia la partita successiva mostrerebbe pezzi
+    // di quella appena conclusa.
+    [Fact]
+    public async Task TornareAllaLobbySvuotaLeCollezioniDellaPartitaConclusa()
+    {
+        var (vm, conn) = Crea();
+        vm.RoomCode = "ABCD";
+
+        conn.Emit(new RevealStepMessage(0, 1, ["Il cadavere"], true, ["Anna"]));
+        await vm.AdvanceRevealCommand.ExecuteAsync(null);
+        conn.Emit(new GameFinishedMessage(["Il cadavere squisito"]));
+
+        Assert.NotEmpty(vm.FinalPhrases);
+        Assert.NotEmpty(vm.RevealSlots);
+        Assert.NotEmpty(vm.RevealAuthors);
+
+        await vm.BackToLobbyCommand.ExecuteAsync(null);
+
+        Assert.Empty(vm.FinalPhrases);
+        Assert.Empty(vm.RevealSlots);
+        Assert.Empty(vm.RevealAuthors);
+        Assert.Equal(string.Empty, vm.AuthorsFootnote);
+    }
+
+    // Stessa pulizia per "Nuova partita": la partita successiva parte dritta
+    // alla scrittura, ma le collezioni della precedente non devono restare
+    // appese in memoria nel frattempo.
+    [Fact]
+    public async Task NuovaPartitaSvuotaLeCollezioniDellaPartitaConclusa()
+    {
+        var (vm, conn) = Crea();
+        vm.RoomCode = "ABCD";
+
+        conn.Emit(new GameFinishedMessage(["Il cadavere squisito"]));
+        Assert.NotEmpty(vm.FinalPhrases);
+
+        await vm.NewGameCommand.ExecuteAsync(null);
+
+        Assert.Empty(vm.FinalPhrases);
+    }
+
     [Fact]
     public async Task EntrareInUnaStanzaNormalizzaIlNicknamePrimaDiInviarlo()
     {

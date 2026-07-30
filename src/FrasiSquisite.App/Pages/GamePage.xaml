@@ -394,6 +394,19 @@
                     </CollectionView.ItemTemplate>
                 </CollectionView>
 
+                <!-- Solo l'host vede questi due pulsanti (lotto-d-brief.md):
+                     un pulsante che risponde NOT_HOST al tocco è peggio di un
+                     pulsante assente, stessa idea del selettore di schema e
+                     dei controlli dei bot. Chi non è host legge l'avviso
+                     discreto sotto invece. -->
+                <Button Text="Nuova partita" Style="{StaticResource PrimaryButton}"
+                        Command="{Binding NewGameCommand}" IsVisible="{Binding ShowFinishedActions}" />
+                <Button Text="Torna alla lobby" Style="{StaticResource SecondaryButton}"
+                        Command="{Binding BackToLobbyCommand}" IsVisible="{Binding ShowFinishedActions}" />
+                <Label Text="Tocca all'host decidere come continuare." Style="{StaticResource FootnoteLabel}"
+                       HorizontalOptions="Center"
+                       IsVisible="{Binding ShowFinishedActions, Converter={StaticResource InvertBool}}" />
+
             </VerticalStackLayout>
 
         </VerticalStackLayout>

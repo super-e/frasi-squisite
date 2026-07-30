@@ -76,6 +76,20 @@ public sealed class FakeGameConnection : IGameConnection
         return Task.CompletedTask;
     }
 
+    public Task NewGameAsync(string roomCode)
+    {
+        LanciaSeImpostato();
+        _calls.Add($"NewGame({roomCode})");
+        return Task.CompletedTask;
+    }
+
+    public Task BackToLobbyAsync(string roomCode)
+    {
+        LanciaSeImpostato();
+        _calls.Add($"BackToLobby({roomCode})");
+        return Task.CompletedTask;
+    }
+
     public Task AddBotAsync(string roomCode)
     {
         LanciaSeImpostato();

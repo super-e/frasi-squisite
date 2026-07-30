@@ -33,6 +33,12 @@ public interface IGameConnection
 
     Task AdvanceRevealAsync(string roomCode);
 
+    /// <summary>Riparte subito dalla schermata finale, stessi giocatori e stesso schema (lotto-d-brief.md).</summary>
+    Task NewGameAsync(string roomCode);
+
+    /// <summary>Torna alla lobby dalla schermata finale senza avviare nulla (lotto-d-brief.md).</summary>
+    Task BackToLobbyAsync(string roomCode);
+
     Task AddBotAsync(string roomCode);
 
     Task RemoveBotAsync(string roomCode, Guid botId);
