@@ -1,7 +1,8 @@
 ﻿<?xml version="1.0" encoding="UTF-8" ?>
-<ResourceDictionary 
+<ResourceDictionary
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
-    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:shapes="clr-namespace:Microsoft.Maui.Controls.Shapes;assembly=Microsoft.Maui.Controls">
 
     <Style TargetType="ActivityIndicator">
         <Setter Property="Color" Value="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource White}}" />
@@ -88,11 +89,11 @@
     </Style>
 
     <Style TargetType="Editor">
-        <Setter Property="TextColor" Value="{AppThemeBinding Light={StaticResource Black}, Dark={StaticResource White}}" />
+        <Setter Property="TextColor" Value="{DynamicResource ThemeInk}" />
         <Setter Property="BackgroundColor" Value="Transparent" />
         <Setter Property="FontFamily" Value="OpenSansRegular"/>
         <Setter Property="FontSize" Value="14" />
-        <Setter Property="PlaceholderColor" Value="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}" />
+        <Setter Property="PlaceholderColor" Value="{DynamicResource ThemeInkMuted}" />
         <Setter Property="MinimumHeightRequest" Value="44"/>
         <Setter Property="MinimumWidthRequest" Value="44"/>
         <Setter Property="VisualStateManager.VisualStateGroups">
@@ -110,11 +111,11 @@
     </Style>
 
     <Style TargetType="Entry">
-        <Setter Property="TextColor" Value="{AppThemeBinding Light={StaticResource Black}, Dark={StaticResource White}}" />
+        <Setter Property="TextColor" Value="{DynamicResource ThemeInk}" />
         <Setter Property="BackgroundColor" Value="Transparent" />
         <Setter Property="FontFamily" Value="OpenSansRegular"/>
         <Setter Property="FontSize" Value="14" />
-        <Setter Property="PlaceholderColor" Value="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}" />
+        <Setter Property="PlaceholderColor" Value="{DynamicResource ThemeInkMuted}" />
         <Setter Property="MinimumHeightRequest" Value="44"/>
         <Setter Property="MinimumWidthRequest" Value="44"/>
         <Setter Property="VisualStateManager.VisualStateGroups">
@@ -154,7 +155,7 @@
     </Style>
 
     <Style TargetType="Label">
-        <Setter Property="TextColor" Value="{AppThemeBinding Light={StaticResource Black}, Dark={StaticResource White}}" />
+        <Setter Property="TextColor" Value="{DynamicResource ThemeInk}" />
         <Setter Property="BackgroundColor" Value="Transparent" />
         <Setter Property="FontFamily" Value="OpenSansRegular" />
         <Setter Property="FontSize" Value="14" />
@@ -402,7 +403,10 @@
 
     <Style TargetType="Page" ApplyToDerivedTypes="True">
         <Setter Property="Padding" Value="0"/>
-        <Setter Property="BackgroundColor" Value="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource OffBlack}}" />
+        <!-- {DynamicResource}, non {AppThemeBinding}: i due temi del design
+             (lotto-a-brief.md) non seguono il chiaro/scuro di sistema, li
+             sceglie l'utente in Impostazioni. -->
+        <Setter Property="BackgroundColor" Value="{DynamicResource ThemeBg}" />
     </Style>
 
     <Style TargetType="Shell" ApplyToDerivedTypes="True">
@@ -429,6 +433,257 @@
         <Setter Property="BarTextColor" Value="{AppThemeBinding Light={StaticResource Magenta}, Dark={StaticResource White}}" />
         <Setter Property="UnselectedTabColor" Value="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray950}}" />
         <Setter Property="SelectedTabColor" Value="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray200}}" />
+    </Style>
+
+    <!-- ==========================================================
+         Design "Frasi Squisite" (lotto-a-brief.md): scala tipografica
+         e controlli. Tutto ciò che dipende dal tema usa
+         {DynamicResource}, mai {StaticResource} - è quello che rende
+         il cambio di tema visibile senza riavviare l'app.
+         Limite noto e accettato: ThemeHeadFont è un font variabile e
+         MAUI su Android non ne seleziona in modo affidabile i pesi
+         interni, quindi i titoli renderano al peso di default, non al
+         700/800 del mockup. Non è un bug da aggirare con
+         FontAttributes="Bold": lo scarterebbe solo per il "corpo".
+         ========================================================== -->
+
+    <Style x:Key="EyebrowLabel" TargetType="Label">
+        <Setter Property="TextColor" Value="{DynamicResource ThemeAccent}" />
+        <Setter Property="FontFamily" Value="OpenSansSemibold" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="TextTransform" Value="Uppercase" />
+        <Setter Property="CharacterSpacing" Value="1.5" />
+    </Style>
+
+    <Style x:Key="H1Label" TargetType="Label">
+        <Setter Property="FontFamily" Value="{DynamicResource ThemeHeadFont}" />
+        <Setter Property="FontSize" Value="38" />
+        <Setter Property="TextColor" Value="{DynamicResource ThemeInk}" />
+        <Setter Property="LineHeight" Value="1.05" />
+    </Style>
+
+    <Style x:Key="H1WinnerLabel" TargetType="Label">
+        <Setter Property="FontFamily" Value="{DynamicResource ThemeHeadFont}" />
+        <Setter Property="FontSize" Value="26" />
+        <Setter Property="TextColor" Value="{DynamicResource ThemeInk}" />
+        <Setter Property="HorizontalOptions" Value="Center" />
+        <Setter Property="HorizontalTextAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="H2Label" TargetType="Label">
+        <Setter Property="FontFamily" Value="{DynamicResource ThemeHeadFont}" />
+        <Setter Property="FontSize" Value="21" />
+        <Setter Property="TextColor" Value="{DynamicResource ThemeInk}" />
+    </Style>
+
+    <Style x:Key="H3Label" TargetType="Label">
+        <Setter Property="FontFamily" Value="{DynamicResource ThemeHeadFont}" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="TextColor" Value="{DynamicResource ThemeInk}" />
+    </Style>
+
+    <Style x:Key="BodyLabel" TargetType="Label">
+        <Setter Property="FontSize" Value="14.5" />
+        <Setter Property="TextColor" Value="{DynamicResource ThemeInkMuted}" />
+        <Setter Property="LineHeight" Value="1.5" />
+    </Style>
+
+    <Style x:Key="ExampleLabel" TargetType="Label">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontAttributes" Value="Italic" />
+        <Setter Property="TextColor" Value="{DynamicResource ThemeInkMuted}" />
+    </Style>
+
+    <Style x:Key="FootnoteLabel" TargetType="Label">
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="TextColor" Value="{DynamicResource ThemeInkMuted}" />
+        <Setter Property="HorizontalOptions" Value="Center" />
+        <Setter Property="HorizontalTextAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="RoomCodeLabel" TargetType="Label">
+        <Setter Property="FontFamily" Value="{DynamicResource ThemeHeadFont}" />
+        <Setter Property="FontSize" Value="32" />
+        <Setter Property="TextColor" Value="{DynamicResource ThemeInk}" />
+        <Setter Property="CharacterSpacing" Value="4" />
+        <Setter Property="HorizontalOptions" Value="Center" />
+        <Setter Property="HorizontalTextAlignment" Value="Center" />
+    </Style>
+
+    <!-- Button nativo: CornerRadius/BackgroundColor/BorderColor sono tutti
+         proprietà con tipo semplice (int/Color), quindi {DynamicResource} le
+         risolve senza bisogno di Brush o Shape dedicati come per i controlli
+         basati su Border qui sotto. -->
+    <Style x:Key="PrimaryButton" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="{DynamicResource ThemeAccent}" />
+        <Setter Property="TextColor" Value="{DynamicResource ThemeOnAccent}" />
+        <Setter Property="FontFamily" Value="{DynamicResource ThemeHeadFont}" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="CornerRadius" Value="{DynamicResource ThemeRadius}" />
+        <Setter Property="BorderWidth" Value="0" />
+        <Setter Property="MinimumHeightRequest" Value="52" />
+        <Setter Property="HorizontalOptions" Value="Fill" />
+        <Setter Property="Padding" Value="24,14" />
+        <Setter Property="VisualStateManager.VisualStateGroups">
+            <VisualStateGroupList>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <!-- "Invia" disabilitato e semitrasparente a testo vuoto
+                         (lotto-a-brief.md): IsEnabled guida questo stato, non
+                         un secondo binding separato sull'opacità. -->
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Property="Opacity" Value="0.4" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateGroupList>
+        </Setter>
+    </Style>
+
+    <Style x:Key="SecondaryButton" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="Transparent" />
+        <Setter Property="TextColor" Value="{DynamicResource ThemeInk}" />
+        <Setter Property="BorderColor" Value="{DynamicResource ThemeInk22}" />
+        <Setter Property="BorderWidth" Value="2" />
+        <Setter Property="FontFamily" Value="OpenSansSemibold" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="CornerRadius" Value="{DynamicResource ThemeRadius}" />
+        <Setter Property="MinimumHeightRequest" Value="52" />
+        <Setter Property="HorizontalOptions" Value="Fill" />
+        <Setter Property="Padding" Value="24,14" />
+        <Setter Property="VisualStateManager.VisualStateGroups">
+            <VisualStateGroupList>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Property="Opacity" Value="0.4" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateGroupList>
+        </Setter>
+    </Style>
+
+    <!-- Card: usata dalle due card di Impostazioni e da ogni frase composta in
+         Fine partita. Border.Stroke è un Brush, non un Color: da cui i
+         "...Brush" nei due ThemeX.xaml invece dei semplici Color. -->
+    <Style x:Key="Card" TargetType="Border">
+        <Setter Property="BackgroundColor" Value="{DynamicResource ThemeSurface}" />
+        <Setter Property="Stroke" Value="{DynamicResource ThemeCardBorderBrush}" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="StrokeShape" Value="{DynamicResource ThemeRadiusShape}" />
+        <Setter Property="Shadow" Value="{DynamicResource CardShadow}" />
+        <Setter Property="Padding" Value="20" />
+    </Style>
+
+    <!-- CodeEntry: Entry non ha bordo/angoli/sfondo propri in MAUI, quindi è
+         una Border (Frame) che li disegna con dentro una Entry trasparente. -->
+    <Style x:Key="CodeEntryFrame" TargetType="Border">
+        <Setter Property="BackgroundColor" Value="{DynamicResource ThemeSurface}" />
+        <Setter Property="Stroke" Value="{DynamicResource ThemeInk33Brush}" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="StrokeShape" Value="{DynamicResource ThemeRadiusHalfShape}" />
+        <Setter Property="Padding" Value="16,12" />
+    </Style>
+
+    <Style x:Key="CodeEntryText" TargetType="Entry">
+        <Setter Property="BackgroundColor" Value="Transparent" />
+        <Setter Property="TextColor" Value="{DynamicResource ThemeInk}" />
+        <Setter Property="PlaceholderColor" Value="{DynamicResource ThemeInkMuted}" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="HorizontalTextAlignment" Value="Center" />
+        <Setter Property="CharacterSpacing" Value="4" />
+    </Style>
+
+    <!-- SlotEditor: stessa idea di CodeEntry ma multiriga (Editor). -->
+    <Style x:Key="SlotEditorFrame" TargetType="Border">
+        <Setter Property="BackgroundColor" Value="{DynamicResource ThemeSurface}" />
+        <Setter Property="Stroke" Value="{DynamicResource ThemeInk22Brush}" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="StrokeShape" Value="{DynamicResource ThemeRadiusSoftShape}" />
+        <Setter Property="Padding" Value="16,12" />
+        <Setter Property="MinimumHeightRequest" Value="96" />
+    </Style>
+
+    <Style x:Key="SlotEditorText" TargetType="Editor">
+        <Setter Property="BackgroundColor" Value="Transparent" />
+        <Setter Property="TextColor" Value="{DynamicResource ThemeInk}" />
+        <Setter Property="PlaceholderColor" Value="{DynamicResource ThemeInkMuted}" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="AutoSize" Value="TextChanges" />
+    </Style>
+
+    <!-- Avatar: cerchio fisso 38, non cambia forma fra i due temi (solo lo
+         sfondo, ThemeAccent2): lo shape è quindi uno StaticResource. -->
+    <shapes:Ellipse x:Key="AvatarShape" />
+
+    <Style x:Key="Avatar" TargetType="Border">
+        <Setter Property="WidthRequest" Value="38" />
+        <Setter Property="HeightRequest" Value="38" />
+        <Setter Property="BackgroundColor" Value="{DynamicResource ThemeAccent2}" />
+        <Setter Property="StrokeThickness" Value="0" />
+        <Setter Property="StrokeShape" Value="{StaticResource AvatarShape}" />
+        <Setter Property="HorizontalOptions" Value="Center" />
+        <Setter Property="VerticalOptions" Value="Center" />
+    </Style>
+
+    <Style x:Key="AvatarInitial" TargetType="Label">
+        <Setter Property="TextColor" Value="White" />
+        <Setter Property="FontFamily" Value="{DynamicResource ThemeHeadFont}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="HorizontalOptions" Value="Center" />
+        <Setter Property="VerticalOptions" Value="Center" />
+        <Setter Property="HorizontalTextAlignment" Value="Center" />
+    </Style>
+
+    <!-- Chip: angoli pieni (pillola), fisso fra i due temi come Avatar. -->
+    <shapes:RoundRectangle x:Key="ChipShape" CornerRadius="999" />
+
+    <Style x:Key="Chip" TargetType="Border">
+        <Setter Property="BackgroundColor" Value="{DynamicResource ThemeSurfaceAlt}" />
+        <Setter Property="StrokeThickness" Value="0" />
+        <Setter Property="StrokeShape" Value="{StaticResource ChipShape}" />
+        <Setter Property="Padding" Value="10,4" />
+        <Setter Property="HorizontalOptions" Value="Start" />
+    </Style>
+
+    <Style x:Key="ChipLabel" TargetType="Label">
+        <Setter Property="TextColor" Value="{DynamicResource ThemeInk}" />
+        <Setter Property="FontFamily" Value="OpenSansSemibold" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="TextTransform" Value="Uppercase" />
+    </Style>
+
+    <!-- Caselle del reveal: "rivelata" (scoperta) e "coperta" (ancora ···). -->
+    <Style x:Key="RevealSlotRevealedFrame" TargetType="Border">
+        <Setter Property="BackgroundColor" Value="{DynamicResource ThemeSurface}" />
+        <Setter Property="Stroke" Value="{DynamicResource ThemeInk15Brush}" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="StrokeShape" Value="{DynamicResource ThemeRadiusSoftShape}" />
+        <Setter Property="Shadow" Value="{DynamicResource CardShadow}" />
+        <Setter Property="Padding" Value="14,10" />
+    </Style>
+
+    <Style x:Key="RevealSlotRevealedText" TargetType="Label">
+        <Setter Property="FontFamily" Value="{DynamicResource ThemeHeadFont}" />
+        <Setter Property="FontSize" Value="19" />
+        <Setter Property="TextColor" Value="{DynamicResource ThemeInk}" />
+    </Style>
+
+    <Style x:Key="RevealSlotCoveredFrame" TargetType="Border">
+        <Setter Property="BackgroundColor" Value="{DynamicResource ThemeSurfaceAlt}" />
+        <Setter Property="Stroke" Value="{DynamicResource ThemeInk33Brush}" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="StrokeDashArray" Value="4,4" />
+        <Setter Property="StrokeShape" Value="{DynamicResource ThemeRadiusSoftShape}" />
+        <Setter Property="Padding" Value="14,10" />
+    </Style>
+
+    <Style x:Key="RevealSlotCoveredText" TargetType="Label">
+        <Setter Property="FontSize" Value="19" />
+        <Setter Property="TextColor" Value="{DynamicResource ThemeInkMuted}" />
     </Style>
 
 </ResourceDictionary>

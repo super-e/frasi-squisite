@@ -16,6 +16,14 @@ public static class MauiProgram
             {
                 fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
                 fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
+
+                // Alias usati da ThemeHeadFont nei due temi (lotto-a-brief.md).
+                // Limite noto e accettato: sono font variabili e MAUI su
+                // Android non seleziona in modo affidabile i pesi interni, quindi
+                // i titoli renderanno al peso di default (non 700/800): non è
+                // un bug da aggirare con FontAttributes="Bold".
+                fonts.AddFont("Unbounded-Variable.ttf", "Unbounded");
+                fonts.AddFont("SpaceGrotesk-Variable.ttf", "SpaceGrotesk");
             });
 
 #if DEBUG
@@ -26,6 +34,8 @@ public static class MauiProgram
         // nuova: due istanze significherebbero una ViewModel iscritta a una
         // connessione diversa da quella che parla col server.
         builder.Services.AddSingleton<IGameConnection, SignalRGameConnection>();
+        builder.Services.AddSingleton<IThemeStore, PreferencesThemeStore>();
+        builder.Services.AddSingleton<IThemeService, ThemeService>();
         builder.Services.AddSingleton(sp => new GameSessionViewModel(
             sp.GetRequiredService<IGameConnection>(),
             PlayerIdentity.Current()));

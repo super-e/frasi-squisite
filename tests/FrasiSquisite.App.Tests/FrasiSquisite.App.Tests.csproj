@@ -26,6 +26,8 @@
 
   <ItemGroup>
     <Compile Include="..\..\src\FrasiSquisite.App\Services\IGameConnection.cs" Link="Linked\IGameConnection.cs" />
+    <Compile Include="..\..\src\FrasiSquisite.App\Services\IThemeService.cs" Link="Linked\IThemeService.cs" />
+    <Compile Include="..\..\src\FrasiSquisite.App\Services\ThemeService.cs" Link="Linked\ThemeService.cs" />
     <Compile Include="..\..\src\FrasiSquisite.App\ViewModels\**\*.cs" LinkBase="Linked\ViewModels" />
   </ItemGroup>
 

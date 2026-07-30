@@ -13,6 +13,10 @@
 
             <converters:IsScreenConverter x:Key="IsScreen" />
             <converters:NotEmptyConverter x:Key="NotEmpty" />
+            <converters:IsThemeConverter x:Key="IsTheme" />
+            <converters:InvertedBoolConverter x:Key="InvertBool" />
+            <converters:UppercaseConverter x:Key="Uppercase" />
+            <converters:InitialConverter x:Key="Initial" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

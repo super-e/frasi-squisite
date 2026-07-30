@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    Tema "b" — Notte di Gioco (scuro). Stessi token di ThemeA.xaml, valori
+    diversi: vedi quel file per la spiegazione della doppia rappresentazione
+    dei raggi (numero nudo + forma) e del perché serve un x:Class.
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:shapes="clr-namespace:Microsoft.Maui.Controls.Shapes;assembly=Microsoft.Maui.Controls"
+    x:Class="FrasiSquisite.App.Resources.Styles.ThemeB">
+
+    <Color x:Key="ThemeBg">#0D0D12</Color>
+    <Color x:Key="ThemeSurface">#17171F</Color>
+    <Color x:Key="ThemeSurfaceAlt">#22222D</Color>
+    <Color x:Key="ThemeInk">#F5F5F7</Color>
+    <Color x:Key="ThemeInkMuted">#9A9AA8</Color>
+    <Color x:Key="ThemeAccent">#39FF9E</Color>
+    <Color x:Key="ThemeAccent2">#FF3DF0</Color>
+    <Color x:Key="ThemeOnAccent">#0D0D12</Color>
+
+    <!-- ink@NN del mockup: alfa CSS in coda, alfa MAUI in testa (#AARRGGBB).
+         Qui NN sono cifre esadecimali (0x15=21, 0x22=34, 0x33=51 su 255). -->
+    <Color x:Key="ThemeInk15">#26F5F5F7</Color>
+    <Color x:Key="ThemeInk22">#38F5F5F7</Color>
+    <Color x:Key="ThemeInk33">#52F5F5F7</Color>
+
+    <!-- Bordo card: 1px #14FFFFFF, presente solo nel tema scuro. -->
+    <SolidColorBrush x:Key="ThemeCardBorderBrush" Color="#14FFFFFF" />
+
+    <SolidColorBrush x:Key="ThemeInk15Brush" Color="{StaticResource ThemeInk15}" />
+    <SolidColorBrush x:Key="ThemeInk22Brush" Color="{StaticResource ThemeInk22}" />
+    <SolidColorBrush x:Key="ThemeInk33Brush" Color="{StaticResource ThemeInk33}" />
+    <SolidColorBrush x:Key="ThemeAccentBrush" Color="{StaticResource ThemeAccent}" />
+
+    <x:Int32 x:Key="ThemeRadius">14</x:Int32>
+    <x:Double x:Key="ThemeRadiusHalf">7</x:Double>
+    <x:Double x:Key="ThemeRadiusSoft">9</x:Double>
+
+    <shapes:RoundRectangle x:Key="ThemeRadiusShape" CornerRadius="14" />
+    <shapes:RoundRectangle x:Key="ThemeRadiusHalfShape" CornerRadius="7" />
+    <shapes:RoundRectangle x:Key="ThemeRadiusSoftShape" CornerRadius="9" />
+
+    <x:String x:Key="ThemeHeadFont">SpaceGrotesk</x:String>
+
+    <!-- Ombra card: nero, opacità 0.55, raggio 46, offset (0, 20). -->
+    <Shadow x:Key="CardShadow" Brush="Black" Opacity="0.55" Radius="46" Offset="0,20" />
+
+</ResourceDictionary>

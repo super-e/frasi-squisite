@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    Tema "a" — Surrealista Pop (chiaro, default). Valori letterali dal design
+    (vedi .superpowers/sdd/lotto-a-brief.md). Ha un x:Class, come una pagina,
+    perché IThemeService deve poterne creare un'istanza a runtime e scambiarla
+    con ThemeB dentro Application.Current.Resources.MergedDictionaries: una
+    ResourceDictionary "anonima" (senza x:Class, come Colors.xaml) non è
+    istanziabile da codice.
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:shapes="clr-namespace:Microsoft.Maui.Controls.Shapes;assembly=Microsoft.Maui.Controls"
+    x:Class="FrasiSquisite.App.Resources.Styles.ThemeA">
+
+    <Color x:Key="ThemeBg">#FAF6EF</Color>
+    <Color x:Key="ThemeSurface">#FFFFFF</Color>
+    <Color x:Key="ThemeSurfaceAlt">#F2ECDF</Color>
+    <Color x:Key="ThemeInk">#1A1A1A</Color>
+    <Color x:Key="ThemeInkMuted">#726C5E</Color>
+    <Color x:Key="ThemeAccent">#FF4D6D</Color>
+    <Color x:Key="ThemeAccent2">#2B6CFF</Color>
+    <Color x:Key="ThemeOnAccent">#FFFFFF</Color>
+
+    <!-- ink@NN del mockup: alfa CSS in coda, alfa MAUI in testa (#AARRGGBB). -->
+    <Color x:Key="ThemeInk15">#261A1A1A</Color>
+    <Color x:Key="ThemeInk22">#381A1A1A</Color>
+    <Color x:Key="ThemeInk33">#521A1A1A</Color>
+
+    <!-- Il tema chiaro non ha un bordo sulle card (si affida solo all'ombra):
+         trasparente, non assente, così Border.Stroke resta impostabile senza
+         un ramo di stile diverso fra i due temi. -->
+    <SolidColorBrush x:Key="ThemeCardBorderBrush" Color="Transparent" />
+
+    <SolidColorBrush x:Key="ThemeInk15Brush" Color="{StaticResource ThemeInk15}" />
+    <SolidColorBrush x:Key="ThemeInk22Brush" Color="{StaticResource ThemeInk22}" />
+    <SolidColorBrush x:Key="ThemeInk33Brush" Color="{StaticResource ThemeInk33}" />
+    <SolidColorBrush x:Key="ThemeAccentBrush" Color="{StaticResource ThemeAccent}" />
+
+    <!-- Raggi: valore nudo (per Button.CornerRadius, che è int) più la forma
+         equivalente (per Border.StrokeShape, che vuole un IShape). Stesso
+         numero, due rappresentazioni: i consumer hanno tipi diversi e MAUI
+         non converte fra loro attraverso {DynamicResource}. -->
+    <x:Int32 x:Key="ThemeRadius">24</x:Int32>
+    <x:Double x:Key="ThemeRadiusHalf">12</x:Double>
+    <x:Double x:Key="ThemeRadiusSoft">16</x:Double>
+
+    <shapes:RoundRectangle x:Key="ThemeRadiusShape" CornerRadius="24" />
+    <shapes:RoundRectangle x:Key="ThemeRadiusHalfShape" CornerRadius="12" />
+    <shapes:RoundRectangle x:Key="ThemeRadiusSoftShape" CornerRadius="16" />
+
+    <x:String x:Key="ThemeHeadFont">Unbounded</x:String>
+
+    <!-- Ombra card: nero, opacità 0.10, raggio 26, offset (0, 10). -->
+    <Shadow x:Key="CardShadow" Brush="Black" Opacity="0.10" Radius="26" Offset="0,10" />
+
+</ResourceDictionary>
