@@ -39,5 +39,7 @@ public interface IGameConnection
 
     Task RenameBotAsync(string roomCode, Guid botId, string nickname);
 
+    Task SetSchemaAsync(string roomCode, string schemaId);
+
     Task DisconnectAsync();
 }

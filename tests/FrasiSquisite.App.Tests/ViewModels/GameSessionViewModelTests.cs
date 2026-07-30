@@ -753,6 +753,99 @@ public class GameSessionViewModelTests
         Assert.True(riga.ShowBotControls);
     }
 
+    // ================= Schema (lotto-c-brief.md) =================
+
+    [Fact]
+    public void CanChangeSchemaEFalsoPerUnNonHost()
+    {
+        var (vm, conn) = Crea();
+
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [new PlayerView(Guid.NewGuid(), "Anna", true, true, false), new PlayerView(Anna, "Bruno", false, true, false)],
+            "surrealista-classico", 5,
+            [new SchemaView("surrealista-classico", "Surrealista classico", 5)]));
+
+        Assert.False(vm.IsHost);
+        Assert.False(vm.CanChangeSchema);
+    }
+
+    [Fact]
+    public void CanChangeSchemaEVeroPerHostInLobby()
+    {
+        var (vm, conn) = Crea();
+
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [new PlayerView(Anna, "Anna", true, true, false)],
+            "surrealista-classico", 5,
+            [new SchemaView("surrealista-classico", "Surrealista classico", 5)]));
+
+        Assert.True(vm.IsHost);
+        Assert.True(vm.CanChangeSchema);
+    }
+
+    [Fact]
+    public async Task SceglierUnoSchemaChiamaLaConnessione()
+    {
+        var (vm, conn) = Crea();
+        vm.RoomCode = "ABCD";
+
+        await vm.SelectSchemaCommand.ExecuteAsync("proverbio");
+
+        Assert.Contains("SetSchema(ABCD,proverbio)", conn.Calls);
+    }
+
+    /// <summary>
+    /// Schemi diversi hanno lunghezze diverse (lotto-c-brief.md): il
+    /// conteggio mostrato deve seguire lo schema effettivamente selezionato
+    /// nell'ultima RoomStateMessage, non un valore scritto a mano.
+    /// </summary>
+    [Fact]
+    public void IlConteggioDelleCaselleSeguiLoSchemaSelezionato()
+    {
+        var (vm, conn) = Crea();
+        var schemiDisponibili = new[]
+        {
+            new SchemaView("surrealista-classico", "Surrealista classico", 5),
+            new SchemaView("proverbio", "Proverbio della nonna", 3),
+        };
+
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [new PlayerView(Anna, "Anna", true, true, false)],
+            "surrealista-classico", 5, schemiDisponibili));
+        Assert.Equal(5, vm.SlotCount);
+
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [new PlayerView(Anna, "Anna", true, true, false)],
+            "proverbio", 3, schemiDisponibili));
+
+        Assert.Equal(3, vm.SlotCount);
+        Assert.Equal("proverbio", vm.SchemaId);
+    }
+
+    [Fact]
+    public void LoSchemaSelezionatoEMarcatoComeTaleTraLeOpzioni()
+    {
+        var (vm, conn) = Crea();
+        var schemiDisponibili = new[]
+        {
+            new SchemaView("surrealista-classico", "Surrealista classico", 5),
+            new SchemaView("proverbio", "Proverbio della nonna", 3),
+        };
+
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [new PlayerView(Anna, "Anna", true, true, false)],
+            "proverbio", 3, schemiDisponibili));
+
+        Assert.Equal(2, vm.SchemaOptions.Count);
+        Assert.True(vm.SchemaOptions.Single(o => o.Id == "proverbio").IsSelected);
+        Assert.False(vm.SchemaOptions.Single(o => o.Id == "surrealista-classico").IsSelected);
+    }
+
     // ================= Validazione nickname lato client (punto 6) =================
 
     [Fact]

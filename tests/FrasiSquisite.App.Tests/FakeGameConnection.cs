@@ -97,6 +97,13 @@ public sealed class FakeGameConnection : IGameConnection
         return Task.CompletedTask;
     }
 
+    public Task SetSchemaAsync(string roomCode, string schemaId)
+    {
+        LanciaSeImpostato();
+        _calls.Add($"SetSchema({roomCode},{schemaId})");
+        return Task.CompletedTask;
+    }
+
     public Task DisconnectAsync()
     {
         _calls.Add("Disconnect()");

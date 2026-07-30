@@ -123,6 +123,16 @@ public partial class GameSessionViewModel : ObservableObject
     [ObservableProperty]
     private string _schemaId = string.Empty;
 
+    /// <summary>
+    /// Nome per esteso dello schema selezionato, cercato in
+    /// <see cref="SchemaOptions"/> quando arriva la RoomStateMessage. Serve
+    /// al riepilogo mostrato a chi non è host (<see cref="SchemaSummary"/>):
+    /// mostrare solo <see cref="SchemaId"/> ("surrealista-classico") non è
+    /// il testo del design ("Surrealista classico").
+    /// </summary>
+    [ObservableProperty]
+    private string _schemaNome = string.Empty;
+
     [ObservableProperty]
     private int _phraseNumber;
 
@@ -164,6 +174,15 @@ public partial class GameSessionViewModel : ObservableObject
 
     public ObservableCollection<PlayerRowView> Players { get; } = [];
 
+    /// <summary>
+    /// Gli schemi che il server offre, arrivati con l'ultima
+    /// <see cref="RoomStateMessage"/> (spec del lotto). Come per i bot, il
+    /// selettore che li mostra è visibile solo all'host
+    /// (<see cref="CanChangeSchema"/>): gli altri vedono solo
+    /// <see cref="SchemaSummary"/>.
+    /// </summary>
+    public ObservableCollection<SchemaOptionView> SchemaOptions { get; } = [];
+
     [ObservableProperty]
     private string _editingBotName = string.Empty;
 
@@ -184,6 +203,25 @@ public partial class GameSessionViewModel : ObservableObject
     /// scompare oltre quella soglia (lotto-b-brief.md).
     /// </summary>
     public bool CanAddBot => IsHost && Screen == ScreenState.Lobby && PlayerCount < MaxPlayers;
+
+    /// <summary>
+    /// Solo l'host vede il selettore: chi lo tocca senza esserlo riceverebbe
+    /// solo un NOT_HOST dal motore invece di non vedere affatto il
+    /// controllo (stessa regola di <see cref="CanAddBot"/> e di
+    /// <see cref="PlayerRowView.ShowBotControls"/> per i bot).
+    /// </summary>
+    public bool CanChangeSchema => IsHost && Screen == ScreenState.Lobby;
+
+    /// <summary>
+    /// "Nome — N caselle", quello che il design mostra a chi non è host
+    /// accanto al segnaposto del QR. Il conteggio non è scritto a mano:
+    /// segue sempre <see cref="SlotCount"/>, che arriva dallo schema
+    /// effettivamente selezionato (schemi diversi hanno lunghezze diverse,
+    /// lotto-c-brief.md).
+    /// </summary>
+    public string SchemaSummary => SchemaNome.Length == 0
+        ? string.Empty
+        : $"{SchemaNome} — {SlotCount} caselle";
 
     /// <summary>
     /// Lunga sempre <see cref="SlotCount"/>: le caselle non ancora scoperte ci
@@ -325,6 +363,9 @@ public partial class GameSessionViewModel : ObservableObject
         EditingBotName = string.Empty;
         _editingBotId = null;
     });
+
+    [RelayCommand]
+    private Task SelectSchemaAsync(string schemaId) => EseguiComandoAsync(() => _connection.SetSchemaAsync(RoomCode, schemaId));
 
     [RelayCommand]
     private void ShowJoinByCode() => IsJoiningByCode = true;
@@ -503,6 +544,20 @@ public partial class GameSessionViewModel : ObservableObject
                 SlotCount = stato.SlotCount;
                 SchemaId = stato.SchemaId;
 
+                SchemaOptions.Clear();
+                foreach (var schema in stato.AvailableSchemas)
+                {
+                    SchemaOptions.Add(new SchemaOptionView(schema, schema.Id == stato.SchemaId));
+                }
+
+                // Se lo schema selezionato non compare nell'elenco (es. in
+                // test che non popolano AvailableSchemas), il riepilogo
+                // ripiega sull'id invece di restare vuoto: SchemaSummary
+                // controlla comunque SchemaNome.Length, quindi meglio un
+                // valore comunque leggibile che "Lunghezza zero" silenzioso.
+                SchemaNome = stato.AvailableSchemas.FirstOrDefault(s => s.Id == stato.SchemaId)?.Nome
+                    ?? stato.SchemaId;
+
                 // "Writing" NON va mappato qui, di proposito: una RoomStateMessage
                 // arriva anche a partita in corso (es. qualcuno si disconnette), e
                 // rimandare in scrittura chi ha già inviato lo strapperebbe dalla
@@ -606,12 +661,26 @@ public partial class GameSessionViewModel : ObservableObject
                 : "Chi l'ha scritta?";
     }
 
-    // CanAddBot dipende da questi tre campi: nessuno dei tre notifica da solo
-    // la proprietà calcolata, quindi lo fanno questi hook generati dal
-    // toolkit per ogni [ObservableProperty] coinvolto.
-    partial void OnIsHostChanged(bool value) => OnPropertyChanged(nameof(CanAddBot));
+    // CanAddBot e CanChangeSchema dipendono da questi campi: nessuno di loro
+    // notifica da solo le proprietà calcolate, quindi lo fanno questi hook
+    // generati dal toolkit per ogni [ObservableProperty] coinvolto.
+    partial void OnIsHostChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanAddBot));
+        OnPropertyChanged(nameof(CanChangeSchema));
+    }
 
-    partial void OnScreenChanged(ScreenState value) => OnPropertyChanged(nameof(CanAddBot));
+    partial void OnScreenChanged(ScreenState value)
+    {
+        OnPropertyChanged(nameof(CanAddBot));
+        OnPropertyChanged(nameof(CanChangeSchema));
+    }
 
     partial void OnPlayerCountChanged(int value) => OnPropertyChanged(nameof(CanAddBot));
+
+    // SchemaSummary dipende da entrambi: né SchemaNome né SlotCount
+    // notificano da soli la proprietà calcolata.
+    partial void OnSchemaNomeChanged(string value) => OnPropertyChanged(nameof(SchemaSummary));
+
+    partial void OnSlotCountChanged(int value) => OnPropertyChanged(nameof(SchemaSummary));
 }

@@ -154,8 +154,53 @@
                         <Label Text="QR / codice" Style="{StaticResource FootnoteLabel}"
                                HorizontalOptions="Center" VerticalOptions="Center" />
                     </Border>
-                    <Label Text="{Binding SchemaId}" Style="{StaticResource BodyLabel}" VerticalOptions="Center" />
+                    <!-- Chi non è host legge solo il nome dello schema scelto: un
+                         controllo qui darebbe NOT_HOST al tocco (lotto-c-brief.md). -->
+                    <Label Text="{Binding SchemaSummary}" Style="{StaticResource BodyLabel}" VerticalOptions="Center"
+                           IsVisible="{Binding CanChangeSchema, Converter={StaticResource InvertBool}}" />
                 </HorizontalStackLayout>
+
+                <!-- Selettore schema, solo per l'host: stessa idea del selettore di
+                     tema in Impostazioni (Border "Chip" con TapGestureRecognizer),
+                     con il bordo d'accento sulla voce selezionata al posto di una
+                     Picker nativa. Il conteggio delle caselle di ogni voce viene
+                     da SchemaOptionView.SlotCount (a sua volta dallo SchemaView di
+                     rete), mai scritto a mano: schemi diversi hanno lunghezze
+                     diverse ed è il punto di questo lotto. -->
+                <CollectionView ItemsSource="{Binding SchemaOptions}" IsVisible="{Binding CanChangeSchema}"
+                                HorizontalOptions="Center">
+                    <CollectionView.ItemsLayout>
+                        <LinearItemsLayout Orientation="Horizontal" ItemSpacing="8" />
+                    </CollectionView.ItemsLayout>
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SchemaOptionView">
+                            <Border Style="{StaticResource Chip}">
+                                <Border.Triggers>
+                                    <DataTrigger TargetType="Border" Binding="{Binding IsSelected}" Value="True">
+                                        <Setter Property="Stroke" Value="{DynamicResource ThemeAccentBrush}" />
+                                        <Setter Property="StrokeThickness" Value="2" />
+                                    </DataTrigger>
+                                </Border.Triggers>
+                                <Border.GestureRecognizers>
+                                    <TapGestureRecognizer
+                                        Command="{Binding Source={x:Reference RootPage}, Path=BindingContext.SelectSchemaCommand}"
+                                        CommandParameter="{Binding Id}" />
+                                </Border.GestureRecognizers>
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="{Binding Nome}" Style="{StaticResource ChipLabel}" />
+                                    <Label Style="{StaticResource FootnoteLabel}">
+                                        <Label.FormattedText>
+                                            <FormattedString>
+                                                <Span Text="{Binding SlotCount}" />
+                                                <Span Text=" caselle" />
+                                            </FormattedString>
+                                        </Label.FormattedText>
+                                    </Label>
+                                </VerticalStackLayout>
+                            </Border>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
 
                 <Label Text="{Binding PlayerCount, StringFormat='Giocatori ({0})'}" Style="{StaticResource H3Label}" />
 

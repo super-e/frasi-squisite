@@ -119,6 +119,9 @@ public sealed class SignalRGameConnection : IGameConnection, IAsyncDisposable
     public Task RenameBotAsync(string roomCode, Guid botId, string nickname) =>
         Hub.InvokeAsync("RenameBot", new RenameBotRequest(roomCode, botId, nickname));
 
+    public Task SetSchemaAsync(string roomCode, string schemaId) =>
+        Hub.InvokeAsync("SetSchema", new SetSchemaRequest(roomCode, schemaId));
+
     public async Task DisconnectAsync()
     {
         if (_connection is not null)
