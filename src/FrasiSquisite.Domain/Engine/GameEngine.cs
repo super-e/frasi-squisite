@@ -482,11 +482,11 @@ public sealed class GameEngine(IGameMode mode, IWordPool pool, IRandomSource ran
     }
 
     /// <summary>
-    /// Il connesso presente da più tempo tra i dati, o Guid.Empty se non ne
-    /// resta nessuno: stessa regola di successione dell'host usata sia
-    /// quando l'host abbandona la stanza (<see cref="OnPlayerLeft"/>) sia
-    /// quando l'espulsione dei disconnessi al reset lo porta via
-    /// (<see cref="AzzeraPerNuovaPartita"/>).
+    /// Il connesso presente da più tempo tra i giocatori passati, o
+    /// Guid.Empty se non ne resta nessuno: stessa regola di successione
+    /// dell'host usata sia quando l'host abbandona la stanza
+    /// (<see cref="OnPlayerLeft"/>) sia quando l'espulsione dei disconnessi
+    /// al reset lo porta via (<see cref="AzzeraPerNuovaPartita"/>).
     /// </summary>
     private static Guid HostPiuAnzianoTraIConnessi(IEnumerable<Player> giocatori) =>
         giocatori.Where(p => p.IsConnected).OrderBy(p => p.JoinOrder).FirstOrDefault()?.Id ?? Guid.Empty;
