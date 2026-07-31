@@ -436,25 +436,34 @@ public partial class GameSessionViewModel : ObservableObject
 
     /// <summary>
     /// "Nuova partita" (lotto-d-brief.md): riparte subito, stessi giocatori e
-    /// stesso schema. Ripulisce prima lo stato della partita appena conclusa,
-    /// come <see cref="BackToLobbyAsync"/>.
+    /// stesso schema. Ripulisce lo stato della partita appena conclusa DOPO
+    /// l'await, come <see cref="BackToLobbyAsync"/> (lotto-e-brief.md, punto 1
+    /// della revisione): se il trasporto cade proprio in quel momento,
+    /// EseguiComandoAsync cattura il guasto e lo scrive in ErrorText, e la
+    /// pulizia semplicemente non avviene - le frasi finali restano a schermo
+    /// invece di sparire sotto un errore senza che nulla possa più
+    /// ripopolarle (arrivano solo con GameFinishedMessage, che non tornerà).
+    /// Sicuro nell'altro verso: né RoomStateMessage né SlotRequestMessage
+    /// toccano quelle collezioni, quindi non c'è nulla che possa ripopolarle
+    /// nel frattempo.
     /// </summary>
     [RelayCommand]
     private Task NewGameAsync() => EseguiComandoAsync(async () =>
     {
-        PulisciStatoDiPartitaConclusa();
         await _connection.NewGameAsync(RoomCode);
+        PulisciStatoDiPartitaConclusa();
     });
 
     /// <summary>
     /// "Torna alla lobby" (lotto-d-brief.md): nessun avvio, solo ripulitura
-    /// dello stato della partita appena conclusa.
+    /// dello stato della partita appena conclusa. Pulizia dopo l'await per lo
+    /// stesso motivo di <see cref="NewGameAsync"/>.
     /// </summary>
     [RelayCommand]
     private Task BackToLobbyAsync() => EseguiComandoAsync(async () =>
     {
-        PulisciStatoDiPartitaConclusa();
         await _connection.BackToLobbyAsync(RoomCode);
+        PulisciStatoDiPartitaConclusa();
     });
 
     private async Task EnsureConnectedAsync()

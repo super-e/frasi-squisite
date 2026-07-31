@@ -1102,6 +1102,45 @@ public class GameSessionViewModelTests
         Assert.Empty(vm.FinalPhrases);
     }
 
+    // ================= Lotto E (revisione del lotto D, punto 1) =================
+    // PulisciStatoDiPartitaConclusa() veniva chiamato PRIMA dell'await sulla
+    // connessione. Se il trasporto cade proprio in quel momento,
+    // EseguiComandoAsync cattura il guasto e lo scrive in ErrorText, ma la
+    // pulizia era già avvenuta: l'host restava sulla schermata finale con
+    // l'errore sopra una lista di frasi ormai vuota, senza che nulla potesse
+    // ripopolarla (le frasi finali arrivano solo con GameFinishedMessage, che
+    // non tornerà). Questi due test dimostrano che, spostata la pulizia dopo
+    // l'await, un guasto di trasporto lascia le frasi finali intatte.
+    [Fact]
+    public async Task UnGuastoDiTrasportoInNuovaPartitaNonCancellaLeFrasiFinali()
+    {
+        var (vm, conn) = Crea();
+        vm.RoomCode = "ABCD";
+        conn.Emit(new GameFinishedMessage(["Il cadavere squisito"]));
+        Assert.NotEmpty(vm.FinalPhrases);
+        conn.NextFailure = new HttpRequestException("host irraggiungibile");
+
+        await vm.NewGameCommand.ExecuteAsync(null);
+
+        Assert.NotEmpty(vm.FinalPhrases);
+        Assert.False(string.IsNullOrEmpty(vm.ErrorText));
+    }
+
+    [Fact]
+    public async Task UnGuastoDiTrasportoInTornaAllaLobbyNonCancellaLeFrasiFinali()
+    {
+        var (vm, conn) = Crea();
+        vm.RoomCode = "ABCD";
+        conn.Emit(new GameFinishedMessage(["Il cadavere squisito"]));
+        Assert.NotEmpty(vm.FinalPhrases);
+        conn.NextFailure = new HttpRequestException("host irraggiungibile");
+
+        await vm.BackToLobbyCommand.ExecuteAsync(null);
+
+        Assert.NotEmpty(vm.FinalPhrases);
+        Assert.False(string.IsNullOrEmpty(vm.ErrorText));
+    }
+
     [Fact]
     public async Task EntrareInUnaStanzaNormalizzaIlNicknamePrimaDiInviarlo()
     {
