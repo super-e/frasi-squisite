@@ -221,6 +221,32 @@ public class GameSessionViewModelTests
         Assert.Equal(("···", false), (vm.RevealSlots[2].Text, vm.RevealSlots[2].IsRevealed));
     }
 
+    // Due stati, non più tre (voto cieco, spec §3): "Chi l'ha scritta?" è
+    // sparito, gli autori arrivano solo con la classifica finale. Questo
+    // test copre entrambe le cose che quello schiacciato copriva: le due
+    // etichette del pulsante E che AdvanceRevealCommand arrivi sempre al
+    // server, in entrambi gli stati - mai un ramo locale che si ferma
+    // prima della chiamata (la regressione lato client che il voto cieco
+    // doveva escludere).
+    [Fact]
+    public async Task IlPulsanteDiRevealMostraLetichettaGiustaEChiamaSempreIlServer()
+    {
+        var (vm, conn) = Crea();
+        vm.RoomCode = "ABCD";
+
+        conn.Emit(new RevealStepMessage(0, 2, ["Il cadavere"], false));
+        Assert.Equal("Rivela la prossima parola", vm.RevealButtonLabel);
+
+        await vm.AdvanceRevealCommand.ExecuteAsync(null);
+        Assert.Contains("AdvanceReveal(ABCD)", conn.Calls);
+
+        conn.Emit(new RevealStepMessage(0, 2, ["Il cadavere", "squisito"], true));
+        Assert.Equal("Prossima frase", vm.RevealButtonLabel);
+
+        await vm.AdvanceRevealCommand.ExecuteAsync(null);
+        Assert.Equal(2, conn.Calls.Count(c => c == "AdvanceReveal(ABCD)"));
+    }
+
     [Fact]
     public void FraseNDiMRiflettePhraseIndexETotalPhrasesDelPasso()
     {

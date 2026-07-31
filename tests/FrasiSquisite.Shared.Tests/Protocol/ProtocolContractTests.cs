@@ -139,13 +139,22 @@ public class ProtocolContractTests
     /// <summary>
     /// Il tipo non deve avere un campo per gli autori: è così che la
     /// segretezza è garantita dal tipo e non dalla disciplina (spec §3).
-    /// Una regressione qui riaprirebbe la fuga senza che nessun altro test
-    /// se ne accorga, perché il valore sarebbe comunque vuoto nei casi provati.
+    /// Come <see cref="SlotRequestNonEspoheAlcunCampoDiTesto"/>, l'elenco
+    /// completo delle proprietà: cercare solo "Authors" per nome (come
+    /// faceva questo test) lascerebbe passare indisturbato un campo
+    /// rimesso con un altro nome (es. "Autori", "AuthorNames",
+    /// "AuthorIds") - una regressione che riaprirebbe la fuga senza che
+    /// nessun altro test se ne accorga, perché il valore sarebbe comunque
+    /// vuoto nei casi provati.
     /// </summary>
     [Fact]
     public void IlPassoDiRevealNonHaUnCampoAutori()
     {
-        Assert.Null(typeof(RevealStepMessage).GetProperty("Authors"));
+        var proprieta = typeof(RevealStepMessage).GetProperties().Select(p => p.Name).ToArray();
+
+        Assert.Equal(
+            ["PhraseIndex", "TotalPhrases", "RevealedSlots", "PhraseComplete"],
+            proprieta);
     }
 
     // Stesso motivo di RoundtripDiRoomState: PhraseResultView contiene una
