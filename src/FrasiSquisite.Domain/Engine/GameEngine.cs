@@ -43,6 +43,8 @@ public sealed partial class GameEngine(IGameMode mode, IWordPool pool, IRandomSo
         BotRemoved e => OnBotRemoved(state, e),
         BotRenamed e => OnBotRenamed(state, e),
         SchemaSelected e => OnSchemaSelected(state, e),
+        VoteCast e => OnVoteCast(state, e),
+        VotingCloseRequested e => OnVotingCloseRequested(state, e),
         _ => EngineResult.NoChange(state),
     };
 

@@ -94,6 +94,7 @@ public sealed partial class GameEngine
             SubmittedThisRound = new HashSet<Guid>(),
             RevealPhraseIndex = 0,
             RevealSlotCount = 0,
+            Votes = new Dictionary<Guid, int>(),
         };
     }
 

@@ -49,3 +49,16 @@ public sealed record BotRenamed(Guid BotId, string Nickname, Guid RequestedBy) :
 /// come già fa generando l'id dei bot in <see cref="BotAdded"/>.
 /// </summary>
 public sealed record SchemaSelected(Schema Schema, Guid RequestedBy) : GameEvent;
+
+/// <summary>
+/// Un voto per la frase all'indice indicato. Un voto a testa, non si cambia
+/// (spec §2): il secondo tentativo dello stesso giocatore è un errore.
+/// </summary>
+public sealed record VoteCast(Guid PlayerId, int PhraseIndex) : GameEvent;
+
+/// <summary>
+/// L'host chiude il voto senza aspettare i ritardatari. Esiste perché il
+/// timer di fase è fase 2: senza né timer né questo, un giocatore che posa il
+/// telefono bloccherebbe la partita a tempo indefinito (spec §1).
+/// </summary>
+public sealed record VotingCloseRequested(Guid RequestedBy) : GameEvent;

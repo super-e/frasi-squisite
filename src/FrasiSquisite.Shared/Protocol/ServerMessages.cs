@@ -59,6 +59,20 @@ public sealed record RevealStepMessage(
     bool PhraseComplete);
 
 /// <summary>
+/// Le frasi su cui votare, nell'ordine in cui sono state costruite. Nessun
+/// autore: il voto è cieco (spec §3). L'indice nella lista è l'indice da
+/// rimandare indietro con <c>CastVoteRequest</c>.
+/// </summary>
+public sealed record VoteRequestMessage(IReadOnlyList<string> Phrases);
+
+/// <summary>
+/// Gemello di <see cref="RoundProgressMessage"/>. <paramref name="Total"/> è
+/// il numero di umani connessi, non di giocatori: bot e disconnessi non votano
+/// (spec §2), e contarli lascerebbe l'attesa ferma a un numero irraggiungibile.
+/// </summary>
+public sealed record VoteProgressMessage(int Voted, int Total);
+
+/// <summary>
 /// Una riga della classifica finale, già al posto giusto: il client disegna e
 /// non calcola, come per <see cref="SchemaView"/> e <see cref="PlayerView"/>.
 /// <paramref name="IsWinner"/> è falso su tutte le righe quando nessuno ha

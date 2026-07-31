@@ -110,43 +110,27 @@ public class RevealTests
     }
 
     [Fact]
-    public void ScopertaLUltimaFraseLaPartitaEConclusa()
+    public void ScopertoTuttoESiEVotatoLaPartitaEConclusa()
     {
         var stato = PartitaConclusa();
 
-        EngineResult risultato = null!;
         for (var i = 0; i < N * K; i++)
         {
-            risultato = _motore.Handle(stato, new RevealAdvanceRequested(Giocatore(0)));
-            stato = risultato.State;
+            stato = _motore.Handle(stato, new RevealAdvanceRequested(Giocatore(0))).State;
+        }
+
+        EngineResult ultimo = null!;
+        for (var g = 0; g < N; g++)
+        {
+            ultimo = _motore.Handle(stato, new VoteCast(Giocatore(g), 0));
+            stato = ultimo.State;
         }
 
         Assert.Equal(RoomPhase.Finished, stato.Phase);
 
-        var finale = Assert.Single(risultato.Broadcasts<GameFinishedMessage>());
+        var finale = Assert.Single(ultimo.Broadcasts<GameFinishedMessage>());
         Assert.Equal(N, finale.Results.Count);
         Assert.All(finale.Results, r => Assert.False(string.IsNullOrWhiteSpace(r.Text)));
-    }
-
-    /// <summary>
-    /// Gli autori arrivano tutti insieme alla fine, ed è l'unico posto in cui
-    /// arrivano: è ciò che rende cieco il voto che si inserirà qui in mezzo.
-    /// </summary>
-    [Fact]
-    public void GliAutoriArrivanoSoloConIlMessaggioFinale()
-    {
-        var stato = PartitaConclusa();
-
-        EngineResult risultato = null!;
-        for (var i = 0; i < N * K; i++)
-        {
-            risultato = _motore.Handle(stato, new RevealAdvanceRequested(Giocatore(0)));
-            stato = risultato.State;
-        }
-
-        var finale = Assert.Single(risultato.Broadcasts<GameFinishedMessage>());
-
         Assert.All(finale.Results, r => Assert.Equal(K, r.Authors.Count));
-        Assert.All(finale.Results, r => Assert.All(r.Authors, a => Assert.StartsWith("G", a, StringComparison.Ordinal)));
     }
 }

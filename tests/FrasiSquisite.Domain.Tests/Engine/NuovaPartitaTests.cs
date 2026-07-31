@@ -31,7 +31,13 @@ public class NuovaPartitaTests
             GameState.NewRoom("ABCD", TestSchemas.WithSlots(K), Schemi),
             (stato, i) => _motore.Handle(stato, new PlayerJoined(Giocatore(i), $"G{i}")).State);
 
-    /// <summary>Sottopone tutte le caselle di ogni round con un prefisso, poi porta il reveal fino in fondo.</summary>
+    /// <summary>
+    /// Sottopone tutte le caselle di ogni round con un prefisso, porta il
+    /// reveal fino in fondo e poi fa votare tutti: da questo lotto il reveal
+    /// da solo non chiude più la partita (Task 4, fase di voto), e gli usi di
+    /// questo aiutante presuppongono di arrivare fino a
+    /// <see cref="RoomPhase.Finished"/>.
+    /// </summary>
     private GameState GiocaFinoAlReveal(GameState stato, int n, string prefisso)
     {
         for (var round = 0; round < K; round++)
@@ -45,6 +51,11 @@ public class NuovaPartitaTests
         for (var i = 0; i < n * K; i++)
         {
             stato = _motore.Handle(stato, new RevealAdvanceRequested(Giocatore(0))).State;
+        }
+
+        for (var g = 0; g < n; g++)
+        {
+            stato = _motore.Handle(stato, new VoteCast(Giocatore(g), 0)).State;
         }
 
         return stato;

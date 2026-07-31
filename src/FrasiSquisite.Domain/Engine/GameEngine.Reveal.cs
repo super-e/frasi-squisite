@@ -47,12 +47,7 @@ public sealed partial class GameEngine
                 [new BroadcastToRoom(passo)]);
         }
 
-        var finito = state with { Phase = RoomPhase.Finished };
-
-        return new EngineResult(finito, [
-            new BroadcastToRoom(passo),
-            new BroadcastToRoom(new GameFinishedMessage(Classifica(finito, new Dictionary<Guid, int>()))),
-        ]);
+        return EntraInVoto(state, [new BroadcastToRoom(passo)]);
     }
 
     /// <summary>Le frasi composte secondo il template dello schema.</summary>
