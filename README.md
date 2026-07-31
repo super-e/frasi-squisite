@@ -48,7 +48,7 @@ sta in [docs/superpowers/specs/2026-07-29-frasi-squisite-design.md](docs/superpo
 ## Stato
 
 Fase 1 completata: partita giocabile dalla lobby al reveal, con più dispositivi
-Android collegati a un server locale. Ci sono i bot, cinque schemi
+Android collegati a un server locale. Ci sono i bot, sei schemi
 grammaticali fra cui scegliere e due temi. Senza timer, voto, persistenza né
 AI — arrivano nelle fasi successive (vedi spec §13).
 

@@ -1,0 +1,16 @@
+{
+  "id": "storia",
+  "version": 1,
+  "nome": "Storia in otto atti",
+  "template": "{0} {1} {2} {3}, {4}. Ultime parole: «{5}». Il pubblico: «{6}». Alla fine {7}.",
+  "caselle": [
+    { "ruolo": "Chi?",                 "prompt": "Un personaggio o un oggetto", "esempio": "Un pinguino in doppiopetto" },
+    { "ruolo": "Con chi?",             "prompt": "Un compagno o un rivale",     "esempio": "insieme al suo commercialista" },
+    { "ruolo": "Dove?",                "prompt": "Un luogo reale o immaginario", "esempio": "nella sala d'attesa di un dentista" },
+    { "ruolo": "Cosa fa?",             "prompt": "L'azione principale",         "esempio": "monta una libreria svedese" },
+    { "ruolo": "Perché?",              "prompt": "La motivazione assurda",      "esempio": "perché gliel'ha detto l'oroscopo" },
+    { "ruolo": "Cosa dicono?",         "prompt": "Ultime parole famose",        "esempio": "Non è colpa mia, io ho solo firmato" },
+    { "ruolo": "Cosa dice la gente?",  "prompt": "Commenti del pubblico",       "esempio": "Si sapeva che finiva così" },
+    { "ruolo": "Com'è andata a finire?", "prompt": "La conseguenza",            "esempio": "sono finiti tutti al telegiornale" }
+  ]
+}

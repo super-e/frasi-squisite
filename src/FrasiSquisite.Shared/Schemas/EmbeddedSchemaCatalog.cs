@@ -28,8 +28,8 @@ public sealed class EmbeddedSchemaCatalog : ISchemaCatalog
         // GetManifestResourceNames() non garantisce alcun ordine: con un solo
         // schema era innocuo, ma con più di uno il selettore in lobby
         // mostrerebbe un ordine arbitrario, potenzialmente diverso da una
-        // build all'altra. Ordine deterministico: il classico per primo (è il
-        // default), gli altri in ordine alfabetico di nome.
+        // build all'altra. Ordine deterministico: il default per primo, gli
+        // altri in ordine alfabetico di nome.
         //
         // SingleOrDefault + messaggio esplicito invece di .Single(): se lo
         // schema di default sparisse dagli embedded (rinominato o rimosso),

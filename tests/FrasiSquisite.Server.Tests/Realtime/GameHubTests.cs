@@ -3,6 +3,7 @@ using System.Text.Json;
 using FrasiSquisite.Domain.Model;
 using FrasiSquisite.Server.Rooms;
 using FrasiSquisite.Shared.Protocol;
+using FrasiSquisite.Shared.Schemas;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
@@ -214,8 +215,15 @@ public sealed class GameHubTests : IAsyncLifetime
         await bruno.WaitFor<SlotRequestMessage>(TimeSpan.FromSeconds(5));
 
         var richiesta = anna.Last<SlotRequestMessage>();
-        Assert.Equal(5, richiesta.TotalRounds);
-        var totalRounds = richiesta.TotalRounds;
+
+        // TotalRounds deve rispecchiare le caselle dello schema della stanza,
+        // non un numero fisso: qui la stanza è appena creata, quindi lo schema
+        // è il default. Il valore letterale (5, quando il default era il
+        // surrealista) rendeva questo test d'integrazione un secondo posto in
+        // cui aggiornare il conteggio a ogni cambio di default — cosa che
+        // EmbeddedSchemaCatalogTests già copre da sola.
+        var totalRounds = new EmbeddedSchemaCatalog().Get(Schema.DefaultId).SlotCount;
+        Assert.Equal(totalRounds, richiesta.TotalRounds);
 
         // Bruno invia due volte nello stesso round: solo lui deve vedere
         // l'errore "già inviato" (spec §2.3: nessun giocatore vede i fatti
@@ -227,7 +235,7 @@ public sealed class GameHubTests : IAsyncLifetime
         var erroreBruno = bruno.Last<ErrorMessage>();
         Assert.Equal("ALREADY_SUBMITTED", erroreBruno.Code);
 
-        // Cinque round con due giocatori (il primo invio di Bruno vale per il round 0).
+        // Un giro completo con due giocatori (il primo invio di Bruno vale per il round 0).
         await anna.Connection.InvokeAsync("SubmitSlot", new SubmitSlotRequest(codice, "anna0"));
         for (var round = 1; round < totalRounds; round++)
         {

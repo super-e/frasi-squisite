@@ -8,11 +8,20 @@ public class EmbeddedSchemaCatalogTests
     private readonly ISchemaCatalog _catalogo = new EmbeddedSchemaCatalog();
 
     [Fact]
-    public void CaricaLoSchemaSurrealistaClassico()
+    public void CaricaLoSchemaDiDefault()
     {
         var schema = _catalogo.Get(Schema.DefaultId);
 
-        Assert.Equal("surrealista-classico", schema.Id);
+        Assert.Equal("storia", schema.Id);
+        Assert.Equal("Storia in otto atti", schema.Nome);
+        Assert.Equal(8, schema.SlotCount);
+    }
+
+    [Fact]
+    public void CaricaLoSchemaSurrealistaClassico()
+    {
+        var schema = _catalogo.Get("surrealista-classico");
+
         Assert.Equal("Surrealista classico", schema.Nome);
         Assert.Equal(5, schema.SlotCount);
     }
@@ -33,11 +42,43 @@ public class EmbeddedSchemaCatalogTests
     [Fact]
     public void ComponeLaFraseSecondoIlTemplate()
     {
-        var schema = _catalogo.Get(Schema.DefaultId);
+        var schema = _catalogo.Get("surrealista-classico");
 
         var frase = schema.Compose(["Il cadavere", "squisito", "berrà", "il vino", "nuovo"]);
 
         Assert.Equal("Il cadavere squisito berrà il vino nuovo", frase);
+    }
+
+    /// <summary>
+    /// Il default è il primo schema con testo fisso nel template (gli altri
+    /// cinque sono semplici concatenazioni "{0} {1} …"): serve un test che
+    /// verifichi che le congiunzioni finiscano davvero nella frase composta,
+    /// e nella posizione giusta.
+    /// </summary>
+    [Fact]
+    public void LoSchemaDiDefaultIntercalaLeCongiunzioniDelTemplate()
+    {
+        var schema = _catalogo.Get(Schema.DefaultId);
+
+        var frase = schema.Compose([
+            "Un pinguino in doppiopetto",
+            "insieme al suo commercialista",
+            "nella sala d'attesa di un dentista",
+            "monta una libreria svedese",
+            "perché gliel'ha detto l'oroscopo",
+            "Non è colpa mia, io ho solo firmato",
+            "Si sapeva che finiva così",
+            "sono finiti tutti al telegiornale",
+        ]);
+
+        Assert.Equal(
+            "Un pinguino in doppiopetto insieme al suo commercialista " +
+            "nella sala d'attesa di un dentista monta una libreria svedese, " +
+            "perché gliel'ha detto l'oroscopo. " +
+            "Ultime parole: «Non è colpa mia, io ho solo firmato». " +
+            "Il pubblico: «Si sapeva che finiva così». " +
+            "Alla fine sono finiti tutti al telegiornale.",
+            frase);
     }
 
     [Fact]
@@ -63,12 +104,13 @@ public class EmbeddedSchemaCatalogTests
         Assert.Contains(_catalogo.All, s => s.Id == Schema.DefaultId);
     }
 
-    // ================= Lotto C: catalogo a cinque schemi =================
+    // ================= Lotto C: catalogo a più schemi =================
 
     [Fact]
-    public void IlCatalogoCaricaTuttiECinqueGliSchemi()
+    public void IlCatalogoCaricaTuttiGliSchemi()
     {
-        Assert.Equal(5, _catalogo.All.Count);
+        Assert.Equal(6, _catalogo.All.Count);
+        Assert.Contains(_catalogo.All, s => s.Id == "storia");
         Assert.Contains(_catalogo.All, s => s.Id == "surrealista-classico");
         Assert.Contains(_catalogo.All, s => s.Id == "titolo-di-giornale");
         Assert.Contains(_catalogo.All, s => s.Id == "proverbio");
@@ -77,20 +119,21 @@ public class EmbeddedSchemaCatalogTests
     }
 
     /// <summary>
-    /// Il classico per primo (è il default), gli altri in ordine alfabetico
-    /// di nome (lotto-c-brief.md, §Ordinamento del catalogo). Un ordine
-    /// letto direttamente da Assembly.GetManifestResourceNames() non lo
+    /// Il default per primo, gli altri in ordine alfabetico di nome
+    /// (lotto-c-brief.md, §Ordinamento del catalogo). Un ordine letto
+    /// direttamente da Assembly.GetManifestResourceNames() non lo
     /// garantirebbe.
     /// </summary>
     [Fact]
-    public void LOrdineDelCatalogoEDeterministicoConIlClassicoPerPrimo()
+    public void LOrdineDelCatalogoEDeterministicoConIlDefaultPerPrimo()
     {
         var atteso = new[]
         {
-            "surrealista-classico", // default, sempre primo
+            "storia",               // default, sempre primo
             "oroscopo",             // "Oroscopo del giorno"
             "proverbio",            // "Proverbio della nonna"
             "ricetta",              // "Ricetta d'autore"
+            "surrealista-classico", // "Surrealista classico"
             "titolo-di-giornale",   // "Titolo di giornale"
         };
 
@@ -156,6 +199,19 @@ public class EmbeddedSchemaCatalogTests
         var frase = schema.Compose(valori);
 
         Assert.False(string.IsNullOrWhiteSpace(frase));
+    }
+
+    /// <summary>
+    /// Otto caselle vuol dire otto round: è lo schema più lungo del catalogo,
+    /// e il numero è la cosa che conta per il motore (K = SlotCount).
+    /// </summary>
+    [Fact]
+    public void LoSchemaStoriaHaOttoCaselle()
+    {
+        var schema = _catalogo.Get("storia");
+
+        Assert.Equal("Storia in otto atti", schema.Nome);
+        Assert.Equal(8, schema.SlotCount);
     }
 
     [Fact]

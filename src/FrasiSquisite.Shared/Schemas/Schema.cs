@@ -9,7 +9,7 @@ public sealed record Schema(
     IReadOnlyList<Casella> Caselle,
     string Template)
 {
-    public const string DefaultId = "surrealista-classico";
+    public const string DefaultId = "storia";
 
     public int SlotCount => Caselle.Count;
 
