@@ -54,7 +54,8 @@ AI — arrivano nelle fasi successive (vedi spec §13).
 
 ## Licenza
 
-[MIT](LICENSE).
+[Apache License 2.0](LICENSE).
 
-I font inclusi nell'app hanno licenze proprie, elencate in
-[NOTICE.md](NOTICE.md).
+La licenza copre il codice. I font inclusi nell'app restano sotto le
+rispettive SIL Open Font License, elencate in [NOTICE.md](NOTICE.md) insieme
+all'attribuzione richiesta dalla clausola 4(d).

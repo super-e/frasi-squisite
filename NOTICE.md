@@ -1,4 +1,17 @@
+# NOTICE
+
+Frasi Squisite
+Copyright 2026 super-e
+
+Questo prodotto è distribuito sotto la Apache License, versione 2.0. Il testo
+integrale si trova in [LICENSE](LICENSE).
+
+---
+
 # Licenze di terze parti
+
+La Apache License copre il codice di questo progetto, non i componenti di
+terzi elencati qui sotto, che restano sotto le rispettive licenze.
 
 ## Font
 
