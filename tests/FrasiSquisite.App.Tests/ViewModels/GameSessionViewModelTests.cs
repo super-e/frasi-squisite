@@ -1219,18 +1219,20 @@ public class GameSessionViewModelTests
         Assert.Empty(profilo.Salvati);
     }
 
-    // Simmetrico al punto 1 della revisione (guasto di trasporto): un
-    // nickname valido non va salvato se la stanza non è stata effettivamente
-    // creata - "usato con successo", non solo "validato".
+    // Il caso più comune in assoluto: primo avvio con il server ancora
+    // spento. Legare il salvataggio all'esito della rete farebbe perdere il
+    // nickname proprio lì, cioè esattamente dove serve che venga ricordato.
+    // "Usato" vuol dire confermato dall'utente, non raggiunto dal server.
     [Fact]
-    public async Task UnGuastoDiTrasportoNellaCreazioneDellaStanzaNonSalvaIlNickname()
+    public async Task UnGuastoDiTrasportoNonImpedisceDiRicordareIlNickname()
     {
         var (vm, conn, profilo) = CreaConProfilo();
         conn.NextFailure = new HttpRequestException("host irraggiungibile");
-        vm.Nickname = "Anna";
+        vm.Nickname = "  anna  ";
 
         await vm.CreateRoomCommand.ExecuteAsync(null);
 
-        Assert.Empty(profilo.Salvati);
+        Assert.Equal("anna", profilo.Nickname);
+        Assert.NotEmpty(vm.ErrorText);
     }
 }

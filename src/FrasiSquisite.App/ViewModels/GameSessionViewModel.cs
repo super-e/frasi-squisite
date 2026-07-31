@@ -281,14 +281,17 @@ public partial class GameSessionViewModel : ObservableObject
         }
 
         Nickname = esito.Normalized;
+
+        // Salvato qui, prima di toccare la rete: "usato" vuol dire che
+        // l'utente l'ha confermato premendo Crea, non che il server era
+        // raggiungibile. Legarlo all'esito della connessione lo farebbe
+        // perdere proprio nel caso più comune - primo avvio, server ancora
+        // spento - che è esattamente quello che questa funzione esiste per
+        // evitare.
+        _playerProfile.SaveNickname(Nickname);
+
         await EnsureConnectedAsync();
         RoomCode = await _connection.CreateRoomAsync(_playerId, Nickname);
-
-        // Dopo l'await, non prima: se la creazione fallisse (guasto di
-        // trasporto o HubException), EseguiComandoAsync intercetta
-        // l'eccezione e questa riga non verrebbe raggiunta - "usato con
-        // successo" (lotto-e-brief.md), non solo "validato".
-        _playerProfile.SaveNickname(Nickname);
     });
 
     [RelayCommand]
@@ -304,13 +307,14 @@ public partial class GameSessionViewModel : ObservableObject
         }
 
         Nickname = esito.Normalized;
+
+        // Stesso motivo di CreateRoomAsync: si salva alla conferma, non
+        // all'esito della rete.
+        _playerProfile.SaveNickname(Nickname);
+
         await EnsureConnectedAsync();
         RoomCode = JoinCode.Trim().ToUpperInvariant();
         await _connection.JoinRoomAsync(_playerId, Nickname, RoomCode);
-
-        // Stesso motivo di CreateRoomAsync: salvato solo dopo un ingresso
-        // riuscito.
-        _playerProfile.SaveNickname(Nickname);
     });
 
     [RelayCommand]
