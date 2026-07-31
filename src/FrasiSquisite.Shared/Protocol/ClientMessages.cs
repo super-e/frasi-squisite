@@ -19,3 +19,12 @@ public sealed record SetSchemaRequest(string RoomCode, string SchemaId);
 public sealed record NewGameRequest(string RoomCode);
 
 public sealed record BackToLobbyRequest(string RoomCode);
+
+/// <summary>
+/// <paramref name="PhraseIndex"/> è l'indice nella lista arrivata con
+/// <c>VoteRequestMessage</c>, non l'indice di riga della classifica: quella
+/// non esiste ancora quando si vota.
+/// </summary>
+public sealed record CastVoteRequest(string RoomCode, int PhraseIndex);
+
+public sealed record CloseVotingRequest(string RoomCode);

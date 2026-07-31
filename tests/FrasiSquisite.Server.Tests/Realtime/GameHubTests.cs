@@ -275,10 +275,11 @@ public sealed class GameHubTests : IAsyncLifetime
 
     /// <summary>
     /// Porta la partita di anna e bruno fino alla GameFinishedMessage:
-    /// avvio, tutti i round scritti, reveal avanzato fino in fondo. Usata
-    /// dai test del Lotto D ("Nuova partita" / "Torna alla lobby"), che
-    /// hanno bisogno di una stanza già in <see cref="RoomPhase.Finished"/>
-    /// prima di poter cominciare.
+    /// avvio, tutti i round scritti, reveal avanzato fino in fondo, voto di
+    /// entrambi (unici umani connessi, quindi bastano loro a chiudere la
+    /// fase). Usata dai test del Lotto D ("Nuova partita" / "Torna alla
+    /// lobby"), che hanno bisogno di una stanza già in
+    /// <see cref="RoomPhase.Finished"/> prima di poter cominciare.
     /// </summary>
     private static async Task<int> GiocaFinoAllaFineAsync(Client anna, Client bruno, string codice)
     {
@@ -294,14 +295,29 @@ public sealed class GameHubTests : IAsyncLifetime
             await bruno.Connection.InvokeAsync("SubmitSlot", new SubmitSlotRequest(codice, $"bruno{round}"));
         }
 
-        // Un AdvanceReveal alla volta finché non arriva la GameFinishedMessage
-        // (spec §2.4: una casella scoperta per avanzamento).
-        while (anna.CountOf<GameFinishedMessage>() == 0)
+        // Un AdvanceReveal alla volta finché non arriva la VoteRequestMessage
+        // (spec §2.4: una casella scoperta per avanzamento). L'ultimo passo di
+        // reveal fa entrare la stanza in Voting nello stesso giro di effetti
+        // in cui manda l'ultima RevealStepMessage, quindi arrivano insieme.
+        while (anna.CountOf<VoteRequestMessage>() == 0)
         {
             var passiPrima = anna.CountOf<RevealStepMessage>();
             await anna.Connection.InvokeAsync("AdvanceReveal", codice);
             await anna.WaitForCount<RevealStepMessage>(passiPrima + 1, TimeSpan.FromSeconds(5));
         }
+
+        await anna.WaitFor<VoteRequestMessage>(TimeSpan.FromSeconds(5));
+
+        // Votano solo gli umani connessi (qui anna e bruno, nessun bot): il
+        // voto del secondo chiude la fase da sé e fa arrivare la
+        // GameFinishedMessage. Quel voto può far comparire il messaggio
+        // mentre la sua stessa InvokeAsync è ancora in volo (il server manda
+        // tutti gli effetti prima che il metodo hub ritorni, stesso dettaglio
+        // già noto per gli altri metodi di questo hub), quindi non si legge
+        // nulla subito dopo l'InvokeAsync: si aspetta la GameFinishedMessage
+        // con l'aiutante apposta, come sotto.
+        await anna.Connection.InvokeAsync("CastVote", new CastVoteRequest(codice, 0));
+        await bruno.Connection.InvokeAsync("CastVote", new CastVoteRequest(codice, 0));
 
         await anna.WaitFor<GameFinishedMessage>(TimeSpan.FromSeconds(5));
 
