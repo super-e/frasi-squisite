@@ -21,6 +21,13 @@ voto è il suo prerequisito.
 - Il **timer** di round e di fase (design generale §13, fase 2). La sua assenza
   è il motivo per cui l'host può forzare la chiusura: senza né timer né pulsante,
   un giocatore che posa il telefono blocca la partita a tempo indefinito.
+- Il **rientro in partita**, anch'esso fase 2. Va detto esplicitamente perché
+  è tentante progettarci sopra: `GameHub.JoinRoom` rifiuta chi arriva a
+  partita iniziata, e `OnPlayerJoined` risponde `GAME_IN_PROGRESS` fuori dalla
+  lobby senza comunque riportare `IsConnected` a vero. **Oggi chi cade non
+  torna**: resta disconnesso, il bot gioca per lui, ed esce dai votanti attesi
+  per sempre. Ogni comportamento "quando rientra…" descriverebbe codice
+  irraggiungibile, e come tale non va né specificato né testato qui.
 - L'**illustrazione** della vincitrice e tutto il resto dell'AI.
 - La **persistenza** dell'esito. La classifica vive quanto la stanza.
 - Il **container Docker** del server, richiesto nella stessa sessione e
@@ -120,8 +127,7 @@ L'insieme dei votanti cambia durante la fase. È lì che stanno i casi veri.
 |---|---|
 | Un giocatore si disconnette mentre si vota | I votanti attesi calano. Se i rimasti avevano già votato, **il voto chiude nell'istante della disconnessione**, non al voto successivo. Va gestito come effetto della disconnessione. |
 | Un giocatore che aveva già votato si disconnette | **Il suo voto resta valido e conta.** La mappa è indicizzata per giocatore, non per connessione: chi ha detto la sua l'ha detta. Il suo nome esce solo dall'insieme di chi si sta ancora aspettando. |
-| Un giocatore rientra durante il voto **senza** aver votato | Torna votante e **riceve l'elenco delle frasi**: senza quel rinvio troverebbe una schermata di voto vuota. Il conteggio atteso risale. |
-| Un giocatore rientra durante il voto **avendo** già votato | Riceve l'avanzamento, non l'elenco: si ritrova in attesa, che è dov'era. Riproporgli le frasi lo inviterebbe a un voto che verrà rifiutato. |
+| Un giocatore rientra durante il voto | **Non può succedere** — vedi §1. Il rientro in partita è fase 2. Nessun comportamento da specificare, nessun test da scrivere. |
 | L'host se ne va durante il voto | L'host passa al più anziano fra i connessi, meccanismo già esistente. Il nuovo host eredita il pulsante di chiusura. |
 | Nessuno vota | Nessuna vincitrice: classifica a punteggio zero. **Stato legale, non eccezione.** Sarà il lotto AI a decidere cosa illustrare quando non c'è vincitrice. |
 | Pareggio | Tutte le frasi a punteggio massimo sono vincitrici ex aequo e compaiono in cima. |
@@ -204,6 +210,15 @@ chiusura (codice stanza).
 Una schermata di voto nuova, la schermata finale che diventa classifica, il
 reveal che smette di disegnare gli autori.
 
+**Il reveal perde un battito, non solo un'etichetta.** Oggi il pulsante ha tre
+stati: "Rivela la prossima parola", poi "Chi l'ha scritta?" — che non chiama il
+server, mostra soltanto gli autori già arrivati col passo che ha completato la
+frase — e infine "Prossima frase". Senza autori nel messaggio, lo stato di mezzo
+non ha più niente da mostrare: **il pulsante torna a due stati** e sparisce la
+nota "Scritta da: A · B · C" sotto la frase. Va tolto anche il campo che teneva
+gli autori in disparte fra un tocco e l'altro, altrimenti resta stato morto che
+il prossimo lettore scambierà per una funzione.
+
 **Vincolo noto, da rispettare fin dalla prima riga.** `GameHost` invia **tutti**
 gli effetti prima che il metodo dell'hub ritorni: quando l'ultimo votante vota,
 il messaggio di chiusura arriva *durante* la sua `await`. Scrivere lo stato
@@ -224,9 +239,8 @@ punteggio, insieme vincitori vuoto quando i voti sono zero.
 
 **Motore:** ingresso in fase, voto valido, voto doppio, indice invalido, voto
 fuori fase, chiusura forzata dall'host, rifiuto a chi host non è. E i casi di
-popolazione mobile: chi esce chiude, il voto di chi esce che resta valido, chi
-rientra senza aver votato che riceve le frasi, chi rientra avendo votato che
-riceve l'avanzamento, zero votanti che chiude all'ingresso.
+popolazione mobile: chi esce chiude, il voto di chi esce che resta valido, zero
+votanti che chiude all'ingresso.
 
 **Protocollo:** contratto e serializzazione dei messaggi nuovi; assenza di
 `Authors` in `RevealStepMessage`.
@@ -234,11 +248,15 @@ riceve l'avanzamento, zero votanti che chiude all'ingresso.
 **Hub:** due client che votano davvero fino alla classifica, e isolamento
 dell'errore — l'`ALREADY_VOTED` di uno non deve raggiungere l'altro.
 
-**Client — e qui va sistemata una cosa a monte.** `FakeGameConnection` oggi non
-sa consegnare un messaggio mentre una chiamata è in volo. È il motivo per cui
-l'ultimo bug di campo era **letteralmente inesprimibile** come test, e il voto ha
-la stessa identica forma. Il fake va esteso in questo lotto, prima dei test di
-voto: senza, scriveremmo test verdi sopra un difetto presente.
+**Client — e qui va esteso uno strumento che esiste già a metà.**
+`FakeGameConnection` ha `MessaggioDuranteInvio`, aggiunto proprio per riprodurre
+il bug del blocco su "in attesa": consegna un messaggio *durante* la chiamata,
+prima che il `Task` ritorni. Ma è agganciato **solo a `SubmitSlotAsync`**.
+
+Il voto ha la stessa identica forma — l'ultimo votante riceve la chiusura mentre
+la sua `await` è ancora in volo — quindi l'aggancio va reso disponibile anche
+sulla chiamata di voto. Senza, il test di quel caso non è esprimibile e
+scriveremmo verde sopra un difetto presente.
 
 ---
 
