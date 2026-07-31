@@ -45,6 +45,60 @@ public class BotTests
         Assert.All(stato.Phrases, f => Assert.True(f.IsComplete));
     }
 
+    /// <summary>
+    /// Lotto E (revisione del lotto D, punto 2): nessun test teneva un bot
+    /// attraverso "Nuova partita" - proprio il punto di cui il brief del
+    /// lotto D si preoccupava di più (il riempimento delle caselle dei bot al
+    /// round 0 dopo un riavvio). Qui, come nel test sopra, solo Anna invia la
+    /// propria casella a ogni round: se il bot non tornasse a riempire la sua
+    /// dopo NewGameRequested, la seconda partita resterebbe bloccata in
+    /// Writing per sempre - non basterebbe quindi controllare che la fase sia
+    /// "cambiata", va dimostrato che arriva fino al reveal, in entrambe le
+    /// partite.
+    /// </summary>
+    [Fact]
+    public void IlBotRiempieLeProprieCaselleAncheInUnaSecondaPartitaDopoNewGameRequested()
+    {
+        const int k = 3;
+        var stato = GameState.NewRoom("ABCD", TestSchemas.WithSlots(k));
+        stato = _motore.Handle(stato, new PlayerJoined(Giocatore(0), "Anna")).State;
+        stato = _motore.Handle(stato, new BotAdded(Bot(0), Giocatore(0))).State;
+
+        stato = _motore.Handle(stato, new GameStartRequested(Giocatore(0))).State;
+
+        for (var round = 0; round < k; round++)
+        {
+            stato = _motore.Handle(stato, new SlotSubmitted(Giocatore(0), $"p1r{round}")).State;
+        }
+
+        // Come nel test sopra: se il bot non avesse riempito la propria
+        // casella a ogni round, la fase sarebbe rimasta Writing per sempre.
+        Assert.Equal(RoomPhase.Reveal, stato.Phase);
+        Assert.All(stato.Phrases, f => Assert.True(f.IsComplete));
+
+        for (var i = 0; i < stato.Phrases.Count * k; i++)
+        {
+            stato = _motore.Handle(stato, new RevealAdvanceRequested(Giocatore(0))).State;
+        }
+
+        Assert.Equal(RoomPhase.Finished, stato.Phase);
+
+        stato = _motore.Handle(stato, new NewGameRequested(Giocatore(0))).State;
+        Assert.Equal(RoomPhase.Writing, stato.Phase);
+
+        for (var round = 0; round < k; round++)
+        {
+            stato = _motore.Handle(stato, new SlotSubmitted(Giocatore(0), $"p2r{round}")).State;
+        }
+
+        // Il punto del test: senza il riempimento del bot al round 0 della
+        // SECONDA partita, questa asserzione fallirebbe con la fase ancora
+        // bloccata in Writing, non solo "un altro valore di fase".
+        Assert.Equal(RoomPhase.Reveal, stato.Phase);
+        Assert.All(stato.Phrases, f => Assert.True(f.IsComplete));
+        Assert.Contains(stato.Phrases, f => f.Slots.Any(s => s!.Text.StartsWith("p2", StringComparison.Ordinal)));
+    }
+
     [Fact]
     public void AggiungereUnBotLoInserisceComeGiocatoreNonConnesso()
     {
