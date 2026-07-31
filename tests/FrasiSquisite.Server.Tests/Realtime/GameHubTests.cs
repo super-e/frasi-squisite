@@ -437,6 +437,38 @@ public sealed class GameHubTests : IAsyncLifetime
         Assert.DoesNotContain(anna.Last<RoomStateMessage>().Players, p => p.IsBot);
     }
 
+    /// <summary>
+    /// I test sui bot dell'hub si fermavano alla lobby (aggiungi, rinomina,
+    /// rimuovi) e quelli del dominio giocavano una partita col bot senza
+    /// passare da SignalR: nessuno copriva la cucitura fra i due, che e'
+    /// esattamente dove il gioco si e' bloccato in mano a un giocatore vero.
+    ///
+    /// Con un bot in stanza la casella del round 0 e' gia' riempita
+    /// all'avvio, quindi l'invio dell'unico umano deve completare il round e
+    /// far arrivare la richiesta del round 1.
+    /// </summary>
+    [Fact]
+    public async Task UnaPartitaConUnBotAvanzaOltreIlPrimoRound()
+    {
+        await using var anna = await ConnettiAsync();
+
+        var codice = await anna.Connection.InvokeAsync<string>(
+            "CreateRoom", new CreateRoomRequest(ProtocolVersion.Current, Guid.NewGuid(), "Anna"));
+        await anna.WaitFor<RoomStateMessage>(TimeSpan.FromSeconds(5));
+
+        await anna.Connection.InvokeAsync("AddBot", new AddBotRequest(codice));
+        await anna.WaitForCount<RoomStateMessage>(2, TimeSpan.FromSeconds(5));
+
+        await anna.Connection.InvokeAsync("StartGame", new StartGameRequest(codice));
+        await anna.WaitFor<SlotRequestMessage>(TimeSpan.FromSeconds(5));
+        Assert.Equal(0, anna.Last<SlotRequestMessage>().Round);
+
+        await anna.Connection.InvokeAsync("SubmitSlot", new SubmitSlotRequest(codice, "Il cadavere"));
+
+        await anna.WaitForCount<SlotRequestMessage>(2, TimeSpan.FromSeconds(5));
+        Assert.Equal(1, anna.Last<SlotRequestMessage>().Round);
+    }
+
     [Fact]
     public async Task UnNonHostCheProvaAdAggiungereUnBotRiceveNotHost()
     {

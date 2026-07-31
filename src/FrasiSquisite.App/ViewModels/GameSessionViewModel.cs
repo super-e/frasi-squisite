@@ -429,9 +429,31 @@ public partial class GameSessionViewModel : ObservableObject
         }
 
         ErrorText = string.Empty;
+
+        // GameHost esegue il motore e attende l'invio di TUTTI gli effetti
+        // prima che il metodo hub ritorni: se il nostro invio chiude il round,
+        // la richiesta di casella successiva (o il reveal) arriva prima che
+        // questo await si sblocchi, e il gestore dei messaggi ha gia' portato
+        // la schermata dove deve stare.
+        //
+        // Succede a ogni round quando in stanza c'e' un bot - il nostro e'
+        // l'unico invio mancante - e comunque all'ultimo invio dell'ultimo
+        // round in qualsiasi partita, perche' li' si passa al reveal.
+        //
+        // Percio' l'attesa si imposta solo se nel frattempo non e' arrivato
+        // nulla: sovrascrivere lo stato deciso dal server lascerebbe il client
+        // fermo per sempre, con il server che aspetta una casella e il
+        // giocatore che guarda una schermata d'attesa che nessun messaggio
+        // sbloccherebbe piu'.
+        var roundInviato = Round;
+
         await _connection.SubmitSlotAsync(RoomCode, esito.Normalized);
         SlotText = string.Empty;
-        Screen = ScreenState.Waiting;
+
+        if (Screen == ScreenState.Writing && Round == roundInviato)
+        {
+            Screen = ScreenState.Waiting;
+        }
     });
 
     /// <summary>

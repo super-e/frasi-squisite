@@ -29,6 +29,22 @@ public sealed class FakeGameConnection : IGameConnection
     /// </summary>
     public Exception? NextFailure { get; set; }
 
+    /// <summary>
+    /// Se impostato, viene emesso <em>durante</em> la prossima
+    /// <see cref="SubmitSlotAsync"/>, prima che il Task ritorni (e si azzera
+    /// da solo).
+    ///
+    /// Non è uno scenario di fantasia: <c>GameHost.DispatchAsync</c> esegue
+    /// il motore e attende l'invio di tutti gli effetti prima che il metodo
+    /// hub ritorni, quindi con un bot in stanza — che rende l'invio dell'unico
+    /// umano capace di chiudere il round — la richiesta di casella del round
+    /// successivo arriva davvero prima che l'<c>await</c> del client si
+    /// sblocchi. Senza questo aggancio la ViewModel non poteva essere provata
+    /// contro quell'ordine, ed è esattamente il buco da cui è passato il bug
+    /// del blocco su "in attesa".
+    /// </summary>
+    public object? MessaggioDuranteInvio { get; set; }
+
     public void Emit(object message) => MessageReceived?.Invoke(message);
 
     public void EmitConnectionInterrupted() => ConnectionInterrupted?.Invoke();
@@ -66,6 +82,13 @@ public sealed class FakeGameConnection : IGameConnection
     {
         LanciaSeImpostato();
         _calls.Add($"SubmitSlot({roomCode},{text})");
+
+        if (MessaggioDuranteInvio is { } messaggio)
+        {
+            MessaggioDuranteInvio = null;
+            MessageReceived?.Invoke(messaggio);
+        }
+
         return Task.CompletedTask;
     }
 

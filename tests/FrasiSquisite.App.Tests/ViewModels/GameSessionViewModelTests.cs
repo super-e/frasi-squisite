@@ -126,6 +126,57 @@ public class GameSessionViewModelTests
         Assert.Equal(ScreenState.Waiting, vm.Screen);
     }
 
+    /// <summary>
+    /// Con un bot in stanza l'invio dell'unico umano chiude il round, e
+    /// GameHost attende l'invio di tutti gli effetti prima che il metodo hub
+    /// ritorni: la richiesta di casella del round successivo arriva quindi
+    /// PRIMA che l'await del client si sblocchi.
+    ///
+    /// Riportarsi in attesa dopo l'await cancellerebbe quello che il server ha
+    /// gia' stabilito, e il blocco sarebbe definitivo: il server aspetta la
+    /// casella del round nuovo, il client mostra l'attesa, e nessun altro
+    /// messaggio arrivera' mai a sbloccarlo. E' il bug visto giocando, che
+    /// nessun test poteva cogliere perche' con soli umani il proprio invio non
+    /// chiude mai il round.
+    /// </summary>
+    [Fact]
+    public async Task UnaRichiestaDiCasellaArrivataDuranteLInvioNonVieneSovrascritta()
+    {
+        var (vm, conn) = Crea();
+        vm.RoomCode = "ABCD";
+        conn.Emit(new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio"));
+        vm.SlotText = "Il cadavere";
+
+        conn.MessaggioDuranteInvio = new SlotRequestMessage(1, 5, "Aggettivo", "un aggettivo", "squisito");
+
+        await vm.SubmitSlotCommand.ExecuteAsync(null);
+
+        Assert.Equal(ScreenState.Writing, vm.Screen);
+        Assert.Equal(2, vm.Round);
+        Assert.Equal("Aggettivo", vm.Ruolo);
+    }
+
+    /// <summary>
+    /// La stessa collisione all'ultimo invio dell'ultimo round, dove il
+    /// server passa al reveal. Qui non serve nessun bot: capita in qualunque
+    /// partita a chi invia per ultimo, che senza questa protezione resterebbe
+    /// in attesa mentre tutti gli altri guardano il reveal.
+    /// </summary>
+    [Fact]
+    public async Task IlRevealArrivatoDuranteLInvioNonVieneSovrascritto()
+    {
+        var (vm, conn) = Crea();
+        vm.RoomCode = "ABCD";
+        conn.Emit(new SlotRequestMessage(4, 5, "Aggettivo", "prompt", "esempio"));
+        vm.SlotText = "nuovo";
+
+        conn.MessaggioDuranteInvio = new RevealStepMessage(0, 2, ["Il cadavere"], false, []);
+
+        await vm.SubmitSlotCommand.ExecuteAsync(null);
+
+        Assert.Equal(ScreenState.Reveal, vm.Screen);
+    }
+
     [Fact]
     public async Task NonSiPuoInviareUnTestoNonValido()
     {
