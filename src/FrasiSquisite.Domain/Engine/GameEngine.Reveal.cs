@@ -1,4 +1,5 @@
 using FrasiSquisite.Domain.Model;
+using FrasiSquisite.Domain.Voting;
 using FrasiSquisite.Shared.Protocol;
 
 namespace FrasiSquisite.Domain.Engine;
@@ -24,17 +25,11 @@ public sealed partial class GameEngine
 
         var testi = frase.Slots.Take(scoperte).Select(s => s!.Text).ToList();
 
-        // Gli autori compaiono solo a frase completa (spec §2.4).
-        var autori = completa
-            ? frase.Slots.Select(s => state.FindPlayer(s!.AuthorId)?.Nickname ?? "?").ToList()
-            : [];
-
         var passo = new RevealStepMessage(
             state.RevealPhraseIndex,
             state.Phrases.Count,
             testi,
-            completa,
-            autori);
+            completa);
 
         if (!completa)
         {
@@ -54,13 +49,34 @@ public sealed partial class GameEngine
 
         var finito = state with { Phase = RoomPhase.Finished };
 
-        var frasiComposte = finito.Phrases
-            .Select(f => finito.Schema.Compose([.. f.Slots.Select(s => s!.Text)]))
-            .ToList();
-
         return new EngineResult(finito, [
             new BroadcastToRoom(passo),
-            new BroadcastToRoom(new GameFinishedMessage(frasiComposte)),
+            new BroadcastToRoom(new GameFinishedMessage(Classifica(finito, new Dictionary<Guid, int>()))),
         ]);
+    }
+
+    /// <summary>Le frasi composte secondo il template dello schema.</summary>
+    private static IReadOnlyList<string> FrasiComposte(GameState state) =>
+        [.. state.Phrases.Select(f => state.Schema.Compose([.. f.Slots.Select(s => s!.Text)]))];
+
+    /// <summary>
+    /// La classifica pronta da mandare. Con voti vuoti — cioè oggi, prima che
+    /// la fase di voto esista — produce tutte le frasi a zero e nessuna
+    /// vincitrice, che è esattamente il significato giusto.
+    /// </summary>
+    private static IReadOnlyList<PhraseResultView> Classifica(
+        GameState state,
+        IReadOnlyDictionary<Guid, int> voti)
+    {
+        var frasi = FrasiComposte(state);
+
+        return [.. VoteTally.From(voti, state.Phrases.Count).Ranking
+            .Select(r => new PhraseResultView(
+                r.PhraseIndex,
+                frasi[r.PhraseIndex],
+                [.. state.Phrases[r.PhraseIndex].Slots
+                    .Select(s => state.FindPlayer(s!.AuthorId)?.Nickname ?? "?")],
+                r.Votes,
+                r.IsWinner))];
     }
 }

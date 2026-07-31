@@ -170,7 +170,7 @@ public class GameSessionViewModelTests
         conn.Emit(new SlotRequestMessage(4, 5, "Aggettivo", "prompt", "esempio"));
         vm.SlotText = "nuovo";
 
-        conn.MessaggioDuranteInvio = new RevealStepMessage(0, 2, ["Il cadavere"], false, []);
+        conn.MessaggioDuranteInvio = new RevealStepMessage(0, 2, ["Il cadavere"], false);
 
         await vm.SubmitSlotCommand.ExecuteAsync(null);
 
@@ -212,7 +212,7 @@ public class GameSessionViewModelTests
             [new PlayerView(Anna, "Anna", true, true, false)],
             "surrealista-classico", 3));
 
-        conn.Emit(new RevealStepMessage(0, 1, ["Il cadavere", "squisito"], false, []));
+        conn.Emit(new RevealStepMessage(0, 1, ["Il cadavere", "squisito"], false));
 
         Assert.Equal(ScreenState.Reveal, vm.Screen);
         Assert.Equal(3, vm.RevealSlots.Count);
@@ -226,71 +226,10 @@ public class GameSessionViewModelTests
     {
         var (vm, conn) = Crea();
 
-        conn.Emit(new RevealStepMessage(1, 3, ["berrà"], false, []));
+        conn.Emit(new RevealStepMessage(1, 3, ["berrà"], false));
 
         Assert.Equal(2, vm.PhraseNumber);
         Assert.Equal(3, vm.TotalPhrases);
-    }
-
-    // Il server manda gli autori insieme alla casella che completa la frase,
-    // ma la ViewModel li trattiene: mostrarli súbito brucerebbe il battito
-    // "Chi l'ha scritta?" voluto dal design (lotto-a-brief.md).
-    [Fact]
-    public void GliAutoriRestanoNascostiFinchéNonSiTocaDiNuovoIlPulsante()
-    {
-        var (vm, conn) = Crea();
-        vm.RoomCode = "ABCD";
-
-        conn.Emit(new RevealStepMessage(0, 2, ["Il cadavere", "squisito"], true, ["Anna", "Bruno"]));
-
-        Assert.Empty(vm.RevealAuthors);
-        Assert.Equal(string.Empty, vm.AuthorsFootnote);
-    }
-
-    // Le tre etichette del pulsante di reveal, nell'ordine in cui il design le
-    // vuole: "Rivela la prossima parola" mentre restano caselle coperte, poi
-    // "Chi l'ha scritta?" alla frase completa, poi "Prossima frase" dopo che
-    // gli autori sono stati mostrati.
-    [Fact]
-    public async Task LEtichettaDelPulsanteDiRevealSeguiILTreStati()
-    {
-        var (vm, conn) = Crea();
-        vm.RoomCode = "ABCD";
-
-        conn.Emit(new RevealStepMessage(0, 2, ["Il cadavere"], false, []));
-        Assert.Equal("Rivela la prossima parola", vm.RevealButtonLabel);
-
-        conn.Emit(new RevealStepMessage(0, 2, ["Il cadavere", "squisito"], true, ["Anna", "Bruno"]));
-        Assert.Equal("Chi l'ha scritta?", vm.RevealButtonLabel);
-        Assert.Empty(vm.RevealAuthors);
-
-        // Stato "Chi l'ha scritta?": tocco locale, nessuna chiamata al server.
-        await vm.AdvanceRevealCommand.ExecuteAsync(null);
-        Assert.Equal("Prossima frase", vm.RevealButtonLabel);
-        Assert.Equal(["Anna", "Bruno"], vm.RevealAuthors);
-        Assert.Equal("Scritta da: Anna · Bruno", vm.AuthorsFootnote);
-        Assert.DoesNotContain(conn.Calls, c => c.StartsWith("AdvanceReveal", StringComparison.Ordinal));
-
-        // Stato "Prossima frase": questo sì chiama il server.
-        await vm.AdvanceRevealCommand.ExecuteAsync(null);
-        Assert.Contains("AdvanceReveal(ABCD)", conn.Calls);
-    }
-
-    // Il passo successivo (nuova frase) deve ripulire gli autori mostrati per
-    // quella precedente: altrimenti resterebbero appesi sotto la frase nuova.
-    [Fact]
-    public async Task UnNuovoPassoDiRevealNascondeGliAutoriDellaFrasePrecedente()
-    {
-        var (vm, conn) = Crea();
-
-        conn.Emit(new RevealStepMessage(0, 2, ["Il cadavere"], true, ["Anna"]));
-        await vm.AdvanceRevealCommand.ExecuteAsync(null);
-        Assert.NotEmpty(vm.RevealAuthors);
-
-        conn.Emit(new RevealStepMessage(1, 2, ["squisito"], false, []));
-
-        Assert.Empty(vm.RevealAuthors);
-        Assert.Equal(string.Empty, vm.AuthorsFootnote);
     }
 
     [Fact]
@@ -298,10 +237,43 @@ public class GameSessionViewModelTests
     {
         var (vm, conn) = Crea();
 
-        conn.Emit(new GameFinishedMessage(["Il cadavere squisito berrà il vino nuovo"]));
+        conn.Emit(new GameFinishedMessage([
+            new PhraseResultView(0, "Il cadavere squisito berrà il vino nuovo", [], 0, false),
+        ]));
 
         Assert.Equal(ScreenState.Finished, vm.Screen);
-        Assert.Single(vm.FinalPhrases);
+        Assert.Single(vm.FinalResults);
+    }
+
+    [Fact]
+    public void IlMessaggioFinalePopolaLaClassifica()
+    {
+        var (vm, conn) = Crea();
+
+        conn.Emit(new GameFinishedMessage([
+            new PhraseResultView(1, "Il notaio divora il tramonto", ["Anna", "Bruno"], 2, true),
+            new PhraseResultView(0, "La zuppa scavalca una scala", ["Bruno", "Anna"], 0, false),
+        ]));
+
+        Assert.Equal(ScreenState.Finished, vm.Screen);
+        Assert.Equal(2, vm.FinalResults.Count);
+        Assert.True(vm.FinalResults[0].IsWinner);
+        Assert.Equal("2 voti", vm.FinalResults[0].VotesLabel);
+        Assert.Equal("Scritta da: Anna · Bruno", vm.FinalResults[0].AuthorsLabel);
+        Assert.False(vm.FinalResults[1].IsWinner);
+        Assert.Equal("0 voti", vm.FinalResults[1].VotesLabel);
+    }
+
+    [Fact]
+    public void ConUnSoloVotoLEtichettaESingolare()
+    {
+        var (vm, conn) = Crea();
+
+        conn.Emit(new GameFinishedMessage([
+            new PhraseResultView(0, "Frase", ["Anna"], 1, true),
+        ]));
+
+        Assert.Equal("1 voto", vm.FinalResults[0].VotesLabel);
     }
 
     [Fact]
@@ -340,13 +312,13 @@ public class GameSessionViewModelTests
         // imposta Screen sullo stesso valore che ha già, quindi il setter
         // generato non invoca OnScreenChanged. La regola di pulizia
         // dell'errore non può quindi dipendere dal cambio di schermata.
-        conn.Emit(new RevealStepMessage(0, 3, ["Il cadavere"], false, []));
+        conn.Emit(new RevealStepMessage(0, 3, ["Il cadavere"], false));
         Assert.Equal(ScreenState.Reveal, vm.Screen);
 
         conn.Emit(new ErrorMessage("TIMEOUT", "Richiesta scaduta, riprova."));
         Assert.False(string.IsNullOrEmpty(vm.ErrorText));
 
-        conn.Emit(new RevealStepMessage(0, 3, ["Il cadavere", "squisito"], false, []));
+        conn.Emit(new RevealStepMessage(0, 3, ["Il cadavere", "squisito"], false));
 
         Assert.Equal(ScreenState.Reveal, vm.Screen);
         Assert.Equal(string.Empty, vm.ErrorText);
@@ -1063,7 +1035,7 @@ public class GameSessionViewModelTests
     {
         var (vm, conn) = Crea();
 
-        conn.Emit(new GameFinishedMessage(["Il cadavere squisito"]));
+        conn.Emit(new GameFinishedMessage([new PhraseResultView(0, "Il cadavere squisito", [], 0, false)]));
         Assert.Equal(ScreenState.Finished, vm.Screen);
 
         // Nessuna RoomStateMessage ancora emessa in questo test: IsHost resta
@@ -1081,7 +1053,7 @@ public class GameSessionViewModelTests
             "ABCD", "Lobby",
             [new PlayerView(Anna, "Anna", true, true, false)],
             "surrealista-classico", 5));
-        conn.Emit(new GameFinishedMessage(["Il cadavere squisito"]));
+        conn.Emit(new GameFinishedMessage([new PhraseResultView(0, "Il cadavere squisito", [], 0, false)]));
 
         Assert.True(vm.IsHost);
         Assert.Equal(ScreenState.Finished, vm.Screen);
@@ -1097,7 +1069,7 @@ public class GameSessionViewModelTests
             "ABCD", "Lobby",
             [new PlayerView(Guid.NewGuid(), "Anna", true, true, false), new PlayerView(Anna, "Bruno", false, true, false)],
             "surrealista-classico", 5));
-        conn.Emit(new GameFinishedMessage(["Il cadavere squisito"]));
+        conn.Emit(new GameFinishedMessage([new PhraseResultView(0, "Il cadavere squisito", [], 0, false)]));
 
         Assert.False(vm.IsHost);
         Assert.Equal(ScreenState.Finished, vm.Screen);
@@ -1128,20 +1100,17 @@ public class GameSessionViewModelTests
         var (vm, conn) = Crea();
         vm.RoomCode = "ABCD";
 
-        conn.Emit(new RevealStepMessage(0, 1, ["Il cadavere"], true, ["Anna"]));
+        conn.Emit(new RevealStepMessage(0, 1, ["Il cadavere"], true));
         await vm.AdvanceRevealCommand.ExecuteAsync(null);
-        conn.Emit(new GameFinishedMessage(["Il cadavere squisito"]));
+        conn.Emit(new GameFinishedMessage([new PhraseResultView(0, "Il cadavere squisito", [], 0, false)]));
 
-        Assert.NotEmpty(vm.FinalPhrases);
+        Assert.NotEmpty(vm.FinalResults);
         Assert.NotEmpty(vm.RevealSlots);
-        Assert.NotEmpty(vm.RevealAuthors);
 
         await vm.BackToLobbyCommand.ExecuteAsync(null);
 
-        Assert.Empty(vm.FinalPhrases);
+        Assert.Empty(vm.FinalResults);
         Assert.Empty(vm.RevealSlots);
-        Assert.Empty(vm.RevealAuthors);
-        Assert.Equal(string.Empty, vm.AuthorsFootnote);
     }
 
     // Stessa pulizia per "Nuova partita": la partita successiva parte dritta
@@ -1153,12 +1122,12 @@ public class GameSessionViewModelTests
         var (vm, conn) = Crea();
         vm.RoomCode = "ABCD";
 
-        conn.Emit(new GameFinishedMessage(["Il cadavere squisito"]));
-        Assert.NotEmpty(vm.FinalPhrases);
+        conn.Emit(new GameFinishedMessage([new PhraseResultView(0, "Il cadavere squisito", [], 0, false)]));
+        Assert.NotEmpty(vm.FinalResults);
 
         await vm.NewGameCommand.ExecuteAsync(null);
 
-        Assert.Empty(vm.FinalPhrases);
+        Assert.Empty(vm.FinalResults);
     }
 
     // ================= Lotto E (revisione del lotto D, punto 1) =================
@@ -1175,13 +1144,13 @@ public class GameSessionViewModelTests
     {
         var (vm, conn) = Crea();
         vm.RoomCode = "ABCD";
-        conn.Emit(new GameFinishedMessage(["Il cadavere squisito"]));
-        Assert.NotEmpty(vm.FinalPhrases);
+        conn.Emit(new GameFinishedMessage([new PhraseResultView(0, "Il cadavere squisito", [], 0, false)]));
+        Assert.NotEmpty(vm.FinalResults);
         conn.NextFailure = new HttpRequestException("host irraggiungibile");
 
         await vm.NewGameCommand.ExecuteAsync(null);
 
-        Assert.NotEmpty(vm.FinalPhrases);
+        Assert.NotEmpty(vm.FinalResults);
         Assert.False(string.IsNullOrEmpty(vm.ErrorText));
     }
 
@@ -1190,13 +1159,13 @@ public class GameSessionViewModelTests
     {
         var (vm, conn) = Crea();
         vm.RoomCode = "ABCD";
-        conn.Emit(new GameFinishedMessage(["Il cadavere squisito"]));
-        Assert.NotEmpty(vm.FinalPhrases);
+        conn.Emit(new GameFinishedMessage([new PhraseResultView(0, "Il cadavere squisito", [], 0, false)]));
+        Assert.NotEmpty(vm.FinalResults);
         conn.NextFailure = new HttpRequestException("host irraggiungibile");
 
         await vm.BackToLobbyCommand.ExecuteAsync(null);
 
-        Assert.NotEmpty(vm.FinalPhrases);
+        Assert.NotEmpty(vm.FinalResults);
         Assert.False(string.IsNullOrEmpty(vm.ErrorText));
     }
 

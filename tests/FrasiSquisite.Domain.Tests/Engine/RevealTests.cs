@@ -53,8 +53,14 @@ public class RevealTests
         Assert.False(passo.PhraseComplete);
     }
 
+    /// <summary>
+    /// Il voto è cieco (spec §3): durante il reveal il messaggio non porta
+    /// affatto gli autori. Non è un campo vuoto da riempire più avanti — il
+    /// campo non esiste, e questo test lo verifica dal lato osservabile:
+    /// l'unica cosa che cambia a frase completa è PhraseComplete.
+    /// </summary>
     [Fact]
-    public void GliAutoriRestanoNascostiFinoAFraseCompleta()
+    public void IlPassoDiRevealNonPortaMaiGliAutori()
     {
         var stato = PartitaConclusa();
 
@@ -64,8 +70,6 @@ public class RevealTests
             var passo = Assert.Single(parziale.Broadcasts<RevealStepMessage>());
 
             Assert.False(passo.PhraseComplete);
-            Assert.Empty(passo.Authors);
-
             stato = parziale.State;
         }
 
@@ -73,7 +77,6 @@ public class RevealTests
         var completo = Assert.Single(ultimo.Broadcasts<RevealStepMessage>());
 
         Assert.True(completo.PhraseComplete);
-        Assert.Equal(K, completo.Authors.Count);
         Assert.Equal(K, completo.RevealedSlots.Count);
     }
 
@@ -121,7 +124,29 @@ public class RevealTests
         Assert.Equal(RoomPhase.Finished, stato.Phase);
 
         var finale = Assert.Single(risultato.Broadcasts<GameFinishedMessage>());
-        Assert.Equal(N, finale.Phrases.Count);
-        Assert.All(finale.Phrases, f => Assert.False(string.IsNullOrWhiteSpace(f)));
+        Assert.Equal(N, finale.Results.Count);
+        Assert.All(finale.Results, r => Assert.False(string.IsNullOrWhiteSpace(r.Text)));
+    }
+
+    /// <summary>
+    /// Gli autori arrivano tutti insieme alla fine, ed è l'unico posto in cui
+    /// arrivano: è ciò che rende cieco il voto che si inserirà qui in mezzo.
+    /// </summary>
+    [Fact]
+    public void GliAutoriArrivanoSoloConIlMessaggioFinale()
+    {
+        var stato = PartitaConclusa();
+
+        EngineResult risultato = null!;
+        for (var i = 0; i < N * K; i++)
+        {
+            risultato = _motore.Handle(stato, new RevealAdvanceRequested(Giocatore(0)));
+            stato = risultato.State;
+        }
+
+        var finale = Assert.Single(risultato.Broadcasts<GameFinishedMessage>());
+
+        Assert.All(finale.Results, r => Assert.Equal(K, r.Authors.Count));
+        Assert.All(finale.Results, r => Assert.All(r.Authors, a => Assert.StartsWith("G", a, StringComparison.Ordinal)));
     }
 }

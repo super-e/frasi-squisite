@@ -371,9 +371,6 @@
                     </BindableLayout.ItemTemplate>
                 </FlexLayout>
 
-                <Label Text="{Binding AuthorsFootnote}" Style="{StaticResource FootnoteLabel}"
-                       IsVisible="{Binding AuthorsFootnote, Converter={StaticResource NotEmpty}}" />
-
                 <Button Text="{Binding RevealButtonLabel}" Style="{StaticResource PrimaryButton}"
                         Command="{Binding AdvanceRevealCommand}" IsVisible="{Binding IsHost}" />
 
@@ -384,11 +381,16 @@
 
                 <Label Text="Ecco cosa è venuto fuori" Style="{StaticResource EyebrowLabel}" HorizontalOptions="Center" />
 
-                <CollectionView ItemsSource="{Binding FinalPhrases}">
+                <CollectionView ItemsSource="{Binding FinalResults}">
                     <CollectionView.ItemTemplate>
-                        <DataTemplate x:DataType="sys:String">
-                            <Border Style="{StaticResource Card}" Margin="0,8">
-                                <Label Text="{Binding .}" Style="{StaticResource H1WinnerLabel}" />
+                        <DataTemplate x:DataType="vm:PhraseResultRowView">
+                            <Border Margin="0,6" Padding="14" Style="{StaticResource Card}">
+                                <VerticalStackLayout Spacing="6">
+                                    <Label Text="&#127942;" FontSize="20" IsVisible="{Binding IsWinner}" />
+                                    <Label Text="{Binding Text}" Style="{StaticResource BodyLabel}" />
+                                    <Label Text="{Binding VotesLabel}" Style="{StaticResource FootnoteLabel}" />
+                                    <Label Text="{Binding AuthorsLabel}" Style="{StaticResource FootnoteLabel}" />
+                                </VerticalStackLayout>
                             </Border>
                         </DataTemplate>
                     </CollectionView.ItemTemplate>

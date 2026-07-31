@@ -180,7 +180,7 @@ public sealed partial class GameEngine
             return new EngineResult(reveal, [
                 new BroadcastToRoom(RoomState(reveal)),
                 new BroadcastToRoom(new RoundProgressMessage(state.Round, state.Players.Count, state.Players.Count)),
-                new BroadcastToRoom(new RevealStepMessage(0, reveal.Phrases.Count, [], false, [])),
+                new BroadcastToRoom(new RevealStepMessage(0, reveal.Phrases.Count, [], false)),
             ]);
         }
 

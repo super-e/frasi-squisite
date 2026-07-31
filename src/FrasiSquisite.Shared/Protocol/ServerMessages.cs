@@ -47,18 +47,32 @@ public sealed record SlotRequestMessage(
 public sealed record RoundProgressMessage(int Round, int Submitted, int Total);
 
 /// <summary>
-/// <paramref name="Authors"/> resta vuoto finché <paramref name="PhraseComplete"/>
-/// è false: sapere chi scrive la casella successiva ne anticiperebbe il
-/// contenuto (spec §2.4).
+/// Il passo di scoprimento non porta gli autori: il voto che segue è cieco
+/// (spec §3). Il campo non è vuoto — non esiste, così come
+/// <see cref="SlotRequestMessage"/> non ha un campo per il testo già scritto.
+/// Una fuga durante il reveal non è una regressione possibile.
 /// </summary>
 public sealed record RevealStepMessage(
     int PhraseIndex,
     int TotalPhrases,
     IReadOnlyList<string> RevealedSlots,
-    bool PhraseComplete,
-    IReadOnlyList<string> Authors);
+    bool PhraseComplete);
 
-public sealed record GameFinishedMessage(IReadOnlyList<string> Phrases);
+/// <summary>
+/// Una riga della classifica finale, già al posto giusto: il client disegna e
+/// non calcola, come per <see cref="SchemaView"/> e <see cref="PlayerView"/>.
+/// <paramref name="IsWinner"/> è falso su tutte le righe quando nessuno ha
+/// votato — "nessuna vincitrice" e "tutte a pari merito" sono cose diverse.
+/// </summary>
+public sealed record PhraseResultView(
+    int PhraseIndex,
+    string Text,
+    IReadOnlyList<string> Authors,
+    int Votes,
+    bool IsWinner);
+
+/// <summary>Ordinate: punteggio decrescente, a parità indice crescente.</summary>
+public sealed record GameFinishedMessage(IReadOnlyList<PhraseResultView> Results);
 
 public sealed record ErrorMessage(string Code, string Message);
 

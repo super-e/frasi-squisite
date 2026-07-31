@@ -6,38 +6,45 @@ namespace FrasiSquisite.Shared.Tests.Protocol;
 
 public class ProtocolContractTests
 {
-    // Il Lotto D aggiunge NewGameRequest/BackToLobbyRequest: un client v3
-    // resterebbe bloccato per sempre nella schermata finale (lotto-d-brief.md,
-    // il difetto che questo lotto corregge), quindi anche qui il rifiuto
-    // esplicito ("aggiorna l'app") è il comportamento giusto, non un
-    // effetto collaterale da tollerare.
+    // Il voto cieco (Task 3) porta il protocollo a v5: RevealStepMessage perde
+    // Authors e GameFinishedMessage guadagna la classifica. Un client v4
+    // resterebbe bloccato a mostrare autori che il server non manda più,
+    // quindi anche qui il rifiuto esplicito ("aggiorna l'app") è il
+    // comportamento giusto, non un effetto collaterale da tollerare.
     [Fact]
-    public void LaVersioneDiProtocolloDelLottoDE4()
+    public void LaVersioneDiProtocolloDelVotoCiecoE5()
     {
-        Assert.Equal(4, ProtocolVersion.Current);
+        Assert.Equal(5, ProtocolVersion.Current);
     }
 
     [Fact]
     public void UnClientDellaVersionePrecedenteNonECompatibile()
     {
+        Assert.False(ProtocolVersion.IsCompatible(4));
+    }
+
+    // Un client v3 è incompatibile tanto quanto uno v4: il caso non va perso
+    // quando la versione corrente avanza, altrimenti una regressione che
+    // accettasse "solo" v3 passerebbe inosservata.
+    [Fact]
+    public void UnClientDiDueVersioniPrimaNonECompatibile()
+    {
         Assert.False(ProtocolVersion.IsCompatible(3));
     }
 
-    // Un client v2 (del lotto precedente) è incompatibile tanto quanto uno
-    // v3: il caso non va perso quando la versione corrente avanza, altrimenti
-    // una regressione che accettasse "solo" v2 passerebbe inosservata.
+    // Stessa cautela per v2: la catena di incompatibilità pregresse resta
+    // tutta coperta man mano che la versione corrente avanza (spec del
+    // progetto: "i test che asseriscono ProtocolVersion vanno aggiornati...
+    // tenendo anche i casi vecchi").
     [Fact]
-    public void UnClientDiDueVersioniPrimaNonECompatibile()
+    public void UnClientDiTreVersioniPrimaNonECompatibile()
     {
         Assert.False(ProtocolVersion.IsCompatible(2));
     }
 
-    // Stessa cautela per v1 (prima ancora del lotto C): la catena di
-    // incompatibilità pregresse resta tutta coperta man mano che la versione
-    // corrente avanza (spec del progetto: "i test che asseriscono
-    // ProtocolVersion vanno aggiornati... tenendo anche i casi vecchi").
+    // E per v1, la prima versione mai esistita.
     [Fact]
-    public void UnClientDiTreVersioniPrimaNonECompatibile()
+    public void UnClientDiQuattroVersioniPrimaNonECompatibile()
     {
         Assert.False(ProtocolVersion.IsCompatible(1));
     }
@@ -117,8 +124,7 @@ public class ProtocolContractTests
             PhraseIndex: 0,
             TotalPhrases: 3,
             RevealedSlots: ["Il cadavere", "squisito"],
-            PhraseComplete: false,
-            Authors: []);
+            PhraseComplete: false);
 
         var json = JsonSerializer.Serialize(originale, ProtocolJson.Options);
         var ricostruito = JsonSerializer.Deserialize<RevealStepMessage>(json, ProtocolJson.Options);
@@ -128,6 +134,50 @@ public class ProtocolContractTests
         Assert.Equal(originale.TotalPhrases, ricostruito.TotalPhrases);
         Assert.Equal(originale.RevealedSlots, ricostruito.RevealedSlots);
         Assert.Equal(originale.PhraseComplete, ricostruito.PhraseComplete);
-        Assert.Equal(originale.Authors, ricostruito.Authors);
+    }
+
+    /// <summary>
+    /// Il tipo non deve avere un campo per gli autori: è così che la
+    /// segretezza è garantita dal tipo e non dalla disciplina (spec §3).
+    /// Una regressione qui riaprirebbe la fuga senza che nessun altro test
+    /// se ne accorga, perché il valore sarebbe comunque vuoto nei casi provati.
+    /// </summary>
+    [Fact]
+    public void IlPassoDiRevealNonHaUnCampoAutori()
+    {
+        Assert.Null(typeof(RevealStepMessage).GetProperty("Authors"));
+    }
+
+    // Stesso motivo di RoundtripDiRoomState: PhraseResultView contiene una
+    // lista (Authors), quindi l'uguaglianza di record confronta quella lista
+    // per riferimento (anzi qui anche per tipo concreto: il literal produce
+    // un array a sola lettura del compilatore, la deserializzazione una
+    // List<string>) e fallirebbe anche a contenuto identico. Il roundtrip si
+    // verifica quindi campo per campo.
+    [Fact]
+    public void RoundtripDelMessaggioFinale()
+    {
+        var originale = new GameFinishedMessage([
+            new PhraseResultView(1, "Il notaio divora il tramonto", ["Anna", "Bruno"], 2, true),
+            new PhraseResultView(0, "La zuppa scavalca una scala", ["Bruno", "Anna"], 0, false),
+        ]);
+
+        var json = JsonSerializer.Serialize(originale, ProtocolJson.Options);
+        var ricostruito = JsonSerializer.Deserialize<GameFinishedMessage>(json, ProtocolJson.Options);
+
+        Assert.NotNull(ricostruito);
+        Assert.Equal(2, ricostruito.Results.Count);
+
+        for (var i = 0; i < originale.Results.Count; i++)
+        {
+            var atteso = originale.Results[i];
+            var effettivo = ricostruito.Results[i];
+
+            Assert.Equal(atteso.PhraseIndex, effettivo.PhraseIndex);
+            Assert.Equal(atteso.Text, effettivo.Text);
+            Assert.Equal(atteso.Authors, effettivo.Authors);
+            Assert.Equal(atteso.Votes, effettivo.Votes);
+            Assert.Equal(atteso.IsWinner, effettivo.IsWinner);
+        }
     }
 }
