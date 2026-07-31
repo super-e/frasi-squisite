@@ -77,6 +77,13 @@ Questo sposta dopo il voto il momento più divertente del gioco — "sei stato t
 scrivere *questo*?". È una scelta consapevole: in cambio si vota sui testi e non
 sulle simpatie.
 
+**E costa meno di quanto sembri.** La frase *i* prende la casella *r* dal
+giocatore `(i − r) mod N`: quando le caselle sono almeno quanti i giocatori — lo
+schema di default ne ha otto — **ogni frase contiene il contributo di tutti**.
+Sotto ogni frase comparirebbe lo stesso insieme di nomi, cambiando solo
+l'abbinamento fra nome e casella. Come informazione per scegliere vale zero, e
+occupa la schermata più affollata dell'app.
+
 ---
 
 ## 4. Flusso
