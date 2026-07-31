@@ -13,7 +13,7 @@ public class GameSessionViewModelTests
     private static (GameSessionViewModel Vm, FakeGameConnection Conn) Crea()
     {
         var connessione = new FakeGameConnection();
-        var vm = new GameSessionViewModel(connessione, Anna, new FakeThemeService()) { ServerUrl = "http://test" };
+        var vm = new GameSessionViewModel(connessione, Anna, new FakeThemeService(), new FakePlayerProfile()) { ServerUrl = "http://test" };
         return (vm, connessione);
     }
 
@@ -21,8 +21,16 @@ public class GameSessionViewModelTests
     {
         var connessione = new FakeGameConnection();
         var tema = new FakeThemeService();
-        var vm = new GameSessionViewModel(connessione, Anna, tema) { ServerUrl = "http://test" };
+        var vm = new GameSessionViewModel(connessione, Anna, tema, new FakePlayerProfile()) { ServerUrl = "http://test" };
         return (vm, connessione, tema);
+    }
+
+    private static (GameSessionViewModel Vm, FakeGameConnection Conn, FakePlayerProfile Profilo) CreaConProfilo(string nicknameSalvato = "")
+    {
+        var connessione = new FakeGameConnection();
+        var profilo = new FakePlayerProfile { Nickname = nicknameSalvato };
+        var vm = new GameSessionViewModel(connessione, Anna, new FakeThemeService(), profilo) { ServerUrl = "http://test" };
+        return (vm, connessione, profilo);
     }
 
     [Fact]
@@ -1152,5 +1160,77 @@ public class GameSessionViewModelTests
 
         Assert.Equal("Bruno Verdi", vm.Nickname);
         Assert.Contains("JoinRoom(Bruno Verdi,ABCD)", conn.Calls);
+    }
+
+    // ================= Lotto E, punto 3: il nickname si ricorda =================
+
+    // Stesso schema di IThemeService: all'avvio la ViewModel legge subito il
+    // valore persistito, senza aspettare un comando.
+    [Fact]
+    public void AllAvvioLaViewModelSiInizializzaColNicknameSalvato()
+    {
+        var (vm, _, _) = CreaConProfilo("Zia Norma");
+
+        Assert.Equal("Zia Norma", vm.Nickname);
+    }
+
+    [Fact]
+    public void SenzaUnNicknameSalvatoLaViewModelPartePartitaConNicknameVuoto()
+    {
+        var (vm, _) = Crea();
+
+        Assert.Equal(string.Empty, vm.Nickname);
+    }
+
+    // Salvato solo dopo un uso riuscito (creazione stanza), e normalizzato -
+    // non il testo grezzo scritto dall'utente.
+    [Fact]
+    public async Task CreareUnaStanzaSalvaIlNicknameNormalizzatoNelProfilo()
+    {
+        var (vm, _, profilo) = CreaConProfilo();
+        vm.Nickname = "  Anna   Banana  ";
+
+        await vm.CreateRoomCommand.ExecuteAsync(null);
+
+        Assert.Equal("Anna Banana", profilo.Nickname);
+    }
+
+    [Fact]
+    public async Task EntrareInUnaStanzaSalvaIlNicknameNormalizzatoNelProfilo()
+    {
+        var (vm, _, profilo) = CreaConProfilo();
+        vm.Nickname = "  Bruno   Verdi  ";
+        vm.JoinCode = "ABCD";
+
+        await vm.JoinRoomCommand.ExecuteAsync(null);
+
+        Assert.Equal("Bruno Verdi", profilo.Nickname);
+    }
+
+    [Fact]
+    public async Task UnNicknameNonValidoNonVieneSalvatoNelProfilo()
+    {
+        var (vm, _, profilo) = CreaConProfilo();
+        vm.Nickname = "   ";
+
+        await vm.CreateRoomCommand.ExecuteAsync(null);
+
+        Assert.Equal(string.Empty, profilo.Nickname);
+        Assert.Empty(profilo.Salvati);
+    }
+
+    // Simmetrico al punto 1 della revisione (guasto di trasporto): un
+    // nickname valido non va salvato se la stanza non è stata effettivamente
+    // creata - "usato con successo", non solo "validato".
+    [Fact]
+    public async Task UnGuastoDiTrasportoNellaCreazioneDellaStanzaNonSalvaIlNickname()
+    {
+        var (vm, conn, profilo) = CreaConProfilo();
+        conn.NextFailure = new HttpRequestException("host irraggiungibile");
+        vm.Nickname = "Anna";
+
+        await vm.CreateRoomCommand.ExecuteAsync(null);
+
+        Assert.Empty(profilo.Salvati);
     }
 }

@@ -36,10 +36,12 @@ public static class MauiProgram
         builder.Services.AddSingleton<IGameConnection, SignalRGameConnection>();
         builder.Services.AddSingleton<IThemeStore, PreferencesThemeStore>();
         builder.Services.AddSingleton<IThemeService, ThemeService>();
+        builder.Services.AddSingleton<IPlayerProfile, PreferencesPlayerProfile>();
         builder.Services.AddSingleton(sp => new GameSessionViewModel(
             sp.GetRequiredService<IGameConnection>(),
             PlayerIdentity.Current(),
-            sp.GetRequiredService<IThemeService>()));
+            sp.GetRequiredService<IThemeService>(),
+            sp.GetRequiredService<IPlayerProfile>()));
         builder.Services.AddSingleton<GamePage>();
 
         return builder.Build();

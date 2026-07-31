@@ -39,6 +39,7 @@ public partial class GameSessionViewModel : ObservableObject
     private readonly IGameConnection _connection;
     private readonly Guid _playerId;
     private readonly IThemeService _themeService;
+    private readonly IPlayerProfile _playerProfile;
 
     /// <summary>
     /// Autori della frase completata dall'ultimo passo di reveal, tenuti in
@@ -52,11 +53,12 @@ public partial class GameSessionViewModel : ObservableObject
     private bool _fraseCompleta;
     private bool _autoriMostratiPerQuestoPasso;
 
-    public GameSessionViewModel(IGameConnection connection, Guid playerId, IThemeService themeService)
+    public GameSessionViewModel(IGameConnection connection, Guid playerId, IThemeService themeService, IPlayerProfile playerProfile)
     {
         _connection = connection;
         _playerId = playerId;
         _themeService = themeService;
+        _playerProfile = playerProfile;
 
         _selectedTheme = themeService.Current;
         // Il tema può cambiare solo da Impostazioni, che passa sempre da
@@ -64,6 +66,12 @@ public partial class GameSessionViewModel : ObservableObject
         // SelectedTheme sincronizzato con la fonte di verità (IThemeService)
         // invece di duplicarne lo stato.
         _themeService.ThemeChanged += tema => SelectedTheme = tema;
+
+        // Stesso schema del tema: il nickname salvato (lotto-e-brief.md) va
+        // letto subito, non solo quando l'utente tocca qualcosa. Se non c'è
+        // nulla di salvato, IPlayerProfile.Nickname è string.Empty - lo
+        // stesso valore di default del campo, quindi resta vuoto come oggi.
+        _nickname = playerProfile.Nickname;
 
         // Sottoscrizione nel costruttore: la ViewModel deve reagire ai messaggi
         // fin dal primo istante, anche prima che l'utente tocchi qualcosa.
@@ -275,6 +283,12 @@ public partial class GameSessionViewModel : ObservableObject
         Nickname = esito.Normalized;
         await EnsureConnectedAsync();
         RoomCode = await _connection.CreateRoomAsync(_playerId, Nickname);
+
+        // Dopo l'await, non prima: se la creazione fallisse (guasto di
+        // trasporto o HubException), EseguiComandoAsync intercetta
+        // l'eccezione e questa riga non verrebbe raggiunta - "usato con
+        // successo" (lotto-e-brief.md), non solo "validato".
+        _playerProfile.SaveNickname(Nickname);
     });
 
     [RelayCommand]
@@ -293,6 +307,10 @@ public partial class GameSessionViewModel : ObservableObject
         await EnsureConnectedAsync();
         RoomCode = JoinCode.Trim().ToUpperInvariant();
         await _connection.JoinRoomAsync(_playerId, Nickname, RoomCode);
+
+        // Stesso motivo di CreateRoomAsync: salvato solo dopo un ingresso
+        // riuscito.
+        _playerProfile.SaveNickname(Nickname);
     });
 
     [RelayCommand]
