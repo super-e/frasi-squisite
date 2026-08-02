@@ -44,13 +44,21 @@ dotnet test tests/FrasiSquisite.Domain.Tests
 
 Il design completo — regole, protocollo, scelte architetturali e loro motivo —
 sta in [docs/superpowers/specs/2026-07-29-frasi-squisite-design.md](docs/superpowers/specs/2026-07-29-frasi-squisite-design.md).
+La fase di voto ha una sua spec a parte:
+[docs/superpowers/specs/2026-07-31-fase-voto-design.md](docs/superpowers/specs/2026-07-31-fase-voto-design.md).
 
 ## Stato
 
-Fase 1 completata: partita giocabile dalla lobby al reveal, con più dispositivi
-Android collegati a un server locale. Ci sono i bot, sei schemi
-grammaticali fra cui scegliere e due temi. Senza timer, voto, persistenza né
-AI — arrivano nelle fasi successive (vedi spec §13).
+Partita giocabile dalla lobby alla classifica, con più dispositivi Android
+collegati a un server locale. Ci sono i bot, sei schemi grammaticali fra cui
+scegliere, due temi, e un voto finale.
+
+Il voto è **cieco**: durante il reveal non si vede chi ha scritto cosa, e i nomi
+compaiono solo con la classifica. Un voto a testa, e votano soltanto gli umani
+connessi — i bot non votano, il vincitore lo decidono le persone.
+
+Senza timer, riconnessione a partita iniziata, persistenza né AI: arrivano nelle
+fasi successive (vedi spec §13).
 
 ## Licenza
 
