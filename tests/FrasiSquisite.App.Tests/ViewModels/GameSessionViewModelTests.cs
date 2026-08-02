@@ -1150,15 +1150,26 @@ public class GameSessionViewModelTests
 
         conn.Emit(new RevealStepMessage(0, 1, ["Il cadavere"], true));
         await vm.AdvanceRevealCommand.ExecuteAsync(null);
+        conn.Emit(new VoteRequestMessage(["Prima", "Seconda"]));
+        await vm.CastVoteCommand.ExecuteAsync(vm.VoteOptions[0]);
+        conn.Emit(new VoteProgressMessage(1, 3));
         conn.Emit(new GameFinishedMessage([new PhraseResultView(0, "Il cadavere squisito", [], 0, false)]));
 
         Assert.NotEmpty(vm.FinalResults);
         Assert.NotEmpty(vm.RevealSlots);
+        Assert.NotEmpty(vm.VoteOptions);
+        Assert.True(vm.HasVoted);
+        Assert.Equal(1, vm.VotedCount);
+        Assert.Equal(3, vm.VotersExpected);
 
         await vm.BackToLobbyCommand.ExecuteAsync(null);
 
         Assert.Empty(vm.FinalResults);
         Assert.Empty(vm.RevealSlots);
+        Assert.Empty(vm.VoteOptions);
+        Assert.False(vm.HasVoted);
+        Assert.Equal(0, vm.VotedCount);
+        Assert.Equal(0, vm.VotersExpected);
     }
 
     // Stessa pulizia per "Nuova partita": la partita successiva parte dritta
@@ -1170,12 +1181,24 @@ public class GameSessionViewModelTests
         var (vm, conn) = Crea();
         vm.RoomCode = "ABCD";
 
+        conn.Emit(new VoteRequestMessage(["Prima", "Seconda"]));
+        await vm.CastVoteCommand.ExecuteAsync(vm.VoteOptions[0]);
+        conn.Emit(new VoteProgressMessage(1, 3));
         conn.Emit(new GameFinishedMessage([new PhraseResultView(0, "Il cadavere squisito", [], 0, false)]));
+
         Assert.NotEmpty(vm.FinalResults);
+        Assert.NotEmpty(vm.VoteOptions);
+        Assert.True(vm.HasVoted);
+        Assert.Equal(1, vm.VotedCount);
+        Assert.Equal(3, vm.VotersExpected);
 
         await vm.NewGameCommand.ExecuteAsync(null);
 
         Assert.Empty(vm.FinalResults);
+        Assert.Empty(vm.VoteOptions);
+        Assert.False(vm.HasVoted);
+        Assert.Equal(0, vm.VotedCount);
+        Assert.Equal(0, vm.VotersExpected);
     }
 
     // ================= Lotto E (revisione del lotto D, punto 1) =================

@@ -87,9 +87,20 @@ public sealed partial class GameEngine
         // Chi se ne va esce dai votanti attesi: se era l'ultimo che mancava,
         // il voto va chiuso adesso. Rimandarlo al prossimo voto significa non
         // chiuderlo mai, perché non ne arriverà nessuno (spec §5).
-        if (aggiornato.Phase == RoomPhase.Voting && TuttiHannoVotato(aggiornato))
+        if (aggiornato.Phase == RoomPhase.Voting)
         {
-            return ChiudiVoto(aggiornato, effetti);
+            if (TuttiHannoVotato(aggiornato))
+            {
+                return ChiudiVoto(aggiornato, effetti);
+            }
+
+            // Chi resta atteso è diminuito di uno: senza questo messaggio il
+            // conteggio "N di M" mostrato dal client resterebbe quello di
+            // prima, perché durante il voto il client ignora deliberatamente
+            // l'aggiornamento di stato della stanza (per non rimostrare in
+            // lista chi ha già votato).
+            var (votanti, attesi) = Avanzamento(aggiornato);
+            effetti.Add(new BroadcastToRoom(new VoteProgressMessage(votanti, attesi)));
         }
 
         return new EngineResult(aggiornato, effetti);

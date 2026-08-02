@@ -410,15 +410,26 @@ public class VotoTests
         Assert.Single(risultato.Broadcasts<GameFinishedMessage>());
     }
 
+    /// <summary>
+    /// Parte da un voto parziale apposta: con zero voti "1 attesi in meno"
+    /// e "0 attesi in meno" sarebbero indistinguibili dal valore iniziale, e
+    /// il test non morderebbe se il motore dimenticasse di ritrasmettere
+    /// l'avanzamento.
+    /// </summary>
     [Fact]
-    public void SeSeNeVaUnoMaNonLUltimoIlVotoRestaAperto()
+    public void SeSeNeVaUnoMaNonLUltimoIlVotoRestaApertoEIlNumeroDegliAttesiSiAggiorna()
     {
         var stato = AlVoto();
+        stato = _motore.Handle(stato, new VoteCast(Giocatore(0), 1)).State;
 
         var risultato = _motore.Handle(stato, new PlayerLeft(Giocatore(2)));
 
         Assert.Equal(RoomPhase.Voting, risultato.State.Phase);
         Assert.Empty(risultato.Broadcasts<GameFinishedMessage>());
+
+        var avanzamento = Assert.Single(risultato.Broadcasts<VoteProgressMessage>());
+        Assert.Equal(1, avanzamento.Voted);
+        Assert.Equal(2, avanzamento.Total);
     }
 
     /// <summary>

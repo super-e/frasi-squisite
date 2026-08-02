@@ -9,11 +9,7 @@ namespace FrasiSquisite.App.ViewModels;
 /// </summary>
 public sealed class PhraseResultRowView(PhraseResultView risultato)
 {
-    public int PhraseIndex { get; } = risultato.PhraseIndex;
-
     public string Text { get; } = risultato.Text;
-
-    public int Votes { get; } = risultato.Votes;
 
     public bool IsWinner { get; } = risultato.IsWinner;
 
