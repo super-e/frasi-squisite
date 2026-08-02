@@ -45,6 +45,16 @@ public sealed class FakeGameConnection : IGameConnection
     /// </summary>
     public object? MessaggioDuranteInvio { get; set; }
 
+    /// <summary>
+    /// Gemello di <see cref="MessaggioDuranteInvio"/> per la chiamata di voto.
+    /// Stessa ragione: <c>GameHost.DispatchAsync</c> attende l'invio di tutti
+    /// gli effetti prima che il metodo hub ritorni, quindi il voto che chiude
+    /// la fase fa arrivare la classifica <em>prima</em> che l'await del client
+    /// si sblocchi. Due proprietà distinte invece di una condivisa: un test
+    /// che arma il voto non deve far scattare nulla su un invio di casella.
+    /// </summary>
+    public object? MessaggioDuranteVoto { get; set; }
+
     public void Emit(object message) => MessageReceived?.Invoke(message);
 
     public void EmitConnectionInterrupted() => ConnectionInterrupted?.Invoke();
@@ -96,6 +106,27 @@ public sealed class FakeGameConnection : IGameConnection
     {
         LanciaSeImpostato();
         _calls.Add($"AdvanceReveal({roomCode})");
+        return Task.CompletedTask;
+    }
+
+    public Task CastVoteAsync(string roomCode, int phraseIndex)
+    {
+        LanciaSeImpostato();
+        _calls.Add($"CastVote({roomCode},{phraseIndex})");
+
+        if (MessaggioDuranteVoto is { } messaggio)
+        {
+            MessaggioDuranteVoto = null;
+            MessageReceived?.Invoke(messaggio);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task CloseVotingAsync(string roomCode)
+    {
+        LanciaSeImpostato();
+        _calls.Add($"CloseVoting({roomCode})");
         return Task.CompletedTask;
     }
 

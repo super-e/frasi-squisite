@@ -16,6 +16,7 @@ public enum ScreenState
     Writing,
     Waiting,
     Reveal,
+    Voting,
     Finished,
 }
 
@@ -41,17 +42,7 @@ public partial class GameSessionViewModel : ObservableObject
     private readonly IThemeService _themeService;
     private readonly IPlayerProfile _playerProfile;
 
-    /// <summary>
-    /// Autori della frase completata dall'ultimo passo di reveal, tenuti in
-    /// disparte finché l'host non tocca di nuovo (battito "Chi l'ha scritta?"
-    /// separato, vedi <see cref="AdvanceRevealAsync"/>). Il server li manda già
-    /// insieme alla casella che completa la frase: nessun secondo giro dal
-    /// server serve per mostrarli, quindi non è un [ObservableProperty].
-    /// </summary>
-    private IReadOnlyList<string> _autoriInAttesa = [];
-
     private bool _fraseCompleta;
-    private bool _autoriMostratiPerQuestoPasso;
 
     public GameSessionViewModel(IGameConnection connection, Guid playerId, IThemeService themeService, IPlayerProfile playerProfile)
     {
@@ -246,24 +237,24 @@ public partial class GameSessionViewModel : ObservableObject
     /// </summary>
     public ObservableCollection<RevealSlotView> RevealSlots { get; } = [];
 
-    /// <summary>
-    /// Vuota finché l'host non tocca il pulsante nello stato "Chi l'ha
-    /// scritta?": si popola da <see cref="_autoriInAttesa"/>, non da un nuovo
-    /// messaggio del server.
-    /// </summary>
-    public ObservableCollection<string> RevealAuthors { get; } = [];
+    public ObservableCollection<PhraseResultRowView> FinalResults { get; } = [];
 
-    public ObservableCollection<string> FinalPhrases { get; } = [];
+    [ObservableProperty]
+    private bool _hasVoted;
+
+    [ObservableProperty]
+    private int _votedCount;
+
+    [ObservableProperty]
+    private int _votersExpected;
+
+    public ObservableCollection<VoteOptionView> VoteOptions { get; } = [];
 
     /// <summary>
-    /// "Scritta da: A · B · C", vuota finché <see cref="RevealAuthors"/> non è
-    /// popolata. Non è un [ObservableProperty] perché dipende da una
-    /// collezione, non da un campo: la notifica parte da
-    /// <see cref="MostraAutori"/>, l'unico punto che modifica RevealAuthors.
+    /// Come per "Inizia partita" e l'avanzamento del reveal: chi non è host
+    /// non vede il pulsante, invece di vederselo rispondere NOT_HOST.
     /// </summary>
-    public string AuthorsFootnote => RevealAuthors.Count == 0
-        ? string.Empty
-        : $"Scritta da: {string.Join(" · ", RevealAuthors)}";
+    public bool ShowCloseVoting => IsHost && Screen == ScreenState.Voting;
 
     [RelayCommand]
     private Task CreateRoomAsync() => EseguiComandoAsync(async () =>
@@ -457,26 +448,42 @@ public partial class GameSessionViewModel : ObservableObject
     });
 
     /// <summary>
-    /// Un solo comando per i tre stati del pulsante di reveal (spec del lotto):
-    /// "Rivela la prossima parola" e "Prossima frase" chiamano il server,
-    /// "Chi l'ha scritta?" no - mostra solo gli autori che il server ha già
-    /// mandato nel passo che ha completato la frase (vedi <see cref="_autoriInAttesa"/>).
-    /// Un'unica Command invece di tre evita alla view di dover scegliere quale
-    /// invocare: la scelta segue lo stesso stato che decide l'etichetta.
+    /// Due stati, non più tre: con il voto cieco (spec §3) il passo "Chi
+    /// l'ha scritta?" non ha più niente da mostrare — gli autori arrivano
+    /// solo alla fine, con la classifica.
     /// </summary>
     [RelayCommand]
-    private Task AdvanceRevealAsync() => EseguiComandoAsync(async () =>
-    {
-        if (_fraseCompleta && !_autoriMostratiPerQuestoPasso)
-        {
-            MostraAutori(_autoriInAttesa);
-            _autoriMostratiPerQuestoPasso = true;
-            AggiornaEtichettaRevealButton();
-            return;
-        }
+    private Task AdvanceRevealAsync() => EseguiComandoAsync(() => _connection.AdvanceRevealAsync(RoomCode));
 
-        await _connection.AdvanceRevealAsync(RoomCode);
+    /// <summary>
+    /// GameHost invia tutti gli effetti prima che il metodo hub ritorni,
+    /// quindi se il nostro è l'ultimo voto la classifica arriva mentre siamo
+    /// ancora dentro l'await, e il gestore dei messaggi ha già portato la
+    /// schermata su Finished. Il pericolo che la guardia previene è scrivere
+    /// stato della schermata di voto dopo che la fase è già finita: qui, a
+    /// differenza di <see cref="SubmitSlotAsync"/>, l'unica scrittura dopo
+    /// l'await è <see cref="HasVoted"/>, che a partita conclusa non legge più
+    /// nessuno - oggi la guardia è quindi innocua, non indispensabile. Resta
+    /// comunque perché è il punto esatto in cui un'aggiunta futura (per
+    /// esempio una scrittura di <see cref="Screen"/> dopo l'await, per
+    /// rispecchiare <see cref="SubmitSlotAsync"/>) reintrodurrebbe il difetto
+    /// vero: trovarci già la guardia è ciò che lo previene.
+    /// </summary>
+    [RelayCommand]
+    private Task CastVoteAsync(VoteOptionView opzione) => EseguiComandoAsync(async () =>
+    {
+        ErrorText = string.Empty;
+
+        await _connection.CastVoteAsync(RoomCode, opzione.Index);
+
+        if (Screen == ScreenState.Voting)
+        {
+            HasVoted = true;
+        }
     });
+
+    [RelayCommand]
+    private Task CloseVotingAsync() => EseguiComandoAsync(() => _connection.CloseVotingAsync(RoomCode));
 
     /// <summary>
     /// "Nuova partita" (lotto-d-brief.md): riparte subito, stessi giocatori e
@@ -651,6 +658,12 @@ public partial class GameSessionViewModel : ObservableObject
                 // ramo tutti resterebbero bloccati su "Aspettiamo gli altri…" (il
                 // server manda comunque una RevealStepMessage iniziale apposta per
                 // questo passaggio; qui è solo una difesa in profondità).
+                //
+                // "Voting" NON va mappato, per lo stesso motivo di "Writing":
+                // una RoomStateMessage arriva anche a voto in corso (qualcuno
+                // si disconnette), e riporterebbe sulla lista chi ha già
+                // votato. Sulla schermata di voto ci si arriva con
+                // VoteRequestMessage, che è per definizione l'invito a votare.
                 if (stato.Phase == "Lobby")
                 {
                     Screen = ScreenState.Lobby;
@@ -694,24 +707,35 @@ public partial class GameSessionViewModel : ObservableObject
                         : new RevealSlotView("···", false));
                 }
 
-                // Gli autori di QUESTO passo restano in disparte: si mostrano
-                // solo al tocco successivo (vedi AdvanceRevealAsync). Qui si
-                // svuota anche la vista di quelli mostrati per il passo
-                // precedente, altrimenti resterebbero appesi sotto la nuova frase.
-                MostraAutori([]);
-                _autoriInAttesa = passo.Authors;
                 _fraseCompleta = passo.PhraseComplete;
-                _autoriMostratiPerQuestoPasso = false;
                 AggiornaEtichettaRevealButton();
 
                 Screen = ScreenState.Reveal;
                 break;
 
-            case GameFinishedMessage finale:
-                FinalPhrases.Clear();
-                foreach (var frase in finale.Phrases)
+            case VoteRequestMessage daVotare:
+                VoteOptions.Clear();
+                for (var i = 0; i < daVotare.Phrases.Count; i++)
                 {
-                    FinalPhrases.Add(frase);
+                    VoteOptions.Add(new VoteOptionView(i, daVotare.Phrases[i]));
+                }
+
+                HasVoted = false;
+                VotedCount = 0;
+                VotersExpected = 0;
+                Screen = ScreenState.Voting;
+                break;
+
+            case VoteProgressMessage avanzamento:
+                VotedCount = avanzamento.Voted;
+                VotersExpected = avanzamento.Total;
+                break;
+
+            case GameFinishedMessage finale:
+                FinalResults.Clear();
+                foreach (var risultato in finale.Results)
+                {
+                    FinalResults.Add(new PhraseResultRowView(risultato));
                 }
 
                 Screen = ScreenState.Finished;
@@ -724,45 +748,26 @@ public partial class GameSessionViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Ripulisce lo stato accumulato dalla partita appena conclusa - frasi
-    /// finali, caselle rivelate, autori in attesa - prima di tornare alla
-    /// lobby o ricominciarne subito un'altra (lotto-d-brief.md). Il server
-    /// manda comunque stato nuovo, ma senza questa pulizia le collezioni
-    /// locali resterebbero appese: lo stesso genere di dimenticanza che
-    /// aveva lasciato il testo di un bot in modifica dopo una ricostruzione
-    /// della lista giocatori.
+    /// Ripulisce lo stato accumulato dalla partita appena conclusa - risultati
+    /// finali, caselle rivelate - prima di tornare alla lobby o ricominciarne
+    /// subito un'altra (lotto-d-brief.md). Il server manda comunque stato
+    /// nuovo, ma senza questa pulizia le collezioni locali resterebbero
+    /// appese: lo stesso genere di dimenticanza che aveva lasciato il testo
+    /// di un bot in modifica dopo una ricostruzione della lista giocatori.
     /// </summary>
     private void PulisciStatoDiPartitaConclusa()
     {
-        FinalPhrases.Clear();
+        FinalResults.Clear();
         RevealSlots.Clear();
-        MostraAutori([]);
-        _autoriInAttesa = [];
         _fraseCompleta = false;
-        _autoriMostratiPerQuestoPasso = false;
+        VoteOptions.Clear();
+        HasVoted = false;
+        VotedCount = 0;
+        VotersExpected = 0;
     }
 
-    private void MostraAutori(IReadOnlyList<string> autori)
-    {
-        RevealAuthors.Clear();
-        foreach (var autore in autori)
-        {
-            RevealAuthors.Add(autore);
-        }
-
-        // RevealAuthors è una ObservableCollection: la sua notifica non fa
-        // scattare da sola quella di AuthorsFootnote, che ne dipende.
-        OnPropertyChanged(nameof(AuthorsFootnote));
-    }
-
-    private void AggiornaEtichettaRevealButton()
-    {
-        RevealButtonLabel = !_fraseCompleta
-            ? "Rivela la prossima parola"
-            : _autoriMostratiPerQuestoPasso
-                ? "Prossima frase"
-                : "Chi l'ha scritta?";
-    }
+    private void AggiornaEtichettaRevealButton() =>
+        RevealButtonLabel = _fraseCompleta ? "Prossima frase" : "Rivela la prossima parola";
 
     // CanAddBot e CanChangeSchema dipendono da questi campi: nessuno di loro
     // notifica da solo le proprietà calcolate, quindi lo fanno questi hook
@@ -772,6 +777,7 @@ public partial class GameSessionViewModel : ObservableObject
         OnPropertyChanged(nameof(CanAddBot));
         OnPropertyChanged(nameof(CanChangeSchema));
         OnPropertyChanged(nameof(ShowFinishedActions));
+        OnPropertyChanged(nameof(ShowCloseVoting));
     }
 
     partial void OnScreenChanged(ScreenState value)
@@ -779,6 +785,7 @@ public partial class GameSessionViewModel : ObservableObject
         OnPropertyChanged(nameof(CanAddBot));
         OnPropertyChanged(nameof(CanChangeSchema));
         OnPropertyChanged(nameof(ShowFinishedActions));
+        OnPropertyChanged(nameof(ShowCloseVoting));
     }
 
     partial void OnPlayerCountChanged(int value) => OnPropertyChanged(nameof(CanAddBot));

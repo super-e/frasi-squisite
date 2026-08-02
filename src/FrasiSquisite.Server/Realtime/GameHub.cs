@@ -59,6 +59,12 @@ public sealed class GameHub(GameHost host, IRoomRegistry rooms, ISchemaCatalog s
     public Task AdvanceReveal(string roomCode) =>
         host.DispatchAsync(roomCode, new RevealAdvanceRequested(GiocatoreCorrente()));
 
+    public Task CastVote(CastVoteRequest request) =>
+        host.DispatchAsync(request.RoomCode, new VoteCast(GiocatoreCorrente(), request.PhraseIndex));
+
+    public Task CloseVoting(CloseVotingRequest request) =>
+        host.DispatchAsync(request.RoomCode, new VotingCloseRequested(GiocatoreCorrente()));
+
     public Task NewGame(NewGameRequest request) =>
         host.DispatchAsync(request.RoomCode, new NewGameRequested(GiocatoreCorrente()));
 

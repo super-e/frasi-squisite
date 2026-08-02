@@ -3,7 +3,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:FrasiSquisite.App.ViewModels"
              xmlns:services="clr-namespace:FrasiSquisite.App.Services"
-             xmlns:sys="clr-namespace:System;assembly=netstandard"
              x:Class="FrasiSquisite.App.Pages.GamePage"
              x:Name="RootPage"
              x:DataType="vm:GameSessionViewModel"
@@ -371,11 +370,50 @@
                     </BindableLayout.ItemTemplate>
                 </FlexLayout>
 
-                <Label Text="{Binding AuthorsFootnote}" Style="{StaticResource FootnoteLabel}"
-                       IsVisible="{Binding AuthorsFootnote, Converter={StaticResource NotEmpty}}" />
-
                 <Button Text="{Binding RevealButtonLabel}" Style="{StaticResource PrimaryButton}"
                         Command="{Binding AdvanceRevealCommand}" IsVisible="{Binding IsHost}" />
+
+            </VerticalStackLayout>
+
+            <!-- ================= Voto ================= -->
+            <VerticalStackLayout Spacing="20" IsVisible="{Binding Screen, Converter={StaticResource IsScreen}, ConverterParameter=Voting}">
+
+                <VerticalStackLayout Spacing="8" IsVisible="{Binding HasVoted, Converter={StaticResource InvertBool}}">
+                    <Label Text="Qual è la migliore?" Style="{StaticResource H2Label}" HorizontalOptions="Center" />
+                    <Label Text="Un voto a testa. Non si cambia idea." Style="{StaticResource FootnoteLabel}"
+                           HorizontalOptions="Center" HorizontalTextAlignment="Center" />
+                </VerticalStackLayout>
+
+                <CollectionView ItemsSource="{Binding VoteOptions}"
+                                IsVisible="{Binding HasVoted, Converter={StaticResource InvertBool}}">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="vm:VoteOptionView">
+                            <Border Margin="0,6" Padding="14" Style="{StaticResource Card}">
+                                <Border.GestureRecognizers>
+                                    <TapGestureRecognizer
+                                        Command="{Binding Source={x:Reference RootPage}, Path=BindingContext.CastVoteCommand}"
+                                        CommandParameter="{Binding .}" />
+                                </Border.GestureRecognizers>
+                                <Label Text="{Binding Text}" Style="{StaticResource BodyLabel}" />
+                            </Border>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+
+                <VerticalStackLayout Spacing="8" IsVisible="{Binding HasVoted}">
+                    <Label Text="Votato." Style="{StaticResource H2Label}" HorizontalOptions="Center" />
+                    <Label HorizontalOptions="Center" Style="{StaticResource BodyLabel}">
+                        <Label.Text>
+                            <MultiBinding StringFormat="Hanno votato {0} di {1}">
+                                <Binding Path="VotedCount" />
+                                <Binding Path="VotersExpected" />
+                            </MultiBinding>
+                        </Label.Text>
+                    </Label>
+                </VerticalStackLayout>
+
+                <Button Text="Chiudi il voto" Style="{StaticResource SecondaryButton}"
+                        Command="{Binding CloseVotingCommand}" IsVisible="{Binding ShowCloseVoting}" />
 
             </VerticalStackLayout>
 
@@ -384,11 +422,17 @@
 
                 <Label Text="Ecco cosa è venuto fuori" Style="{StaticResource EyebrowLabel}" HorizontalOptions="Center" />
 
-                <CollectionView ItemsSource="{Binding FinalPhrases}">
+                <CollectionView ItemsSource="{Binding FinalResults}">
                     <CollectionView.ItemTemplate>
-                        <DataTemplate x:DataType="sys:String">
-                            <Border Style="{StaticResource Card}" Margin="0,8">
-                                <Label Text="{Binding .}" Style="{StaticResource H1WinnerLabel}" />
+                        <DataTemplate x:DataType="vm:PhraseResultRowView">
+                            <Border Margin="0,6" Style="{StaticResource Card}">
+                                <VerticalStackLayout Spacing="6">
+                                    <Label Text="&#127942;" FontSize="20" IsVisible="{Binding IsWinner}" />
+                                    <Label Text="{Binding Text}" Style="{StaticResource BodyLabel}" />
+                                    <Label Text="{Binding VotesLabel}" Style="{StaticResource FootnoteLabel}" />
+                                    <Label Text="{Binding AuthorsLabel}" Style="{StaticResource FootnoteLabel}"
+                                           IsVisible="{Binding AuthorsLabel, Converter={StaticResource NotEmpty}}" />
+                                </VerticalStackLayout>
                             </Border>
                         </DataTemplate>
                     </CollectionView.ItemTemplate>

@@ -81,6 +81,11 @@ public class BotTests
             stato = _motore.Handle(stato, new RevealAdvanceRequested(Giocatore(0))).State;
         }
 
+        // Il bot non vota (Task 4, fase di voto): con Anna sola tra i
+        // votanti attesi, tocca a lei chiudere il voto per arrivare a
+        // Finished.
+        stato = _motore.Handle(stato, new VoteCast(Giocatore(0), 0)).State;
+
         Assert.Equal(RoomPhase.Finished, stato.Phase);
 
         stato = _motore.Handle(stato, new NewGameRequested(Giocatore(0))).State;

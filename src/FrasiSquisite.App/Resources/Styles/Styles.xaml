@@ -462,14 +462,6 @@
         <Setter Property="LineHeight" Value="1.05" />
     </Style>
 
-    <Style x:Key="H1WinnerLabel" TargetType="Label">
-        <Setter Property="FontFamily" Value="{DynamicResource ThemeHeadFont}" />
-        <Setter Property="FontSize" Value="26" />
-        <Setter Property="TextColor" Value="{DynamicResource ThemeInk}" />
-        <Setter Property="HorizontalOptions" Value="Center" />
-        <Setter Property="HorizontalTextAlignment" Value="Center" />
-    </Style>
-
     <Style x:Key="H2Label" TargetType="Label">
         <Setter Property="FontFamily" Value="{DynamicResource ThemeHeadFont}" />
         <Setter Property="FontSize" Value="21" />

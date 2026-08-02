@@ -54,4 +54,46 @@ public class FakeGameConnectionTests
 
         Assert.Equal(connessione.NextRoomCode, codice);
     }
+
+    /// <summary>
+    /// L'aggancio esiste già per SubmitSlotAsync, aggiunto per riprodurre il
+    /// blocco su "in attesa". Il voto ha la stessa forma — l'ultimo votante
+    /// riceve la chiusura mentre la sua await è ancora in volo — quindi
+    /// serve anche qui, altrimenti quel caso non è esprimibile come test.
+    /// </summary>
+    [Fact]
+    public async Task IlMessaggioDuranteVotoArrivaPrimaCheLaChiamataRitorni()
+    {
+        var conn = new FakeGameConnection
+        {
+            MessaggioDuranteVoto = new GameFinishedMessage([]),
+        };
+
+        object? ricevuto = null;
+        var giaRitornata = false;
+        conn.MessageReceived += m =>
+        {
+            ricevuto = m;
+            Assert.False(giaRitornata, "il messaggio è arrivato dopo il ritorno della chiamata");
+        };
+
+        await conn.CastVoteAsync("ABCD", 0);
+        giaRitornata = true;
+
+        Assert.IsType<GameFinishedMessage>(ricevuto);
+    }
+
+    [Fact]
+    public async Task IlMessaggioDuranteVotoSiAzzeraDopoLUso()
+    {
+        var conn = new FakeGameConnection { MessaggioDuranteVoto = new GameFinishedMessage([]) };
+
+        var conteggio = 0;
+        conn.MessageReceived += _ => conteggio++;
+
+        await conn.CastVoteAsync("ABCD", 0);
+        await conn.CastVoteAsync("ABCD", 0);
+
+        Assert.Equal(1, conteggio);
+    }
 }

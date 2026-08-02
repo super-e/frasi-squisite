@@ -15,7 +15,8 @@ public sealed record GameState(
     IReadOnlyList<Phrase> Phrases,
     IReadOnlySet<Guid> SubmittedThisRound,
     int RevealPhraseIndex,
-    int RevealSlotCount)
+    int RevealSlotCount,
+    IReadOnlyDictionary<Guid, int> Votes)
 {
     /// <summary>
     /// <paramref name="availableSchemas"/> è annullabile solo per lasciare
@@ -39,7 +40,8 @@ public sealed record GameState(
             Phrases: [],
             SubmittedThisRound: new HashSet<Guid>(),
             RevealPhraseIndex: 0,
-            RevealSlotCount: 0);
+            RevealSlotCount: 0,
+            Votes: new Dictionary<Guid, int>());
 
     public Player? FindPlayer(Guid id) => Players.FirstOrDefault(p => p.Id == id);
 
