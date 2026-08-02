@@ -16,6 +16,7 @@ public enum ScreenState
     Writing,
     Waiting,
     Reveal,
+    Voting,
     Finished,
 }
 
@@ -238,6 +239,23 @@ public partial class GameSessionViewModel : ObservableObject
 
     public ObservableCollection<PhraseResultRowView> FinalResults { get; } = [];
 
+    [ObservableProperty]
+    private bool _hasVoted;
+
+    [ObservableProperty]
+    private int _votedCount;
+
+    [ObservableProperty]
+    private int _votersExpected;
+
+    public ObservableCollection<VoteOptionView> VoteOptions { get; } = [];
+
+    /// <summary>
+    /// Come per "Inizia partita" e l'avanzamento del reveal: chi non è host
+    /// non vede il pulsante, invece di vederselo rispondere NOT_HOST.
+    /// </summary>
+    public bool ShowCloseVoting => IsHost && Screen == ScreenState.Voting;
+
     [RelayCommand]
     private Task CreateRoomAsync() => EseguiComandoAsync(async () =>
     {
@@ -438,6 +456,31 @@ public partial class GameSessionViewModel : ObservableObject
     private Task AdvanceRevealAsync() => EseguiComandoAsync(() => _connection.AdvanceRevealAsync(RoomCode));
 
     /// <summary>
+    /// La guardia dopo l'await è la stessa di <see cref="SubmitSlotAsync"/> e
+    /// per lo stesso motivo: GameHost invia tutti gli effetti prima che il
+    /// metodo hub ritorni, quindi se il nostro è l'ultimo voto la classifica
+    /// arriva mentre siamo ancora dentro l'await, e il gestore dei messaggi
+    /// ha già portato la schermata su Finished. Scrivere qui senza controllare
+    /// la riporterebbe indietro, su una lista di frasi che non si possono più
+    /// votare.
+    /// </summary>
+    [RelayCommand]
+    private Task CastVoteAsync(VoteOptionView opzione) => EseguiComandoAsync(async () =>
+    {
+        ErrorText = string.Empty;
+
+        await _connection.CastVoteAsync(RoomCode, opzione.Index);
+
+        if (Screen == ScreenState.Voting)
+        {
+            HasVoted = true;
+        }
+    });
+
+    [RelayCommand]
+    private Task CloseVotingAsync() => EseguiComandoAsync(() => _connection.CloseVotingAsync(RoomCode));
+
+    /// <summary>
     /// "Nuova partita" (lotto-d-brief.md): riparte subito, stessi giocatori e
     /// stesso schema. Ripulisce lo stato della partita appena conclusa DOPO
     /// l'await, come <see cref="BackToLobbyAsync"/> (lotto-e-brief.md, punto 1
@@ -610,6 +653,12 @@ public partial class GameSessionViewModel : ObservableObject
                 // ramo tutti resterebbero bloccati su "Aspettiamo gli altri…" (il
                 // server manda comunque una RevealStepMessage iniziale apposta per
                 // questo passaggio; qui è solo una difesa in profondità).
+                //
+                // "Voting" NON va mappato, per lo stesso motivo di "Writing":
+                // una RoomStateMessage arriva anche a voto in corso (qualcuno
+                // si disconnette), e riporterebbe sulla lista chi ha già
+                // votato. Sulla schermata di voto ci si arriva con
+                // VoteRequestMessage, che è per definizione l'invito a votare.
                 if (stato.Phase == "Lobby")
                 {
                     Screen = ScreenState.Lobby;
@@ -659,6 +708,24 @@ public partial class GameSessionViewModel : ObservableObject
                 Screen = ScreenState.Reveal;
                 break;
 
+            case VoteRequestMessage daVotare:
+                VoteOptions.Clear();
+                for (var i = 0; i < daVotare.Phrases.Count; i++)
+                {
+                    VoteOptions.Add(new VoteOptionView(i, daVotare.Phrases[i]));
+                }
+
+                HasVoted = false;
+                VotedCount = 0;
+                VotersExpected = 0;
+                Screen = ScreenState.Voting;
+                break;
+
+            case VoteProgressMessage avanzamento:
+                VotedCount = avanzamento.Voted;
+                VotersExpected = avanzamento.Total;
+                break;
+
             case GameFinishedMessage finale:
                 FinalResults.Clear();
                 foreach (var risultato in finale.Results)
@@ -688,6 +755,10 @@ public partial class GameSessionViewModel : ObservableObject
         FinalResults.Clear();
         RevealSlots.Clear();
         _fraseCompleta = false;
+        VoteOptions.Clear();
+        HasVoted = false;
+        VotedCount = 0;
+        VotersExpected = 0;
     }
 
     private void AggiornaEtichettaRevealButton() =>
@@ -701,6 +772,7 @@ public partial class GameSessionViewModel : ObservableObject
         OnPropertyChanged(nameof(CanAddBot));
         OnPropertyChanged(nameof(CanChangeSchema));
         OnPropertyChanged(nameof(ShowFinishedActions));
+        OnPropertyChanged(nameof(ShowCloseVoting));
     }
 
     partial void OnScreenChanged(ScreenState value)
@@ -708,6 +780,7 @@ public partial class GameSessionViewModel : ObservableObject
         OnPropertyChanged(nameof(CanAddBot));
         OnPropertyChanged(nameof(CanChangeSchema));
         OnPropertyChanged(nameof(ShowFinishedActions));
+        OnPropertyChanged(nameof(ShowCloseVoting));
     }
 
     partial void OnPlayerCountChanged(int value) => OnPropertyChanged(nameof(CanAddBot));

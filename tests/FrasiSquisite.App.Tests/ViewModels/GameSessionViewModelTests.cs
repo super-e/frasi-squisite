@@ -33,6 +33,28 @@ public class GameSessionViewModelTests
         return (vm, connessione, profilo);
     }
 
+    /// <summary>
+    /// Stanza nota e invito a votare già arrivato: il punto di partenza di
+    /// tutti i test della fase di voto. <paramref name="ioSonoHost"/> decide
+    /// se il giocatore locale è l'host, da cui dipende il pulsante di
+    /// chiusura.
+    /// </summary>
+    private static (GameSessionViewModel Vm, FakeGameConnection Conn) InVoto(bool ioSonoHost = false)
+    {
+        var (vm, conn) = Crea();
+
+        conn.Emit(new RoomStateMessage(
+            "ABCD",
+            "Reveal",
+            [new PlayerView(Anna, "Anna", ioSonoHost, true, false)],
+            "storia",
+            8));
+
+        conn.Emit(new VoteRequestMessage(["Prima", "Seconda"]));
+
+        return (vm, conn);
+    }
+
     [Fact]
     public void AllAvvioSiEAllaSchermataIniziale()
     {
@@ -1280,5 +1302,146 @@ public class GameSessionViewModelTests
 
         Assert.Equal("anna", profilo.Nickname);
         Assert.NotEmpty(vm.ErrorText);
+    }
+
+    // ================= Lotto voto (task-8-brief.md) =================
+
+    [Fact]
+    public void LaRichiestaDiVotoPortaAllaSchermataDiVoto()
+    {
+        var (vm, conn) = Crea();
+
+        conn.Emit(new VoteRequestMessage(["Prima frase", "Seconda frase"]));
+
+        Assert.Equal(ScreenState.Voting, vm.Screen);
+        Assert.Equal(2, vm.VoteOptions.Count);
+        Assert.Equal("Prima frase", vm.VoteOptions[0].Text);
+        Assert.Equal(1, vm.VoteOptions[1].Index);
+        Assert.False(vm.HasVoted);
+    }
+
+    [Fact]
+    public async Task VotareInviaLIndiceEPassaInAttesa()
+    {
+        var (vm, conn) = InVoto();
+
+        await vm.CastVoteCommand.ExecuteAsync(vm.VoteOptions[1]);
+
+        Assert.Contains("CastVote(ABCD,1)", conn.Calls);
+        Assert.True(vm.HasVoted);
+        Assert.Equal(ScreenState.Voting, vm.Screen);
+    }
+
+    /// <summary>
+    /// L'ultimo votante riceve la classifica <em>durante</em> la propria
+    /// await: GameHost invia tutti gli effetti prima che il metodo hub
+    /// ritorni. Scrivere HasVoted dopo l'await senza guardia non basta —
+    /// quello è innocuo — ma toccare Screen sì: lo riporterebbe sul voto a
+    /// partita conclusa. È la forma esatta del bug che bloccò una partita
+    /// vera su "in attesa 1 di 2".
+    /// </summary>
+    [Fact]
+    public async Task SeLaClassificaArrivaDuranteIlVotoLaSchermataNonTornaIndietro()
+    {
+        var (vm, conn) = InVoto();
+
+        conn.MessaggioDuranteVoto = new GameFinishedMessage([
+            new PhraseResultView(0, "Prima", ["Anna"], 1, true),
+        ]);
+
+        await vm.CastVoteCommand.ExecuteAsync(vm.VoteOptions[0]);
+
+        Assert.Equal(ScreenState.Finished, vm.Screen);
+        Assert.Single(vm.FinalResults);
+    }
+
+    [Fact]
+    public void LAvanzamentoDelVotoAggiornaIlConteggio()
+    {
+        var (vm, conn) = InVoto();
+
+        conn.Emit(new VoteProgressMessage(1, 3));
+
+        Assert.Equal(1, vm.VotedCount);
+        Assert.Equal(3, vm.VotersExpected);
+    }
+
+    [Fact]
+    public void ChiNonEHostNonVedeIlPulsantePerChiudereIlVoto()
+    {
+        var (vm, _) = InVoto(ioSonoHost: false);
+
+        Assert.False(vm.ShowCloseVoting);
+    }
+
+    [Fact]
+    public async Task LHostVedeIlPulsantePerChiudereIlVotoELoUsa()
+    {
+        var (vm, conn) = InVoto(ioSonoHost: true);
+
+        Assert.True(vm.ShowCloseVoting);
+
+        await vm.CloseVotingCommand.ExecuteAsync(null);
+
+        Assert.Contains("CloseVoting(ABCD)", conn.Calls);
+    }
+
+    /// <summary>
+    /// Una RoomStateMessage arriva anche a voto in corso (qualcuno si
+    /// disconnette): non deve strappare dalla schermata d'attesa chi ha già
+    /// votato, riportandolo sulla lista come se non avesse fatto nulla. È lo
+    /// stesso motivo per cui "Writing" non viene mappato.
+    /// </summary>
+    [Fact]
+    public async Task UnAggiornamentoDiStanzaNonRiportaAlVotoChiHaGiaVotato()
+    {
+        var (vm, conn) = InVoto();
+        await vm.CastVoteCommand.ExecuteAsync(vm.VoteOptions[0]);
+
+        conn.Emit(new RoomStateMessage(
+            "ABCD",
+            "Voting",
+            [new PlayerView(Guid.NewGuid(), "Bruno", false, true, false)],
+            "storia",
+            8));
+
+        Assert.True(vm.HasVoted);
+    }
+
+    /// <summary>
+    /// Lacuna segnalata in revisione: i due agganci "messaggio durante" della
+    /// connessione finta (<see cref="FakeGameConnection.MessaggioDuranteInvio"/>
+    /// e <see cref="FakeGameConnection.MessaggioDuranteVoto"/>) sono due campi
+    /// distinti proprio per non incrociarsi. Questo è il primo task in cui la
+    /// ViewModel usa davvero entrambe le chiamate (SubmitSlot e CastVote), quindi
+    /// è il primo punto in cui l'incrocio è verificabile: armare l'uno e
+    /// invocare l'altro non deve emettere nulla.
+    /// </summary>
+    [Fact]
+    public async Task IDueAgganciDiMessaggioDuranteNonSiIncrociano()
+    {
+        // Armare l'aggancio del voto e invocare l'invio di una casella non
+        // deve emettere nulla: sono due proprietà distinte della connessione
+        // finta apposta per questo.
+        var (vmScrittura, connScrittura) = Crea();
+        vmScrittura.RoomCode = "ABCD";
+        connScrittura.Emit(new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio"));
+        vmScrittura.SlotText = "Il cadavere";
+        connScrittura.MessaggioDuranteVoto = new VoteRequestMessage(["Prima", "Seconda"]);
+
+        await vmScrittura.SubmitSlotCommand.ExecuteAsync(null);
+
+        Assert.Equal(ScreenState.Waiting, vmScrittura.Screen);
+        Assert.NotNull(connScrittura.MessaggioDuranteVoto);
+
+        // E viceversa: armare l'aggancio dell'invio casella e votare non
+        // deve emettere nulla.
+        var (vmVoto, connVoto) = InVoto();
+        connVoto.MessaggioDuranteInvio = new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio");
+
+        await vmVoto.CastVoteCommand.ExecuteAsync(vmVoto.VoteOptions[0]);
+
+        Assert.Equal(ScreenState.Voting, vmVoto.Screen);
+        Assert.NotNull(connVoto.MessaggioDuranteInvio);
     }
 }
