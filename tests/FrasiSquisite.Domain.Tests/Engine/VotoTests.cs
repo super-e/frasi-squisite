@@ -288,4 +288,107 @@ public class VotoTests
         var errore = Assert.Single(risultato.MessagesTo<ErrorMessage>(Giocatore(99)));
         Assert.Equal("NOT_IN_ROOM", errore.Code);
     }
+
+    [Fact]
+    public void LHostChiudeIlVotoInAnticipoELaClassificaArrivaConLaFrasePiuVotata()
+    {
+        var stato = AlVoto();
+        stato = _motore.Handle(stato, new VoteCast(Giocatore(0), 1)).State;
+
+        var risultato = _motore.Handle(stato, new VotingCloseRequested(Giocatore(0)));
+
+        Assert.Equal(RoomPhase.Finished, risultato.State.Phase);
+
+        var finale = Assert.Single(risultato.Broadcasts<GameFinishedMessage>());
+        Assert.Equal(N, finale.Results.Count);
+        Assert.Equal(1, finale.Results[0].PhraseIndex);
+        Assert.Equal(1, finale.Results[0].Votes);
+        Assert.True(finale.Results[0].IsWinner);
+    }
+
+    [Fact]
+    public void ChiNonEHostNonPuoChiudereIlVotoENonArrivaNessunaClassifica()
+    {
+        var stato = AlVoto();
+        stato = _motore.Handle(stato, new VoteCast(Giocatore(0), 1)).State;
+
+        var risultato = _motore.Handle(stato, new VotingCloseRequested(Giocatore(1)));
+
+        var errore = Assert.Single(risultato.MessagesTo<ErrorMessage>(Giocatore(1)));
+        Assert.Equal("NOT_HOST", errore.Code);
+        Assert.Empty(risultato.Broadcasts<GameFinishedMessage>());
+        Assert.Equal(RoomPhase.Voting, risultato.State.Phase);
+    }
+
+    /// <summary>
+    /// Distinto apposta dal caso "hanno vinto tutte a pari merito": qui
+    /// nessuno ha votato, quindi nessuna frase vince, non tutte insieme.
+    /// </summary>
+    [Fact]
+    public void LHostChiudeIlVotoSenzaCheNessunoAbbiaVotatoENessunaFraseVince()
+    {
+        var stato = AlVoto();
+
+        var risultato = _motore.Handle(stato, new VotingCloseRequested(Giocatore(0)));
+
+        Assert.Equal(RoomPhase.Finished, risultato.State.Phase);
+
+        var finale = Assert.Single(risultato.Broadcasts<GameFinishedMessage>());
+        Assert.Equal(N, finale.Results.Count);
+        Assert.All(finale.Results, r => Assert.Equal(0, r.Votes));
+        Assert.All(finale.Results, r => Assert.False(r.IsWinner));
+    }
+
+    /// <summary>
+    /// Costruito interamente nel motore: se tutti gli umani si disconnettono
+    /// durante il reveal, la successione dell'host (<c>OnPlayerLeft</c> in
+    /// GameEngine.Players.cs) ripiega sull'host precedente quando non resta
+    /// nessuno connesso — quindi l'host, benché disconnesso, può ancora far
+    /// avanzare il reveal fino in fondo. Da lì si entra in voto con
+    /// l'insieme dei votanti attesi vuoto: la stanza non deve restare
+    /// appesa in <see cref="RoomPhase.Voting"/>.
+    /// </summary>
+    [Fact]
+    public void SeTuttiIVotantiAttesiSiSonoDisconnessiIlVotoSiChiudeSubitoAllIngresso()
+    {
+        var stato = GameState.NewRoom("ABCD", TestSchemas.WithSlots(K));
+        for (var i = 0; i < N; i++)
+        {
+            stato = _motore.Handle(stato, new PlayerJoined(Giocatore(i), $"G{i}")).State;
+        }
+
+        stato = _motore.Handle(stato, new GameStartRequested(Giocatore(0))).State;
+
+        for (var round = 0; round < K; round++)
+        {
+            for (var g = 0; g < N; g++)
+            {
+                stato = _motore.Handle(stato, new SlotSubmitted(Giocatore(g), $"p{round}{g}")).State;
+            }
+        }
+
+        Assert.Equal(RoomPhase.Reveal, stato.Phase);
+
+        // Si disconnettono prima i non host, l'host per ultimo: finché non è
+        // lui a lasciare la successione passa a chi resta connesso, ma
+        // all'ultimo abbandono non resta nessuno e l'host di prima resta
+        // host (ramo "?? state.HostId" in OnPlayerLeft).
+        for (var i = N - 1; i >= 0; i--)
+        {
+            stato = _motore.Handle(stato, new PlayerLeft(Giocatore(i))).State;
+        }
+
+        Assert.Equal(Giocatore(0), stato.HostId);
+        Assert.DoesNotContain(stato.Players, p => p.IsConnected);
+
+        EngineResult ultimo = null!;
+        for (var i = 0; i < N * K; i++)
+        {
+            ultimo = _motore.Handle(stato, new RevealAdvanceRequested(Giocatore(0)));
+            stato = ultimo.State;
+        }
+
+        Assert.Equal(RoomPhase.Finished, ultimo.State.Phase);
+        Assert.Single(ultimo.Broadcasts<GameFinishedMessage>());
+    }
 }

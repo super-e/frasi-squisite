@@ -125,9 +125,11 @@ public sealed partial class GameEngine
 
     /// <summary>
     /// Chiude e pubblica la classifica. Unico punto che porta a
-    /// <see cref="RoomPhase.Finished"/>: le tre strade che ci arrivano
-    /// (ultimo voto, host che forza, ultimo votante che se ne va) devono
-    /// produrre esattamente gli stessi messaggi.
+    /// <see cref="RoomPhase.Finished"/>: le strade che ci arrivano oggi
+    /// (ultimo voto, host che forza la chiusura) devono produrre esattamente
+    /// gli stessi messaggi. Una terza strada — la disconnessione dell'ultimo
+    /// votante che chiude il voto da sola, invece di limitarsi a togliere un
+    /// atteso — non è ancora cablata: arriva in un lotto successivo.
     /// </summary>
     private static EngineResult ChiudiVoto(GameState state, List<Effect> effetti)
     {

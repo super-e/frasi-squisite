@@ -55,9 +55,9 @@ public sealed partial class GameEngine
         [.. state.Phrases.Select(f => state.Schema.Compose([.. f.Slots.Select(s => s!.Text)]))];
 
     /// <summary>
-    /// La classifica pronta da mandare. Con voti vuoti — cioè oggi, prima che
-    /// la fase di voto esista — produce tutte le frasi a zero e nessuna
-    /// vincitrice, che è esattamente il significato giusto.
+    /// La classifica pronta da mandare. Con nessun voto — il voto chiuso
+    /// prima che qualcuno esprimesse una preferenza — produce tutte le frasi
+    /// a zero e nessuna vincitrice, che è esattamente il significato giusto.
     /// </summary>
     private static IReadOnlyList<PhraseResultView> Classifica(
         GameState state,
