@@ -456,13 +456,18 @@ public partial class GameSessionViewModel : ObservableObject
     private Task AdvanceRevealAsync() => EseguiComandoAsync(() => _connection.AdvanceRevealAsync(RoomCode));
 
     /// <summary>
-    /// La guardia dopo l'await è la stessa di <see cref="SubmitSlotAsync"/> e
-    /// per lo stesso motivo: GameHost invia tutti gli effetti prima che il
-    /// metodo hub ritorni, quindi se il nostro è l'ultimo voto la classifica
-    /// arriva mentre siamo ancora dentro l'await, e il gestore dei messaggi
-    /// ha già portato la schermata su Finished. Scrivere qui senza controllare
-    /// la riporterebbe indietro, su una lista di frasi che non si possono più
-    /// votare.
+    /// GameHost invia tutti gli effetti prima che il metodo hub ritorni,
+    /// quindi se il nostro è l'ultimo voto la classifica arriva mentre siamo
+    /// ancora dentro l'await, e il gestore dei messaggi ha già portato la
+    /// schermata su Finished. Il pericolo che la guardia previene è scrivere
+    /// stato della schermata di voto dopo che la fase è già finita: qui, a
+    /// differenza di <see cref="SubmitSlotAsync"/>, l'unica scrittura dopo
+    /// l'await è <see cref="HasVoted"/>, che a partita conclusa non legge più
+    /// nessuno - oggi la guardia è quindi innocua, non indispensabile. Resta
+    /// comunque perché è il punto esatto in cui un'aggiunta futura (per
+    /// esempio una scrittura di <see cref="Screen"/> dopo l'await, per
+    /// rispecchiare <see cref="SubmitSlotAsync"/>) reintrodurrebbe il difetto
+    /// vero: trovarci già la guardia è ciò che lo previene.
     /// </summary>
     [RelayCommand]
     private Task CastVoteAsync(VoteOptionView opzione) => EseguiComandoAsync(async () =>

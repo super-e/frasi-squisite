@@ -1353,6 +1353,11 @@ public class GameSessionViewModelTests
 
         Assert.Equal(ScreenState.Finished, vm.Screen);
         Assert.Single(vm.FinalResults);
+
+        // Prova che la guardia morde davvero: la classifica arrivata durante
+        // l'await non deve lasciare HasVoted scritto, perché a partita
+        // conclusa nessuno lo legge più.
+        Assert.False(vm.HasVoted);
     }
 
     [Fact]
@@ -1406,6 +1411,8 @@ public class GameSessionViewModelTests
             8));
 
         Assert.True(vm.HasVoted);
+        Assert.Equal(ScreenState.Voting, vm.Screen);
+        Assert.Equal(2, vm.VoteOptions.Count);
     }
 
     /// <summary>
