@@ -391,4 +391,53 @@ public class VotoTests
         Assert.Equal(RoomPhase.Finished, ultimo.State.Phase);
         Assert.Single(ultimo.Broadcasts<GameFinishedMessage>());
     }
+
+    /// <summary>
+    /// Il caso che bloccherebbe la partita: se l'ultimo atteso se ne va, la
+    /// chiusura deve avvenire nell'istante della disconnessione. Nessun altro
+    /// evento arriverebbe a rivalutarla.
+    /// </summary>
+    [Fact]
+    public void SeLUltimoAttesoSeNeVaIlVotoSiChiudeSubito()
+    {
+        var stato = AlVoto();
+        stato = _motore.Handle(stato, new VoteCast(Giocatore(0), 1)).State;
+        stato = _motore.Handle(stato, new VoteCast(Giocatore(1), 1)).State;
+
+        var risultato = _motore.Handle(stato, new PlayerLeft(Giocatore(2)));
+
+        Assert.Equal(RoomPhase.Finished, risultato.State.Phase);
+        Assert.Single(risultato.Broadcasts<GameFinishedMessage>());
+    }
+
+    [Fact]
+    public void SeSeNeVaUnoMaNonLUltimoIlVotoRestaAperto()
+    {
+        var stato = AlVoto();
+
+        var risultato = _motore.Handle(stato, new PlayerLeft(Giocatore(2)));
+
+        Assert.Equal(RoomPhase.Voting, risultato.State.Phase);
+        Assert.Empty(risultato.Broadcasts<GameFinishedMessage>());
+    }
+
+    /// <summary>
+    /// Chi ha votato e poi è caduto ha già detto la sua: la mappa è indicizzata
+    /// per giocatore, non per connessione (spec §5).
+    /// </summary>
+    [Fact]
+    public void IlVotoDiChiSiDisconnetteContaComunque()
+    {
+        var stato = AlVoto();
+        stato = _motore.Handle(stato, new VoteCast(Giocatore(2), 1)).State;
+        stato = _motore.Handle(stato, new PlayerLeft(Giocatore(2))).State;
+
+        stato = _motore.Handle(stato, new VoteCast(Giocatore(0), 0)).State;
+        var risultato = _motore.Handle(stato, new VoteCast(Giocatore(1), 0));
+
+        var finale = Assert.Single(risultato.Broadcasts<GameFinishedMessage>());
+
+        Assert.Equal(2, finale.Results.Single(r => r.PhraseIndex == 0).Votes);
+        Assert.Equal(1, finale.Results.Single(r => r.PhraseIndex == 1).Votes);
+    }
 }

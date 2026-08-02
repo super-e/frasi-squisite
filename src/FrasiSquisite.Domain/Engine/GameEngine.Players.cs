@@ -84,6 +84,14 @@ public sealed partial class GameEngine
             return FillDisconnected(aggiornato, effetti);
         }
 
+        // Chi se ne va esce dai votanti attesi: se era l'ultimo che mancava,
+        // il voto va chiuso adesso. Rimandarlo al prossimo voto significa non
+        // chiuderlo mai, perché non ne arriverà nessuno (spec §5).
+        if (aggiornato.Phase == RoomPhase.Voting && TuttiHannoVotato(aggiornato))
+        {
+            return ChiudiVoto(aggiornato, effetti);
+        }
+
         return new EngineResult(aggiornato, effetti);
     }
 
