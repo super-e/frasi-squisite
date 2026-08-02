@@ -1,0 +1,38 @@
+# Il server di Frasi Squisite sull'LXC 155 del Proxmox.
+#
+# Aggiornare:  git pull && docker compose up -d --build
+#
+# L'immagine si costruisce qui invece di essere tirata da un registry:
+# niente credenziali da gestire e niente pubblicazione, al prezzo di
+# qualche minuto di build sul container a ogni aggiornamento.
+
+services:
+  server:
+    build: .
+    image: frasi-squisite-server:local
+    container_name: frasi-squisite
+    restart: unless-stopped
+
+    ports:
+      # Caddy (CT100) inoltra frasisquisite.carraraenri.co qui.
+      # La porta a sinistra deve restare 5000 finche' non si aggiorna anche
+      # il Caddyfile e la regola del firewall di Proxmox nel file 155.fw.
+      - "5000:5000"
+
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+
+    # Nessun volume, di proposito: il server tiene le stanze in memoria e
+    # non scrive niente su disco. Un riavvio interrompe le partite in corso,
+    # che e' esattamente il comportamento di oggi anche fuori da Docker
+    # (design generale, sezione 14: "fuori scope, persistenza dello stato
+    # vivo"). Il database della fase 3 sara' un servizio in piu' qui dentro,
+    # non un volume da indovinare adesso.
+
+    logging:
+      # Senza questo i log crescono senza limite finche' non riempiono il
+      # disco del container: 24 GB durano parecchio, ma non per sempre.
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

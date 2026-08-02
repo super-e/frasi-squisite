@@ -1,0 +1,28 @@
+# Tutto quello che sta qui non viene nemmeno spedito al demone Docker.
+# Non e' solo pulizia: bin/ del progetto Android contiene un APK da oltre
+# 80 MB, e senza queste righe finirebbe nel contesto di build a ogni
+# docker build, per poi non essere usato da nessuno.
+
+**/bin/
+**/obj/
+
+.git/
+.gitignore
+.superpowers/
+
+# L'app Android non si compila in questa immagine (serve il workload MAUI,
+# assente su Linux) e il Dockerfile non la copia: tenerla fuori dal
+# contesto rende esplicito che non c'entra.
+src/FrasiSquisite.App/
+
+tests/
+docs/
+*.md
+LICENSE
+NOTICE.md
+
+# Il compose non serve dentro l'immagine, e citarlo nel contesto farebbe
+# invalidare la cache a ogni sua modifica.
+docker-compose.yml
+Dockerfile
+.dockerignore
