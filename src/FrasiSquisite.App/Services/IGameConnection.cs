@@ -33,6 +33,12 @@ public interface IGameConnection
 
     Task AdvanceRevealAsync(string roomCode);
 
+    /// <summary>Un voto a testa, non si cambia: il secondo tentativo torna ALREADY_VOTED.</summary>
+    Task CastVoteAsync(string roomCode, int phraseIndex);
+
+    /// <summary>Chiude il voto senza aspettare i ritardatari. Solo l'host.</summary>
+    Task CloseVotingAsync(string roomCode);
+
     /// <summary>Riparte subito dalla schermata finale, stessi giocatori e stesso schema (lotto-d-brief.md).</summary>
     Task NewGameAsync(string roomCode);
 

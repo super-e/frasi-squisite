@@ -110,6 +110,12 @@ public sealed class SignalRGameConnection : IGameConnection, IAsyncDisposable
     public Task AdvanceRevealAsync(string roomCode) =>
         Hub.InvokeAsync("AdvanceReveal", roomCode);
 
+    public Task CastVoteAsync(string roomCode, int phraseIndex) =>
+        Hub.InvokeAsync("CastVote", new CastVoteRequest(roomCode, phraseIndex));
+
+    public Task CloseVotingAsync(string roomCode) =>
+        Hub.InvokeAsync("CloseVoting", new CloseVotingRequest(roomCode));
+
     public Task NewGameAsync(string roomCode) =>
         Hub.InvokeAsync("NewGame", new NewGameRequest(roomCode));
 
@@ -155,6 +161,8 @@ public sealed class SignalRGameConnection : IGameConnection, IAsyncDisposable
         nameof(RoundProgressMessage) => payload.Deserialize<RoundProgressMessage>(ProtocolJson.Options),
         nameof(RevealStepMessage) => payload.Deserialize<RevealStepMessage>(ProtocolJson.Options),
         nameof(GameFinishedMessage) => payload.Deserialize<GameFinishedMessage>(ProtocolJson.Options),
+        nameof(VoteRequestMessage) => payload.Deserialize<VoteRequestMessage>(ProtocolJson.Options),
+        nameof(VoteProgressMessage) => payload.Deserialize<VoteProgressMessage>(ProtocolJson.Options),
         nameof(ErrorMessage) => payload.Deserialize<ErrorMessage>(ProtocolJson.Options),
         _ => null,
     };
