@@ -619,4 +619,109 @@ public sealed class GameHubTests : IAsyncLifetime
 
         Assert.Empty(loggerProvider.VociDiErrore);
     }
+
+    /// <summary>
+    /// Due client giocano, scoprono tutto, votano, e ricevono la classifica.
+    /// L'errore del doppio voto deve restare privato: se il routing per
+    /// giocatore regredisse a un broadcast di stanza, arriverebbe a entrambi.
+    /// </summary>
+    [Fact]
+    public async Task DueClientVotanoERicevonoLaClassifica()
+    {
+        await using var anna = await ConnettiAsync();
+        await using var bruno = await ConnettiAsync();
+
+        var annaId = Guid.NewGuid();
+        var brunoId = Guid.NewGuid();
+
+        var codice = await anna.Connection.InvokeAsync<string>(
+            "CreateRoom", new CreateRoomRequest(ProtocolVersion.Current, annaId, "Anna"));
+
+        await bruno.Connection.InvokeAsync(
+            "JoinRoom", new JoinRoomRequest(ProtocolVersion.Current, brunoId, "Bruno", codice));
+
+        await bruno.WaitFor<RoomStateMessage>(TimeSpan.FromSeconds(5));
+
+        await anna.Connection.InvokeAsync("StartGame", new StartGameRequest(codice));
+        await anna.WaitFor<SlotRequestMessage>(TimeSpan.FromSeconds(5));
+
+        var totalRounds = new EmbeddedSchemaCatalog().Get(Schema.DefaultId).SlotCount;
+
+        for (var round = 0; round < totalRounds; round++)
+        {
+            await anna.Connection.InvokeAsync("SubmitSlot", new SubmitSlotRequest(codice, $"anna{round}"));
+            await bruno.Connection.InvokeAsync("SubmitSlot", new SubmitSlotRequest(codice, $"bruno{round}"));
+        }
+
+        // Due frasi da due caselle ciascuna... in realtà N frasi da
+        // totalRounds caselle: il reveal chiede un passo per casella di ogni
+        // frase, quindi 2 * totalRounds tocchi.
+        for (var i = 0; i < 2 * totalRounds; i++)
+        {
+            await anna.Connection.InvokeAsync("AdvanceReveal", codice);
+        }
+
+        await anna.WaitFor<VoteRequestMessage>(TimeSpan.FromSeconds(5));
+        await bruno.WaitFor<VoteRequestMessage>(TimeSpan.FromSeconds(5));
+
+        var daVotare = anna.Last<VoteRequestMessage>();
+        Assert.Equal(2, daVotare.Phrases.Count);
+
+        await anna.Connection.InvokeAsync("CastVote", new CastVoteRequest(codice, 0));
+        await anna.Connection.InvokeAsync("CastVote", new CastVoteRequest(codice, 1));
+        await anna.WaitFor<ErrorMessage>(TimeSpan.FromSeconds(5));
+        Assert.Equal("ALREADY_VOTED", anna.Last<ErrorMessage>().Code);
+
+        await bruno.Connection.InvokeAsync("CastVote", new CastVoteRequest(codice, 0));
+
+        await anna.WaitFor<GameFinishedMessage>(TimeSpan.FromSeconds(5));
+        await bruno.WaitFor<GameFinishedMessage>(TimeSpan.FromSeconds(5));
+
+        var classifica = bruno.Last<GameFinishedMessage>();
+        Assert.Equal(2, classifica.Results.Count);
+        Assert.Equal(0, classifica.Results[0].PhraseIndex);
+        Assert.Equal(2, classifica.Results[0].Votes);
+        Assert.True(classifica.Results[0].IsWinner);
+
+        Assert.Equal(0, bruno.CountOf<ErrorMessage>());
+    }
+
+    [Fact]
+    public async Task SoloLHostPuoChiudereIlVotoDallHub()
+    {
+        await using var anna = await ConnettiAsync();
+        await using var bruno = await ConnettiAsync();
+
+        var codice = await anna.Connection.InvokeAsync<string>(
+            "CreateRoom", new CreateRoomRequest(ProtocolVersion.Current, Guid.NewGuid(), "Anna"));
+
+        await bruno.Connection.InvokeAsync(
+            "JoinRoom", new JoinRoomRequest(ProtocolVersion.Current, Guid.NewGuid(), "Bruno", codice));
+
+        await bruno.WaitFor<RoomStateMessage>(TimeSpan.FromSeconds(5));
+
+        await anna.Connection.InvokeAsync("StartGame", new StartGameRequest(codice));
+        await anna.WaitFor<SlotRequestMessage>(TimeSpan.FromSeconds(5));
+
+        var totalRounds = new EmbeddedSchemaCatalog().Get(Schema.DefaultId).SlotCount;
+
+        for (var round = 0; round < totalRounds; round++)
+        {
+            await anna.Connection.InvokeAsync("SubmitSlot", new SubmitSlotRequest(codice, $"anna{round}"));
+            await bruno.Connection.InvokeAsync("SubmitSlot", new SubmitSlotRequest(codice, $"bruno{round}"));
+        }
+
+        for (var i = 0; i < 2 * totalRounds; i++)
+        {
+            await anna.Connection.InvokeAsync("AdvanceReveal", codice);
+        }
+
+        await bruno.WaitFor<VoteRequestMessage>(TimeSpan.FromSeconds(5));
+
+        await bruno.Connection.InvokeAsync("CloseVoting", new CloseVotingRequest(codice));
+
+        await bruno.WaitFor<ErrorMessage>(TimeSpan.FromSeconds(5));
+        Assert.Equal("NOT_HOST", bruno.Last<ErrorMessage>().Code);
+        Assert.Equal(0, anna.CountOf<GameFinishedMessage>());
+    }
 }
