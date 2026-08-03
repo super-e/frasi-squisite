@@ -95,6 +95,7 @@ public sealed partial class GameEngine
             RevealPhraseIndex = 0,
             RevealSlotCount = 0,
             Votes = new Dictionary<Guid, int>(),
+            IllustrationsRequested = new HashSet<int>(),
         };
     }
 

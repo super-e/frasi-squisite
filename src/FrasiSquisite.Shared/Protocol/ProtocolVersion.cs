@@ -7,7 +7,7 @@ namespace FrasiSquisite.Shared.Protocol;
 /// </summary>
 public static class ProtocolVersion
 {
-    public const int Current = 6;
+    public const int Current = 7;
 
     public static bool IsCompatible(int clientVersion) => clientVersion == Current;
 }

@@ -6,15 +6,15 @@ namespace FrasiSquisite.Shared.Tests.Protocol;
 
 public class ProtocolContractTests
 {
-    // La rifinitura via IA (AI Task 6) porta il protocollo a v6: la fase
-    // "Refining" arriva dentro RoomStateMessage.Phase e un client v5 non
-    // saprebbe cosa farne, restando fermo su una schermata sbagliata invece
-    // di mostrare l'attesa. Anche qui il rifiuto esplicito ("aggiorna l'app")
-    // è il comportamento giusto.
+    // L'illustrazione via IA (AI Task 1) porta il protocollo a v7:
+    // IllustrationReadyMessage e IllustrationFailedMessage sono messaggi nuovi
+    // che un client v6 non saprebbe interpretare, restando con il pulsante
+    // dell'illustrazione spento invece di mostrare l'esito. Anche qui il
+    // rifiuto esplicito ("aggiorna l'app") è il comportamento giusto.
     [Fact]
-    public void LaVersioneDiProtocolloDellaRifinituraE6()
+    public void LaVersioneDelProtocolloE7()
     {
-        Assert.Equal(6, ProtocolVersion.Current);
+        Assert.Equal(7, ProtocolVersion.Current);
     }
 
     [Fact]
