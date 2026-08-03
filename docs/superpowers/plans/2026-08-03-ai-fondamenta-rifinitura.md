@@ -1443,30 +1443,26 @@ builder.Services.AddSingleton<RefinementRunner>();
 
 La spec §9 lo chiede esplicitamente, ed è il requisito §8.5 del design generale: *"il gioco è interamente giocabile senza AI"*, verificato e non sperato. Oggi lo si otterrebbe **per caso** — i test d'integrazione girano senza chiave — ma nessuno lo afferma, quindi un domani si potrebbe rendere l'AI obbligatoria senza che un test rosso lo segnali.
 
-In `tests/FrasiSquisite.Server.Tests/Ai/AiConfigurazioneTests.cs`, aggiungere:
+**Non aggiungendo un test nuovo**, che sarebbe un doppione di
+`SenzaChiaveIlContainerRisolveIlProviderDisabilitato` del Task 3, ma
+**ancorando l'affermazione al test che una partita la gioca davvero**.
+
+In `tests/FrasiSquisite.Server.Tests/Realtime/GameHubTests.cs`, dentro
+`DueClientVotanoERicevonoLaClassifica`, subito dopo la creazione dei client:
 
 ```csharp
-    /// <summary>
-    /// Il requisito §8.5 del design generale: senza AI il gioco arriva in
-    /// fondo. Non e' un test sull'AI ma sulla sua ASSENZA, e va scritto
-    /// perche' altrimenti la garanzia riposa sul fatto che nessuno abbia
-    /// configurato una chiave nei test - cioe' su un caso, non su una scelta.
-    /// </summary>
-    [Fact]
-    public async Task SenzaChiaveUnaPartitaArrivaDallaLobbyAllaClassifica()
-    {
-        await using var factory = new WebApplicationFactory<Program>();
-
-        Assert.IsType<DisabledAiTextProvider>(factory.Services.GetRequiredService<IAiTextProvider>());
-
-        // Il percorso completo e' gia' coperto da
-        // GameHubTests.DueClientVotanoERicevonoLaClassifica, che gira contro
-        // questa stessa configurazione: qui si inchioda il presupposto su cui
-        // quel test poggia senza dirlo.
-    }
+        // Il requisito §8.5 del design generale: "il gioco e' interamente
+        // giocabile senza AI", verificato e non sperato. Questo test gioca una
+        // partita intera dalla lobby alla classifica, e l'asserzione qui dice
+        // a quali condizioni: senza modello. Senza questa riga la garanzia
+        // riposerebbe sul fatto che nessuno abbia configurato una chiave nei
+        // test — cioe' su un caso, non su una scelta.
+        Assert.IsType<DisabledAiTextProvider>(_factory.Services.GetRequiredService<IAiTextProvider>());
 ```
 
-> Se dopo averlo scritto ti accorgi che duplica soltanto un test esistente senza aggiungere un'affermazione nuova, **dillo nel report invece di tenerlo**: un test che non può fallire da solo è rumore, e in quel caso la cosa giusta è aggiungere l'asserzione sul provider dentro `GameHubTests` e cancellare questo.
+con gli using necessari: `using FrasiSquisite.Server.Ai;` e
+`using Microsoft.Extensions.DependencyInjection;` (quest'ultimo potrebbe già
+esserci — controllare prima di aggiungerlo).
 
 - [ ] **Step 7: Eseguire la suite completa**
 
