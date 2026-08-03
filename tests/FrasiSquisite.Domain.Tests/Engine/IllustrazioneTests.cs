@@ -185,6 +185,38 @@ public class IllustrazioneTests
         Assert.Empty(risultato.Effects);
     }
 
+    /// <summary>
+    /// Qui la fase da sola non basta: a differenza della rifinitura, in
+    /// <c>Finished</c> le richieste sono più di una e concorrenti su indici
+    /// diversi, quindi un esito duplicato o tardivo per un indice che non è
+    /// (più) in attesa deve essere ignorato, non ribroadcast a tutta la stanza.
+    /// </summary>
+    [Fact]
+    public void UnEsitoPerUnIndiceMaiChiestoVieneIgnorato()
+    {
+        var stato = AllaClassifica();
+
+        var risultato = _motore.Handle(stato, new IllustrationFinished(1, "/illustrazioni/abc"));
+
+        Assert.Empty(risultato.Effects);
+    }
+
+    /// <summary>
+    /// Stesso caso, ma dopo che l'indice è già stato tolto da un fallimento:
+    /// un secondo esito tardivo per quello stesso indice non deve
+    /// ribroadcastare né un successo né un altro fallimento.
+    /// </summary>
+    [Fact]
+    public void UnEsitoTardivoDopoUnFallimentoVieneIgnorato()
+    {
+        var stato = _motore.Handle(AllaClassifica(), new IllustrationRequested(Giocatore(0), 1)).State;
+        stato = _motore.Handle(stato, new IllustrationFinished(1, null)).State;
+
+        var risultato = _motore.Handle(stato, new IllustrationFinished(1, "/illustrazioni/tardivo"));
+
+        Assert.Empty(risultato.Effects);
+    }
+
     [Fact]
     public void UnaPartitaNuovaAzzeraLeIllustrazioni()
     {

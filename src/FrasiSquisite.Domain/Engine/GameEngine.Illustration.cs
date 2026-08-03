@@ -16,7 +16,7 @@ public sealed partial class GameEngine
             return Error(state, e.RequestedBy, "NOT_FINISHED", "La partita non è ancora finita.");
         }
 
-        if (e.RequestedBy != state.HostId)
+        if (state.HostId != e.RequestedBy)
         {
             return Error(state, e.RequestedBy, "NOT_HOST", "Solo chi ospita può chiedere l'illustrazione.");
         }
@@ -45,6 +45,19 @@ public sealed partial class GameEngine
         // esito appartiene a una partita che non c'e' piu'. Nessun errore verso
         // il client: non l'ha chiesto nessun giocatore, e' un evento interno.
         if (state.Phase != RoomPhase.Finished)
+        {
+            return EngineResult.NoChange(state);
+        }
+
+        // Per la rifinitura la fase basta da sola: si esce da Refining al primo
+        // evento processato, quindi un secondo esito e' automaticamente fuori
+        // fase. Qui no: si resta in Finished per sempre e le richieste sono
+        // piu' d'una, concorrenti su indici diversi. Un esito duplicato o
+        // tardivo per un indice che non e' (piu') in attesa va ignorato, non
+        // ribroadcast: altrimenti un doppio evento per la stessa frase
+        // manderebbe a tutta la stanza un pronta/fallita che non riguarda piu'
+        // niente.
+        if (!state.IllustrationsRequested.Contains(e.PhraseIndex))
         {
             return EngineResult.NoChange(state);
         }
