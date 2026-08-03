@@ -69,9 +69,16 @@ public sealed class IllustrationRunner(
         }
     }
 
+    private const string Recinto = "```";
+
     /// <summary>
     /// I modelli incorniciano volentieri la risposta in un blocco markdown o
-    /// fra virgolette. Scartarla per questo sarebbe uno spreco.
+    /// fra virgolette. Scartarla per questo sarebbe uno spreco - ma togliere
+    /// backtick e virgolette dai bordi a prescindere e' altrettanto uno
+    /// sbaglio: una descrizione che finisse per caso con una virgoletta
+    /// isolata verrebbe mutilata. Si toglie quindi un recinto solo se e'
+    /// completo (apre e chiude), e una coppia di virgolette solo se e'
+    /// davvero una coppia (apre E chiude).
     /// </summary>
     private static string? Pulisci(string? risposta)
     {
@@ -80,8 +87,47 @@ public sealed class IllustrationRunner(
             return null;
         }
 
-        var pulita = risposta.Trim().Trim('`').Trim().Trim('"').Trim();
+        var pulita = TogliVirgietteAccoppiate(TogliBloccoRecintato(risposta.Trim()));
 
         return pulita.Length == 0 ? null : pulita;
     }
+
+    /// <summary>
+    /// Toglie un blocco recintato completo (tre backtick, testo, tre
+    /// backtick), non i singoli backtick sparsi. I modelli mettono spesso la
+    /// parola del linguaggio sulla prima riga (es. "```text"): quella riga
+    /// non fa parte del prompt e va tolta insieme al recinto, non lasciata
+    /// incollata al resto.
+    /// </summary>
+    private static string TogliBloccoRecintato(string testo)
+    {
+        if (!testo.StartsWith(Recinto, StringComparison.Ordinal) || !testo.EndsWith(Recinto, StringComparison.Ordinal))
+        {
+            return testo;
+        }
+
+        var interno = testo[Recinto.Length..^Recinto.Length];
+        var finePrimaRiga = interno.IndexOf('\n');
+
+        if (finePrimaRiga >= 0)
+        {
+            var primaRiga = interno[..finePrimaRiga].Trim();
+
+            // Una parola sola (nessuno spazio) sulla prima riga e' il tag del
+            // linguaggio, non contenuto: es. "text" in "```text\n...\n```".
+            if (primaRiga.Length > 0 && !primaRiga.Contains(' '))
+            {
+                interno = interno[(finePrimaRiga + 1)..];
+            }
+        }
+
+        return interno.Trim();
+    }
+
+    /// <summary>
+    /// Toglie le virgolette solo quando aprono E chiudono davvero: una
+    /// virgoletta isolata a un solo bordo non e' una coppia, e' contenuto.
+    /// </summary>
+    private static string TogliVirgietteAccoppiate(string testo) =>
+        testo.Length >= 2 && testo[0] == '"' && testo[^1] == '"' ? testo[1..^1] : testo;
 }

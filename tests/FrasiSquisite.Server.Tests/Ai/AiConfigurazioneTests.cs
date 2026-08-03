@@ -88,4 +88,31 @@ public class AiConfigurazioneTests
 
         Assert.IsType<OpenAiCompatibleImageProvider>(provider);
     }
+
+    /// <summary>
+    /// Il primo passo dell'illustrazione (la traduzione) passa per
+    /// IAiTextProvider, il cui HttpClient qui in Program.cs veniva registrato
+    /// con TimeoutSeconds (10s): il budget pensato per la sola rifinitura.
+    /// IllustrationRunner governa l'intera operazione a due passi con
+    /// ImageTimeoutSeconds (di norma 90s), ma quel token non serve a nulla se
+    /// il trasporto tronca già la prima chiamata a 10s - la traduzione
+    /// fallirebbe in silenzio ogni volta che il modello ci mette più di dieci
+    /// secondi, cosa tutt'altro che rara con un modello di ragionamento. Il
+    /// client va quindi impostato sul più grande dei due limiti, cosicché il
+    /// trasporto resti una rete di sicurezza sotto al token e non un
+    /// collo di bottiglia sopra di esso.
+    /// </summary>
+    [Fact]
+    public void IlClientDelProviderDiTestoUsaIlPiuGrandeDeiDueTimeout()
+    {
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder => builder.UseSetting("Ai:ApiKey", "chiave-di-prova-mai-reale")
+                .UseSetting("Ai:TimeoutSeconds", "5")
+                .UseSetting("Ai:ImageTimeoutSeconds", "20"));
+
+        var httpClientFactory = factory.Services.GetRequiredService<IHttpClientFactory>();
+        var client = httpClientFactory.CreateClient(nameof(IAiTextProvider));
+
+        Assert.Equal(TimeSpan.FromSeconds(20), client.Timeout);
+    }
 }
