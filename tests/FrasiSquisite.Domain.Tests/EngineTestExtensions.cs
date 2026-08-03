@@ -14,10 +14,16 @@ public static class EngineTestExtensions
             .OfType<T>();
 
     public static IEnumerable<object> AllMessages(this EngineResult result) =>
-        result.Effects.Select(e => e switch
+        result.Effects.SelectMany(e => e switch
         {
-            SendToPlayer s => s.Message,
-            BroadcastToRoom b => b.Message,
+            SendToPlayer s => (IEnumerable<object>)[s.Message],
+            BroadcastToRoom b => [b.Message],
+            // RequestRefinement non ha un messaggio per un client: è un
+            // effetto interno fra motore e server, non passa mai per la
+            // connessione (spec §3). Niente da aggiungere qui, ma resta
+            // esplicito - il case di default sotto continua a bloccare gli
+            // effetti davvero non previsti.
+            RequestRefinement => [],
             _ => throw new InvalidOperationException($"Effetto non gestito: {e.GetType().Name}"),
         });
 }

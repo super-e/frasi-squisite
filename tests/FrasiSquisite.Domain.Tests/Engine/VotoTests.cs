@@ -37,6 +37,10 @@ public class VotoTests
             }
         }
 
+        // Dalla fine della scrittura si passa per la rifinitura: nei test del
+        // motore la si conclude senza modifiche, perche' il modello non c'e'.
+        stato = _motore.Handle(stato, new RefinementFinished(null)).State;
+
         for (var i = 0; i < N * K; i++)
         {
             stato = _motore.Handle(stato, new RevealAdvanceRequested(Giocatore(0))).State;
@@ -69,6 +73,10 @@ public class VotoTests
                 stato = _motore.Handle(stato, new SlotSubmitted(Giocatore(g), $"p{round}{g}")).State;
             }
         }
+
+        // Dalla fine della scrittura si passa per la rifinitura: nei test del
+        // motore la si conclude senza modifiche, perche' il modello non c'e'.
+        stato = _motore.Handle(stato, new RefinementFinished(null)).State;
 
         EngineResult ultimo = null!;
         for (var i = 0; i < N * K; i++)
@@ -106,6 +114,10 @@ public class VotoTests
                 stato = _motore.Handle(stato, new SlotSubmitted(Giocatore(g), $"p{round}{g}")).State;
             }
         }
+
+        // Dalla fine della scrittura si passa per la rifinitura: nei test del
+        // motore la si conclude senza modifiche, perche' il modello non c'e'.
+        stato = _motore.Handle(stato, new RefinementFinished(null)).State;
 
         EngineResult ultimo = null!;
         for (var i = 0; i < N * K; i++)
@@ -204,6 +216,10 @@ public class VotoTests
                 stato = _motore.Handle(stato, new SlotSubmitted(Giocatore(g), $"p{round}{g}")).State;
             }
         }
+
+        // Dalla fine della scrittura si passa per la rifinitura: nei test del
+        // motore la si conclude senza modifiche, perche' il modello non c'e'.
+        stato = _motore.Handle(stato, new RefinementFinished(null)).State;
 
         EngineResult ultimoReveal = null!;
         for (var i = 0; i < N * K; i++)
@@ -366,6 +382,10 @@ public class VotoTests
                 stato = _motore.Handle(stato, new SlotSubmitted(Giocatore(g), $"p{round}{g}")).State;
             }
         }
+
+        // Dalla fine della scrittura si passa per la rifinitura: nei test del
+        // motore la si conclude senza modifiche, perche' il modello non c'e'.
+        stato = _motore.Handle(stato, new RefinementFinished(null)).State;
 
         Assert.Equal(RoomPhase.Reveal, stato.Phase);
 

@@ -128,6 +128,10 @@ public class SchemaSelectionTests
             stato = _motore.Handle(stato, new SlotSubmitted(Bruno, $"b{round}")).State;
         }
 
+        // Dalla fine della scrittura si passa per la rifinitura: nei test del
+        // motore la si conclude senza modifiche, perche' il modello non c'e'.
+        stato = _motore.Handle(stato, new RefinementFinished(null)).State;
+
         Assert.Equal(RoomPhase.Reveal, stato.Phase);
         Assert.All(stato.Phrases, f => Assert.Equal(k, f.Slots.Count));
         Assert.All(stato.Phrases, f => Assert.True(f.IsComplete));

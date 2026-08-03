@@ -10,3 +10,12 @@ public abstract record Effect;
 public sealed record SendToPlayer(Guid PlayerId, object Message) : Effect;
 
 public sealed record BroadcastToRoom(object Message) : Effect;
+
+/// <summary>
+/// Chiede che le caselle vengano rifinite. Porta i dati e nient'altro: il
+/// motore non sa se dietro ci sia un modello, un dizionario o niente
+/// (spec §3).
+/// </summary>
+public sealed record RequestRefinement(
+    IReadOnlyList<IReadOnlyList<string>> Frasi,
+    string Template) : Effect;

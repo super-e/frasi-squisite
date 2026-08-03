@@ -102,6 +102,10 @@ public class AbbandonoTests
             }
         }
 
+        // Dalla fine della scrittura si passa per la rifinitura: nei test del
+        // motore la si conclude senza modifiche, perche' il modello non c'e'.
+        stato = _motore.Handle(stato, new RefinementFinished(null)).State;
+
         Assert.Equal(RoomPhase.Reveal, stato.Phase);
         Assert.All(stato.Phrases, f => Assert.True(f.IsComplete));
     }

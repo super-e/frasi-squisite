@@ -45,6 +45,7 @@ public sealed partial class GameEngine(IGameMode mode, IWordPool pool, IRandomSo
         SchemaSelected e => OnSchemaSelected(state, e),
         VoteCast e => OnVoteCast(state, e),
         VotingCloseRequested e => OnVotingCloseRequested(state, e),
+        RefinementFinished e => OnRefinementFinished(state, e),
         _ => EngineResult.NoChange(state),
     };
 
