@@ -68,6 +68,53 @@ public class RefinementGuardTests
         Assert.Equal("a", esito[0]);
     }
 
+    /// <summary>
+    /// Le caselle 5 e 6 del template reale sono precedute da "dicendo: «" e
+    /// "La gente dice: «": il letterale finisce con la virgoletta di
+    /// apertura, che nessun modello scrive mai davanti al proprio testo.
+    /// Senza tagliare anche la punteggiatura in coda al letterale, il
+    /// confronto "come inizia la rifinitura" non scatterebbe mai per queste
+    /// due caselle, e la formula fissa ("La gente dice") potrebbe essere
+    /// ripetuta senza che il controllo se ne accorga.
+    /// </summary>
+    [Fact]
+    public void UnaCasellaCheRipeteLaFormulaDietroLeVirgoletteTornaGrezza()
+    {
+        var grezze = new[] { "a", "b", "c", "d", "e", "f", "si sapeva che finiva così", "h" };
+        var rifinite = new[]
+        {
+            "a", "b", "c", "d", "e", "f", "La gente dice che si sapeva che finiva così", "h",
+        };
+
+        var esito = RefinementGuard.Applica(grezze, rifinite, Template);
+
+        Assert.Equal("si sapeva che finiva così", esito[6]);
+    }
+
+    /// <summary>
+    /// Vero negativo, e il caso piu' insidioso: la rifinitura comincia
+    /// davvero con "La gente", proprio come il letterale del template, ma
+    /// prosegue in modo diverso ("non aveva dubbi" invece di "dice") - non
+    /// e' una ripetizione della formula, e' una coincidenza legittima. Se il
+    /// taglio della punteggiatura in coda erodesse anche l'ultima parola
+    /// vera ("dice"), il letterale si accorcerebbe a "La gente" e questa
+    /// rifinitura verrebbe rifiutata per errore: e' esattamente il modo in
+    /// cui le maglie si allargherebbero troppo.
+    /// </summary>
+    [Fact]
+    public void UnaRifinituraLegittimaDietroLeVirgoletteVieneAccettata()
+    {
+        var grezze = new[] { "a", "b", "c", "d", "e", "f", "si sapeva che finiva così", "h" };
+        var rifinite = new[]
+        {
+            "a", "b", "c", "d", "e", "f", "La gente non aveva dubbi: si sapeva che finiva così", "h",
+        };
+
+        var esito = RefinementGuard.Applica(grezze, rifinite, Template);
+
+        Assert.Equal("La gente non aveva dubbi: si sapeva che finiva così", esito[6]);
+    }
+
     [Fact]
     public void UnNumeroDiCaselleDiversoScartaTuttaLaFrase()
     {

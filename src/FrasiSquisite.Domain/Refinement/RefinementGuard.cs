@@ -78,6 +78,13 @@ public static partial class RefinementGuard
     /// confronto parte dalla prima vera parola, "ed è andata a finire che".
     /// Cosi' ci si accorge che il modello lo sta ripetendo, perche' il
     /// confronto e' su come INIZIA la casella rifinita.
+    ///
+    /// La stessa logica vale in coda: per "dicendo: «{5}»" il testo grezzo
+    /// prima di 5 e' "dicendo: «", ma quella virgoletta di apertura non la
+    /// scrive mai nessun modello (a nessuno si chiede di restituire le
+    /// virgolette). Senza toglierla il confronto "come inizia" non
+    /// scatterebbe mai per questa casella: si taglia anche la punteggiatura
+    /// finale, fermandosi all'ultima vera parola, "dicendo".
     /// </summary>
     private static string[] LetteraliPrecedenti(string template, int caselle)
     {
@@ -99,7 +106,8 @@ public static partial class RefinementGuard
                 ? prima[(precedente + 1)..]
                 : prima;
 
-            esito[i] = PunteggiaturaIniziale().Replace(grezzo.Trim(), string.Empty);
+            var senzaTesta = PunteggiaturaIniziale().Replace(grezzo.Trim(), string.Empty);
+            esito[i] = PunteggiaturaFinale().Replace(senzaTesta, string.Empty);
         }
 
         return esito;
@@ -115,4 +123,14 @@ public static partial class RefinementGuard
     /// </summary>
     [GeneratedRegex(@"^[^\p{L}\p{N}]+")]
     private static partial Regex PunteggiaturaIniziale();
+
+    /// <summary>
+    /// Punteggiatura e spazi in coda a una stringa: quella che introduce il
+    /// segnaposto successivo (i due punti, la virgoletta di apertura) e che
+    /// il modello non ripete mai insieme al resto del testo letterale. Si
+    /// ferma alla prima parola vera incontrata andando a ritroso, quindi non
+    /// puo' mai erodere una parola del template.
+    /// </summary>
+    [GeneratedRegex(@"[^\p{L}\p{N}]+$")]
+    private static partial Regex PunteggiaturaFinale();
 }
