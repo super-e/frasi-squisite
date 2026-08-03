@@ -39,6 +39,17 @@ if (aiOptions.Abilitato)
         c.BaseAddress = new Uri(aiOptions.BaseUrl);
         c.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", aiOptions.ApiKey);
+
+        // Non è un doppione del CancellationTokenSource che RefinementRunner
+        // crea con lo stesso TimeoutSeconds: questo qui limita solo la
+        // richiesta HTTP di OpenAiCompatibleTextProvider, un dettaglio di
+        // QUESTA implementazione. Quello di RefinementRunner e' il limite a
+        // livello di contratto - vale per qualunque IAiTextProvider,
+        // presente o futuro, HTTP o no - ed e' cio' che rende testabile il
+        // timeout (RefinementRunnerTests.OltreIlTimeoutSiRestituisceNull) con
+        // un doppio finto e senza HttpClient. Oggi coincidono perche' la
+        // fonte e' la stessa; se un domani divergessero, entrambi restano
+        // necessari.
         c.Timeout = TimeSpan.FromSeconds(aiOptions.TimeoutSeconds);
     });
 }

@@ -44,6 +44,16 @@ public sealed class RefinementRunner(
         string template,
         CancellationToken ct)
     {
+        // Non e' un doppione del c.Timeout impostato in Program.cs sull'
+        // HttpClient di OpenAiCompatibleTextProvider: quello limita solo la
+        // richiesta HTTP di QUELLA implementazione. Questo qui e' il limite a
+        // livello di contratto sull'intera operazione "IAiTextProvider.
+        // CompletaAsync", valido per qualunque implementazione dietro
+        // l'interfaccia, presente o futura - ed e' cio' che permette di
+        // provare il timeout (vedi OltreIlTimeoutSiRestituisceNull) con un
+        // doppio finto, senza rete. Oggi i due valori coincidono perche'
+        // vengono dalla stessa AiOptions.TimeoutSeconds; se in futuro
+        // divergessero, servirebbero comunque entrambi.
         using var scadenza = CancellationTokenSource.CreateLinkedTokenSource(ct);
         scadenza.CancelAfter(TimeSpan.FromSeconds(_opzioni.TimeoutSeconds));
 
