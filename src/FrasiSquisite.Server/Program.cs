@@ -3,6 +3,7 @@ using FrasiSquisite.Domain.Filling;
 using FrasiSquisite.Domain.Modes;
 using FrasiSquisite.Domain.Randomness;
 using FrasiSquisite.Server.Ai;
+using FrasiSquisite.Server.Images;
 using FrasiSquisite.Server.Realtime;
 using FrasiSquisite.Server.Rooms;
 using FrasiSquisite.Shared.Protocol;
@@ -26,6 +27,7 @@ builder.Services.AddSingleton<IRoomRegistry, RoomRegistry>();
 builder.Services.AddSingleton<GameHost>();
 builder.Services.AddSingleton<RefinementRunner>();
 builder.Services.AddSingleton<IllustrationRunner>();
+builder.Services.AddSingleton<ImageStore>();
 
 builder.Services.Configure<AiOptions>(builder.Configuration.GetSection(AiOptions.Sezione));
 
@@ -96,6 +98,15 @@ else
 var app = builder.Build();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+
+// Non passa da SignalR: un'immagine è un file, e il trasporto del gioco è per
+// messaggi piccoli. L'identificativo nel percorso è l'unica credenziale, il
+// che rende l'indirizzo condivisibile di proposito — chi ce l'ha, vede.
+app.MapGet("/illustrazioni/{id}", (string id, ImageStore deposito) =>
+    deposito.TryGet(id, out var byteImmagine)
+        ? Results.File(byteImmagine, "image/png")
+        : Results.NotFound());
+
 app.MapHub<GameHub>("/hubs/game");
 
 app.Run();
