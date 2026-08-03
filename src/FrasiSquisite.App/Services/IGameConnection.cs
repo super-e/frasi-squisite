@@ -39,6 +39,9 @@ public interface IGameConnection
     /// <summary>Chiude il voto senza aspettare i ritardatari. Solo l'host.</summary>
     Task CloseVotingAsync(string roomCode);
 
+    /// <summary>Solo l'host: il server rifiuta gli altri con NOT_HOST.</summary>
+    Task RequestIllustrationAsync(string roomCode, int phraseIndex);
+
     /// <summary>Riparte subito dalla schermata finale, stessi giocatori e stesso schema (lotto-d-brief.md).</summary>
     Task NewGameAsync(string roomCode);
 

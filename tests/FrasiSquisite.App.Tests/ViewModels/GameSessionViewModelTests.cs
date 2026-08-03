@@ -1508,4 +1508,135 @@ public class GameSessionViewModelTests
         Assert.Equal(ScreenState.Voting, vmVoto.Screen);
         Assert.NotNull(connVoto.MessaggioDuranteInvio);
     }
+
+    // ================= Lotto illustrazione (task-6-brief.md) =================
+
+    /// <summary>
+    /// Punto di partenza dei test dell'illustrazione: stanza nota e classifica
+    /// finale già arrivata, con due righe (indici 0 e 1). <paramref
+    /// name="ioSonoHost"/> decide se il giocatore locale è l'host, da cui
+    /// dipende il pulsante "Illustra" — gemello di <see cref="InVoto"/>.
+    /// </summary>
+    private static (GameSessionViewModel Vm, FakeGameConnection Conn) InFinale(bool ioSonoHost = true)
+    {
+        var (vm, conn) = Crea();
+        vm.RoomCode = "ABCD";
+
+        conn.Emit(new RoomStateMessage(
+            "ABCD",
+            "Lobby",
+            [new PlayerView(Anna, "Anna", ioSonoHost, true, false)],
+            "storia",
+            8));
+
+        conn.Emit(new GameFinishedMessage([
+            new PhraseResultView(0, "Prima frase", ["Anna"], 1, true),
+            new PhraseResultView(1, "Seconda frase", ["Anna"], 0, false),
+        ]));
+
+        return (vm, conn);
+    }
+
+    [Fact]
+    public void SoloLHostVedeIlPulsanteDellIllustrazione()
+    {
+        var (vmHost, _) = InFinale(ioSonoHost: true);
+
+        Assert.All(vmHost.FinalResults, riga => Assert.True(riga.CanRequest));
+
+        var (vmOspite, _) = InFinale(ioSonoHost: false);
+
+        Assert.All(vmOspite.FinalResults, riga => Assert.False(riga.CanRequest));
+    }
+
+    [Fact]
+    public async Task ChiedereLIllustrazioneMettelaRigaInAttesa()
+    {
+        var (vm, conn) = InFinale();
+        var riga = vm.FinalResults[0];
+
+        await vm.RequestIllustrationCommand.ExecuteAsync(riga);
+
+        Assert.Contains("RequestIllustration(ABCD,0)", conn.Calls);
+        Assert.True(riga.IsWaiting);
+        Assert.False(riga.CanRequest);
+    }
+
+    /// <summary>
+    /// L'indirizzo che arriva è relativo: il server non sa sotto quale nome è
+    /// raggiunto (c'è Caddy davanti). Il client lo combina col proprio
+    /// ServerUrl, che è l'unico posto dove quell'informazione esiste davvero.
+    /// </summary>
+    [Fact]
+    public void LIndirizzoRelativoDiventaAssolutoConIlServerUrl()
+    {
+        var (vm, conn) = InFinale();
+
+        conn.Emit(new IllustrationReadyMessage(0, "/illustrazioni/ab12"));
+
+        Assert.Equal("http://test/illustrazioni/ab12", vm.FinalResults[0].ImageUrl);
+    }
+
+    [Fact]
+    public async Task LImmagineProntaTogliLAttesaEMostraIlRiquadro()
+    {
+        var (vm, conn) = InFinale();
+        var riga = vm.FinalResults[0];
+        await vm.RequestIllustrationCommand.ExecuteAsync(riga);
+        Assert.True(riga.IsWaiting);
+
+        conn.Emit(new IllustrationReadyMessage(0, "/illustrazioni/ab12"));
+
+        Assert.False(riga.IsWaiting);
+        Assert.Equal("http://test/illustrazioni/ab12", riga.ImageUrl);
+        Assert.False(riga.CanRequest);
+    }
+
+    /// <summary>
+    /// Senza questo il pulsante resterebbe spento per sempre dopo un guasto e
+    /// l'host non potrebbe riprovare.
+    /// </summary>
+    [Fact]
+    public async Task UnFallimentoRiaccendeIlPulsanteEDiceCosaEAndatoStorto()
+    {
+        var (vm, conn) = InFinale();
+        var riga = vm.FinalResults[0];
+        await vm.RequestIllustrationCommand.ExecuteAsync(riga);
+        Assert.True(riga.IsWaiting);
+
+        conn.Emit(new IllustrationFailedMessage(0, "Generazione fallita, riprova."));
+
+        Assert.False(riga.IsWaiting);
+        Assert.True(riga.CanRequest);
+        Assert.Null(riga.ImageUrl);
+        Assert.Equal("Generazione fallita, riprova.", vm.ErrorText);
+    }
+
+    /// <summary>
+    /// Un messaggio per una frase che non è in classifica non deve far
+    /// esplodere niente: arriva dal server, e il client non lo controlla.
+    /// </summary>
+    [Fact]
+    public void UnMessaggioPerUnaFraseSconosciutaVieneIgnorato()
+    {
+        var (vm, conn) = InFinale();
+
+        conn.Emit(new IllustrationReadyMessage(99, "/illustrazioni/ab12"));
+        conn.Emit(new IllustrationFailedMessage(99, "Generazione fallita."));
+
+        Assert.All(vm.FinalResults, riga => Assert.Null(riga.ImageUrl));
+        Assert.All(vm.FinalResults, riga => Assert.False(riga.IsWaiting));
+    }
+
+    [Fact]
+    public async Task RicominciareUnaPartitaPulisceLeImmagini()
+    {
+        var (vm, conn) = InFinale();
+        conn.Emit(new IllustrationReadyMessage(0, "/illustrazioni/ab12"));
+        Assert.NotEmpty(vm.FinalResults);
+
+        await vm.NewGameCommand.ExecuteAsync(null);
+
+        Assert.Empty(vm.FinalResults);
+    }
 }

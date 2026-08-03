@@ -442,6 +442,22 @@
                                     <Label Text="{Binding VotesLabel}" Style="{StaticResource FootnoteLabel}" />
                                     <Label Text="{Binding AuthorsLabel}" Style="{StaticResource FootnoteLabel}"
                                            IsVisible="{Binding AuthorsLabel, Converter={StaticResource NotEmpty}}" />
+
+                                    <!-- Il pulsante esiste solo per chi ospita: il server
+                                         rifiuterebbe comunque gli altri con NOT_HOST, ma
+                                         mostrarlo a tutti sarebbe una bugia all'utente. -->
+                                    <Button Text="Illustra"
+                                            Command="{Binding Source={RelativeSource AncestorType={x:Type vm:GameSessionViewModel}}, Path=RequestIllustrationCommand}"
+                                            CommandParameter="{Binding .}"
+                                            IsVisible="{Binding CanRequest}" />
+
+                                    <ActivityIndicator IsRunning="{Binding IsWaiting}"
+                                                       IsVisible="{Binding IsWaiting}" />
+
+                                    <Image Source="{Binding ImageUrl}"
+                                           Aspect="AspectFit"
+                                           HeightRequest="240"
+                                           IsVisible="{Binding ImageUrl, Converter={StaticResource NotEmpty}}" />
                                 </VerticalStackLayout>
                             </Border>
                         </DataTemplate>
