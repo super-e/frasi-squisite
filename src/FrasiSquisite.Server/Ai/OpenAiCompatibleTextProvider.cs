@@ -54,11 +54,23 @@ public sealed class OpenAiCompatibleTextProvider(
                 .GetProperty("content")
                 .GetString();
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or KeyNotFoundException or IndexOutOfRangeException)
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or KeyNotFoundException or IndexOutOfRangeException or InvalidOperationException)
         {
             // Rete giu', timeout, o una risposta di forma inattesa: per il
             // gioco sono lo stesso caso, e nessuno di questi deve far cadere
             // una partita.
+            //
+            // InvalidOperationException e' qui perche' JsonElement la lancia
+            // nei casi realistici con un fornitore terzo: indicizzare [0] su
+            // "choices" quando non e' un array (es. "choices": null oppure
+            // "choices": {}, forme plausibili in una risposta d'errore), o
+            // GetString() su un "content" che non e' una stringa (es. un
+            // numero). Verificato a runtime per ogni passo di navigazione del
+            // JSON usato qui sotto: le uniche eccezioni che JsonElement puo'
+            // lanciare su un documento sintatticamente valido sono
+            // KeyNotFoundException (proprieta' assente), IndexOutOfRangeException
+            // (indice fuori range su un array vero) e InvalidOperationException
+            // (tipo sbagliato) — tutte e tre gia' catturate qui.
             logger.LogWarning(ex, "Chiamata al fornitore AI fallita: si prosegue senza rifinitura.");
             return null;
         }
