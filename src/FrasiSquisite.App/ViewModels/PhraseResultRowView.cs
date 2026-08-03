@@ -31,8 +31,18 @@ public sealed partial class PhraseResultRowView(PhraseResultView risultato, bool
     /// <summary>
     /// Il pulsante esiste solo per chi ospita: il server rifiuterebbe comunque
     /// gli altri, ma mostrare un pulsante che dà errore è una bugia.
+    ///
+    /// Osservabile, non fissata alla costruzione: le righe nascono una volta
+    /// sola, all'arrivo di <see cref="FrasiSquisite.Shared.Protocol.GameFinishedMessage"/>,
+    /// che non torna mai. Se nel frattempo l'host si disconnette e il motore
+    /// ne promuove un altro, GameSessionViewModel lo scopre da una
+    /// RoomStateMessage successiva e aggiorna questa proprietà da fuori
+    /// (OnIsHostChanged) - altrimenti il nuovo host resterebbe senza
+    /// pulsante "Illustra" per il resto della partita.
     /// </summary>
-    public bool IsHost { get; } = isHost;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanRequest))]
+    private bool _isHost = isHost;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanRequest))]

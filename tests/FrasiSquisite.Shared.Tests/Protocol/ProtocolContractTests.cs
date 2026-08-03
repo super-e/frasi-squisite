@@ -17,41 +17,54 @@ public class ProtocolContractTests
         Assert.Equal(7, ProtocolVersion.Current);
     }
 
+    // v6 è l'unica versione davvero installata sul campo: l'APK del lotto
+    // precedente, uscito prima che l'illustrazione portasse il protocollo a
+    // v7. Questo caso era rimasto scoperto quando Current è avanzato: la
+    // convenzione del file (allungare la catena a ogni avanzamento, senza
+    // perdere i casi vecchi) impone di aggiungerlo qui, in cima, e di
+    // rinumerare "quante versioni prima" tutti i casi già coperti.
     [Fact]
     public void UnClientDellaVersionePrecedenteNonECompatibile()
+    {
+        Assert.False(ProtocolVersion.IsCompatible(6));
+    }
+
+    // Un client v5 è incompatibile tanto quanto uno v6: il caso non va perso
+    // quando la versione corrente avanza, altrimenti una regressione che
+    // accettasse "solo" v5 passerebbe inosservata.
+    [Fact]
+    public void UnClientDiDueVersioniPrimaNonECompatibile()
     {
         Assert.False(ProtocolVersion.IsCompatible(5));
     }
 
-    // Un client v4 è incompatibile tanto quanto uno v5: il caso non va perso
-    // quando la versione corrente avanza, altrimenti una regressione che
-    // accettasse "solo" v4 passerebbe inosservata.
-    [Fact]
-    public void UnClientDiDueVersioniPrimaNonECompatibile()
-    {
-        Assert.False(ProtocolVersion.IsCompatible(4));
-    }
-
-    // Stessa cautela per v3: la catena di incompatibilità pregresse resta
+    // Stessa cautela per v4: la catena di incompatibilità pregresse resta
     // tutta coperta man mano che la versione corrente avanza (spec del
     // progetto: "i test che asseriscono ProtocolVersion vanno aggiornati...
     // tenendo anche i casi vecchi").
     [Fact]
     public void UnClientDiTreVersioniPrimaNonECompatibile()
     {
+        Assert.False(ProtocolVersion.IsCompatible(4));
+    }
+
+    // E per v3.
+    [Fact]
+    public void UnClientDiQuattroVersioniPrimaNonECompatibile()
+    {
         Assert.False(ProtocolVersion.IsCompatible(3));
     }
 
     // E per v2.
     [Fact]
-    public void UnClientDiQuattroVersioniPrimaNonECompatibile()
+    public void UnClientDiCinqueVersioniPrimaNonECompatibile()
     {
         Assert.False(ProtocolVersion.IsCompatible(2));
     }
 
     // E per v1, la prima versione mai esistita.
     [Fact]
-    public void UnClientDiCinqueVersioniPrimaNonECompatibile()
+    public void UnClientDiSeiVersioniPrimaNonECompatibile()
     {
         Assert.False(ProtocolVersion.IsCompatible(1));
     }

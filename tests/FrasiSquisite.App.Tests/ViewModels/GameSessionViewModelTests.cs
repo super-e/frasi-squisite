@@ -1554,6 +1554,37 @@ public class GameSessionViewModelTests
         Assert.All(vmOspite.FinalResults, riga => Assert.False(riga.CanRequest));
     }
 
+    /// <summary>
+    /// Revisione finale, rilievo 1: le righe di FinalResults nascono una
+    /// volta sola con GameFinishedMessage e non si ricostruiscono mai più.
+    /// Se dopo la classifica l'host originale si disconnette e il motore
+    /// promuove il giocatore locale, la RoomStateMessage che lo annuncia
+    /// arriva DOPO GameFinishedMessage - esattamente l'ordine simulato qui.
+    /// Senza la correzione, IsHost delle righe resta fotografato al momento
+    /// della costruzione (false) e CanRequest pure, anche se
+    /// GameSessionViewModel.IsHost è nel frattempo diventato true.
+    /// </summary>
+    [Fact]
+    public void UnHostPromossoDopoLaClassificaPuoIllustrare()
+    {
+        var (vm, conn) = InFinale(ioSonoHost: false);
+        var riga = vm.FinalResults[0];
+        Assert.False(riga.CanRequest);
+
+        // L'host originale si disconnette, il motore promuove il giocatore
+        // locale (Anna) e trasmette il nuovo stato della stanza - dopo la
+        // classifica finale, non prima.
+        conn.Emit(new RoomStateMessage(
+            "ABCD",
+            "Lobby",
+            [new PlayerView(Anna, "Anna", true, true, false)],
+            "storia",
+            8));
+
+        Assert.True(vm.IsHost);
+        Assert.True(riga.CanRequest);
+    }
+
     [Fact]
     public async Task ChiedereLIllustrazioneMettelaRigaInAttesa()
     {
@@ -1621,6 +1652,27 @@ public class GameSessionViewModelTests
         Assert.True(riga.CanRequest);
         Assert.Null(riga.ImageUrl);
         Assert.Equal("Generazione fallita, riprova.", vm.ErrorText);
+    }
+
+    /// <summary>
+    /// Revisione finale, rilievo 2: il fallimento va in broadcast a tutta la
+    /// stanza (il server non sa chi ha premuto il pulsante), ma sui client
+    /// che non hanno chiesto niente il messaggio non significa nulla - non
+    /// possono nemmeno riprovare. Qui nessuno ha eseguito
+    /// RequestIllustrationCommand, quindi IsWaiting della riga è già false:
+    /// il fallimento deve spegnere l'attesa (comunque, innocuamente) ma non
+    /// scrivere il banner d'errore.
+    /// </summary>
+    [Fact]
+    public void UnFallimentoPerUnaRigaMaiRichiestaSuQuestoClientNonMostraIlBanner()
+    {
+        var (vm, conn) = InFinale();
+
+        conn.Emit(new IllustrationFailedMessage(1, "Generazione fallita, riprova."));
+
+        Assert.Equal(string.Empty, vm.ErrorText);
+        Assert.False(vm.FinalResults[0].IsWaiting);
+        Assert.True(vm.FinalResults[0].CanRequest);
     }
 
     /// <summary>

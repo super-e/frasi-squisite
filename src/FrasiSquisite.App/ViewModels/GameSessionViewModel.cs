@@ -789,6 +789,17 @@ public partial class GameSessionViewModel : ObservableObject
                 break;
 
             case IllustrationFailedMessage fallita:
+                // Il fallimento va in broadcast a tutta la stanza (il server
+                // non sa chi ha premuto il pulsante), ma il banner deve
+                // parlare solo a chi ha davvero chiesto l'illustrazione: gli
+                // altri client non hanno niente da riprovare, e un errore per
+                // qualcosa che non hanno chiesto non significa nulla sui loro
+                // schermi. IsWaiting su QUESTO client è vero solo per chi ha
+                // premuto il pulsante - RequestIllustrationAsync lo accende
+                // prima dell'await - quindi va letto PRIMA di spegnerlo qui
+                // sotto, che invece resta per tutti: è lo spegnimento
+                // dell'attesa a dover valere ovunque, non il messaggio.
+                //
                 // ErrorText va scritto solo se la riga esiste ancora: un
                 // fallimento tardivo (partita già ricominciata, FinalResults
                 // svuotata da PulisciStatoDiPartitaConclusa) non ha più niente
@@ -797,8 +808,13 @@ public partial class GameSessionViewModel : ObservableObject
                 // spieghi, perché la classifica a cui apparteneva è sparita.
                 if (RigaDiFrase(fallita.PhraseIndex) is { } rigaFallita)
                 {
+                    var questoClientAvevaChiesto = rigaFallita.IsWaiting;
                     rigaFallita.IsWaiting = false;
-                    ErrorText = fallita.Message;
+
+                    if (questoClientAvevaChiesto)
+                    {
+                        ErrorText = fallita.Message;
+                    }
                 }
 
                 break;
@@ -849,6 +865,18 @@ public partial class GameSessionViewModel : ObservableObject
         OnPropertyChanged(nameof(CanChangeSchema));
         OnPropertyChanged(nameof(ShowFinishedActions));
         OnPropertyChanged(nameof(ShowCloseVoting));
+
+        // Le righe di FinalResults, a differenza di Players, non si
+        // ricostruiscono a ogni RoomStateMessage: nascono una volta sola con
+        // GameFinishedMessage, che non torna. Se l'host si disconnette e il
+        // motore promuove un altro giocatore, questo è l'unico punto in cui
+        // la promozione può ancora raggiungere righe già esistenti - senza,
+        // il nuovo host vedrebbe "Nuova partita" e "Torna alla lobby" (che
+        // dipendono da IsHost qui sopra) ma nessun pulsante "Illustra".
+        foreach (var riga in FinalResults)
+        {
+            riga.IsHost = value;
+        }
     }
 
     partial void OnScreenChanged(ScreenState value)

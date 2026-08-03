@@ -51,9 +51,14 @@ public sealed class RefinementRunner(
         // CompletaAsync", valido per qualunque implementazione dietro
         // l'interfaccia, presente o futura - ed e' cio' che permette di
         // provare il timeout (vedi OltreIlTimeoutSiRestituisceNull) con un
-        // doppio finto, senza rete. Oggi i due valori coincidono perche'
-        // vengono dalla stessa AiOptions.TimeoutSeconds; se in futuro
-        // divergessero, servirebbero comunque entrambi.
+        // doppio finto, senza rete. I due valori NON coincidono piu': quello
+        // HttpClient e' impostato al piu' grande fra TimeoutSeconds e
+        // ImageTimeoutSeconds (oggi 90s, perche' lo stesso client serve anche
+        // il primo passo dell'illustrazione), mentre qui restano i
+        // TimeoutSeconds veri e propri (10s). E' comunque corretto: il
+        // trasporto e' solo una rete di sicurezza piu' larga, il limite
+        // effettivo della rifinitura lo impone sempre questo token, non
+        // quello.
         using var scadenza = CancellationTokenSource.CreateLinkedTokenSource(ct);
         scadenza.CancelAfter(TimeSpan.FromSeconds(_opzioni.TimeoutSeconds));
 
