@@ -22,6 +22,18 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
 
+      # La chiave del modello NON sta qui: arriva dal file .env accanto a
+      # questo compose, che non e' in git. Docker Compose lo legge da solo.
+      #
+      # Il doppio trattino basso non e' un refuso: e' il separatore di
+      # sezione che .NET usa nelle variabili d'ambiente, dove i due punti
+      # non sono ammessi ovunque. Diventa la sezione "Ai", chiave "ApiKey".
+      #
+      # Il ":-" fa si' che senza .env la variabile resti vuota e l'AI resti
+      # spenta, invece di far fallire l'avvio: e' il degrado applicato anche
+      # al deployment. Senza chiave il gioco resta interamente giocabile.
+      Ai__ApiKey: ${AI_API_KEY:-}
+
     # Nessun volume, di proposito: il server tiene le stanze in memoria e
     # non scrive niente su disco. Un riavvio interrompe le partite in corso,
     # che e' esattamente il comportamento di oggi anche fuori da Docker
