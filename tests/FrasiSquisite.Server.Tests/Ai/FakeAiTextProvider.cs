@@ -14,6 +14,16 @@ public sealed class FakeAiTextProvider : IAiTextProvider
     /// <summary>Se impostato, la chiamata attende questo prima di rispondere.</summary>
     public TimeSpan Ritardo { get; set; } = TimeSpan.Zero;
 
+    /// <summary>
+    /// Se impostata, la prossima chiamata la lancia invece di rispondere (e si
+    /// azzera da sola): simula un guasto del modello - rete giù, errore HTTP,
+    /// risposta malformata a livello di trasporto - senza dover implementare un
+    /// vero client HTTP solo per provare che chi chiama regga il fallimento
+    /// (stesso schema di <c>FakeGameConnection.NextFailure</c> nei test
+    /// dell'app).
+    /// </summary>
+    public Exception? ProssimoErrore { get; set; }
+
     public int Chiamate { get; private set; }
 
     public string? UltimoSistema { get; private set; }
@@ -25,6 +35,12 @@ public sealed class FakeAiTextProvider : IAiTextProvider
         Chiamate++;
         UltimoSistema = sistema;
         UltimoUtente = utente;
+
+        if (ProssimoErrore is { } errore)
+        {
+            ProssimoErrore = null;
+            throw errore;
+        }
 
         if (Ritardo > TimeSpan.Zero)
         {
