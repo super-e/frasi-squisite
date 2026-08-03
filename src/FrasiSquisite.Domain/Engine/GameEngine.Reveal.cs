@@ -69,8 +69,16 @@ public sealed partial class GameEngine
             .Select(r => new PhraseResultView(
                 r.PhraseIndex,
                 frasi[r.PhraseIndex],
+                // Chi ha scritto la frase, non chi ha riempito ogni casella:
+                // con otto caselle e due giocatori l'elenco per casella
+                // ripeteva ogni nome quattro volte, e l'ordine posizionale
+                // diceva pure quale casella fosse di chi — che il voto cieco
+                // non prevede di rivelare. La deduplica e' sull'identita' e
+                // non sul nome: due omonimi restano due persone.
                 [.. state.Phrases[r.PhraseIndex].Slots
-                    .Select(s => state.FindPlayer(s!.AuthorId)?.Nickname ?? "?")],
+                    .Select(s => s!.AuthorId)
+                    .Distinct()
+                    .Select(id => state.FindPlayer(id)?.Nickname ?? "?")],
                 r.Votes,
                 r.IsWinner))];
     }

@@ -77,6 +77,10 @@ public sealed record VoteProgressMessage(int Voted, int Total);
 /// non calcola, come per <see cref="SchemaView"/> e <see cref="PlayerView"/>.
 /// <paramref name="IsWinner"/> è falso su tutte le righe quando nessuno ha
 /// votato — "nessuna vincitrice" e "tutte a pari merito" sono cose diverse.
+/// <paramref name="Authors"/> è l'insieme delle persone che hanno contribuito
+/// alla frase, ciascuna una volta sola e nell'ordine in cui hanno scritto la
+/// prima casella: non un autore per casella, che con più caselle che giocatori
+/// ripeterebbe gli stessi nomi e direbbe quale casella è di chi.
 /// </summary>
 public sealed record PhraseResultView(
     int PhraseIndex,
