@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using FrasiSquisite.Domain.Model;
+using FrasiSquisite.Server.Ai;
 using FrasiSquisite.Server.Rooms;
 using FrasiSquisite.Shared.Protocol;
 using FrasiSquisite.Shared.Schemas;
@@ -630,6 +631,14 @@ public sealed class GameHubTests : IAsyncLifetime
     {
         await using var anna = await ConnettiAsync();
         await using var bruno = await ConnettiAsync();
+
+        // Il requisito §8.5 del design generale: "il gioco e' interamente
+        // giocabile senza AI", verificato e non sperato. Questo test gioca una
+        // partita intera dalla lobby alla classifica, e l'asserzione qui dice
+        // a quali condizioni: senza modello. Senza questa riga la garanzia
+        // riposerebbe sul fatto che nessuno abbia configurato una chiave nei
+        // test — cioe' su un caso, non su una scelta.
+        Assert.IsType<DisabledAiTextProvider>(_factory.Services.GetRequiredService<IAiTextProvider>());
 
         var annaId = Guid.NewGuid();
         var brunoId = Guid.NewGuid();

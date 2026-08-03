@@ -55,8 +55,8 @@ public class GameHostTests
         // Le dipendenze restano nulle di proposito: il costruttore primario non
         // le valida e il test non chiama nulla che le usi, gli serve solo che
         // gli inizializzatori di campo girino.
-        var uno = new GameHost(null!, null!, null!, null!);
-        var due = new GameHost(null!, null!, null!, null!);
+        var uno = new GameHost(null!, null!, null!, null!, null!);
+        var due = new GameHost(null!, null!, null!, null!, null!);
 
         Assert.NotNull(campo.GetValue(uno));
         Assert.NotNull(campo.GetValue(due));
