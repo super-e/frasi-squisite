@@ -333,6 +333,16 @@
                 </Label>
             </VerticalStackLayout>
 
+            <!-- ================= Rifinitura ================= -->
+            <VerticalStackLayout Spacing="20" IsVisible="{Binding Screen, Converter={StaticResource IsScreen}, ConverterParameter=Refining}">
+                <Label Text="Il cadavere si ricompone…" Style="{StaticResource H2Label}"
+                       HorizontalOptions="Center" HorizontalTextAlignment="Center" />
+                <ActivityIndicator IsRunning="True" HorizontalOptions="Center" />
+                <Label Style="{StaticResource FootnoteLabel}" HorizontalOptions="Center"
+                       HorizontalTextAlignment="Center"
+                       Text="Stiamo rimettendo a posto le preposizioni. Le parole restano vostre." />
+            </VerticalStackLayout>
+
             <!-- ================= Reveal ================= -->
             <VerticalStackLayout Spacing="20" IsVisible="{Binding Screen, Converter={StaticResource IsScreen}, ConverterParameter=Reveal}">
 

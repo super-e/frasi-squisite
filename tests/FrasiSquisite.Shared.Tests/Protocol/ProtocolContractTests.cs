@@ -6,45 +6,52 @@ namespace FrasiSquisite.Shared.Tests.Protocol;
 
 public class ProtocolContractTests
 {
-    // Il voto cieco (Task 3) porta il protocollo a v5: RevealStepMessage perde
-    // Authors e GameFinishedMessage guadagna la classifica. Un client v4
-    // resterebbe bloccato a mostrare autori che il server non manda più,
-    // quindi anche qui il rifiuto esplicito ("aggiorna l'app") è il
-    // comportamento giusto, non un effetto collaterale da tollerare.
+    // La rifinitura via IA (AI Task 6) porta il protocollo a v6: la fase
+    // "Refining" arriva dentro RoomStateMessage.Phase e un client v5 non
+    // saprebbe cosa farne, restando fermo su una schermata sbagliata invece
+    // di mostrare l'attesa. Anche qui il rifiuto esplicito ("aggiorna l'app")
+    // è il comportamento giusto.
     [Fact]
-    public void LaVersioneDiProtocolloDelVotoCiecoE5()
+    public void LaVersioneDiProtocolloDellaRifinituraE6()
     {
-        Assert.Equal(5, ProtocolVersion.Current);
+        Assert.Equal(6, ProtocolVersion.Current);
     }
 
     [Fact]
     public void UnClientDellaVersionePrecedenteNonECompatibile()
     {
-        Assert.False(ProtocolVersion.IsCompatible(4));
+        Assert.False(ProtocolVersion.IsCompatible(5));
     }
 
-    // Un client v3 è incompatibile tanto quanto uno v4: il caso non va perso
+    // Un client v4 è incompatibile tanto quanto uno v5: il caso non va perso
     // quando la versione corrente avanza, altrimenti una regressione che
-    // accettasse "solo" v3 passerebbe inosservata.
+    // accettasse "solo" v4 passerebbe inosservata.
     [Fact]
     public void UnClientDiDueVersioniPrimaNonECompatibile()
     {
-        Assert.False(ProtocolVersion.IsCompatible(3));
+        Assert.False(ProtocolVersion.IsCompatible(4));
     }
 
-    // Stessa cautela per v2: la catena di incompatibilità pregresse resta
+    // Stessa cautela per v3: la catena di incompatibilità pregresse resta
     // tutta coperta man mano che la versione corrente avanza (spec del
     // progetto: "i test che asseriscono ProtocolVersion vanno aggiornati...
     // tenendo anche i casi vecchi").
     [Fact]
     public void UnClientDiTreVersioniPrimaNonECompatibile()
     {
+        Assert.False(ProtocolVersion.IsCompatible(3));
+    }
+
+    // E per v2.
+    [Fact]
+    public void UnClientDiQuattroVersioniPrimaNonECompatibile()
+    {
         Assert.False(ProtocolVersion.IsCompatible(2));
     }
 
     // E per v1, la prima versione mai esistita.
     [Fact]
-    public void UnClientDiQuattroVersioniPrimaNonECompatibile()
+    public void UnClientDiCinqueVersioniPrimaNonECompatibile()
     {
         Assert.False(ProtocolVersion.IsCompatible(1));
     }

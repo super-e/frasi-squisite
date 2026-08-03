@@ -118,6 +118,40 @@ public class GameSessionViewModelTests
         Assert.Equal(atteso, vm.Screen);
     }
 
+    /// <summary>
+    /// Eccezione consapevole alla regola stabilita col voto: "Writing" e
+    /// "Voting" NON si mappano, perche' uno stato di stanza che arriva a
+    /// partita in corso strapperebbe dalla schermata d'attesa chi ha gia'
+    /// inviato o gia' votato. Qui e' l'opposto: durante la rifinitura nessuno
+    /// ha niente da fare e tutti devono andare sulla schermata di passaggio.
+    /// </summary>
+    [Fact]
+    public void LoStatoDiStanzaInRifinituraPortaTuttiSullaSchermataDiAttesa()
+    {
+        var (vm, conn) = Crea();
+
+        conn.Emit(new RoomStateMessage(
+            "ABCD",
+            "Refining",
+            [new PlayerView(Anna, "Anna", true, true, false)],
+            "storia",
+            8));
+
+        Assert.Equal(ScreenState.Refining, vm.Screen);
+    }
+
+    [Fact]
+    public void DallaRifinituraSiEsceQuandoArrivaIlPrimoPassoDiReveal()
+    {
+        var (vm, conn) = Crea();
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Refining", [new PlayerView(Anna, "Anna", true, true, false)], "storia", 8));
+
+        conn.Emit(new RevealStepMessage(0, 2, [], false));
+
+        Assert.Equal(ScreenState.Reveal, vm.Screen);
+    }
+
     [Fact]
     public void RicevereUnaRichiestaDiCasellaPortaInScritturaEMostraIlRuolo()
     {

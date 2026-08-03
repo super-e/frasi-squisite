@@ -15,6 +15,7 @@ public enum ScreenState
     Lobby,
     Writing,
     Waiting,
+    Refining,
     Reveal,
     Voting,
     Finished,
@@ -671,6 +672,14 @@ public partial class GameSessionViewModel : ObservableObject
                 else if (stato.Phase == "Reveal")
                 {
                     Screen = ScreenState.Reveal;
+                }
+                // "Refining" SI mappa, a differenza di "Writing" e "Voting":
+                // durante la rifinitura nessuno ha niente da fare e tutti
+                // devono andare sulla schermata di passaggio, quindi qui la
+                // mappatura e' esattamente cio' che serve.
+                else if (stato.Phase == "Refining")
+                {
+                    Screen = ScreenState.Refining;
                 }
 
                 break;
