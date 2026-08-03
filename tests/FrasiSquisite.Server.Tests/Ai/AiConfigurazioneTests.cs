@@ -64,38 +64,28 @@ public class AiConfigurazioneTests
     /// Con una chiave in configurazione, il container deve risolvere
     /// l'implementazione vera e non quella spenta.
     ///
-    /// La chiave passa per una variabile d'ambiente e non per
-    /// <c>WithWebHostBuilder(..).ConfigureAppConfiguration(..)</c>: in
-    /// <c>Program.cs</c> la scelta del provider viene decisa leggendo
-    /// <c>builder.Configuration</c> PRIMA di <c>builder.Build()</c>, mentre le
-    /// configurazioni aggiunte da <c>WithWebHostBuilder</c> vengono applicate
-    /// solo durante <c>Build()</c> stesso — troppo tardi, e infatti con
-    /// quell'approccio il test risolveva ancora <see cref="DisabledAiImageProvider"/>.
-    /// Le variabili d'ambiente, invece, fanno parte della configurazione fin
-    /// da <c>WebApplication.CreateBuilder(args)</c>, quindi sono già presenti
-    /// quando <c>Program.cs</c> legge <c>aiOptions.Abilitato</c>.
+    /// La chiave passa per <c>IWebHostBuilder.UseSetting</c> e non per una
+    /// variabile d'ambiente di processo: in <c>Program.cs</c> la scelta del
+    /// provider viene decisa leggendo <c>builder.Configuration</c> PRIMA di
+    /// <c>builder.Build()</c>, mentre le configurazioni aggiunte da
+    /// <c>WithWebHostBuilder(..).ConfigureAppConfiguration(..)</c> vengono
+    /// applicate solo durante <c>Build()</c> stesso — troppo tardi, e infatti
+    /// con quell'approccio il test risolveva ancora
+    /// <see cref="DisabledAiImageProvider"/>. <c>UseSetting</c> scrive invece
+    /// nella configurazione dell'host, disponibile già prima di
+    /// <c>Build()</c>, senza toccare l'ambiente del processo: l'effetto resta
+    /// confinato a questa singola <see cref="WebApplicationFactory{Program}"/>
+    /// e nessun altro test (es. la garanzia "senza modello" in
+    /// GameHubTests, che gira in parallelo su un'altra classe) può vederlo.
     /// </summary>
     [Fact]
     public void ConLaChiaveIlContainerRisolveOpenAiCompatibleImageProvider()
     {
-        const string chiave = "Ai__ApiKey";
-        var precedente = Environment.GetEnvironmentVariable(chiave);
-        try
-        {
-            Environment.SetEnvironmentVariable(chiave, "chiave-di-prova-mai-reale");
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder => builder.UseSetting("Ai:ApiKey", "chiave-di-prova-mai-reale"));
 
-            using var factory = new WebApplicationFactory<Program>();
-            var provider = factory.Services.GetRequiredService<IAiImageProvider>();
+        var provider = factory.Services.GetRequiredService<IAiImageProvider>();
 
-            Assert.IsType<OpenAiCompatibleImageProvider>(provider);
-        }
-        finally
-        {
-            // La variabile è di processo: va tolta subito, altrimenti
-            // "accenderebbe" l'AI anche per gli altri test che condividono lo
-            // stesso processo di test (es. la garanzia "senza modello" in
-            // GameHubTests).
-            Environment.SetEnvironmentVariable(chiave, precedente);
-        }
+        Assert.IsType<OpenAiCompatibleImageProvider>(provider);
     }
 }
