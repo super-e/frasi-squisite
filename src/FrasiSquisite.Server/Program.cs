@@ -56,8 +56,14 @@ if (aiOptions.Abilitato)
     builder.Services.AddHttpClient<IAiImageProvider, OpenAiCompatibleImageProvider>(c =>
     {
         c.BaseAddress = new Uri(aiOptions.BaseUrl);
-        c.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", aiOptions.ApiKey);
+
+        // Niente Authorization qui, apposta: questo client serve solo la
+        // generazione (vedi OpenAiCompatibleImageProvider, che aggiunge la
+        // chiave esplicitamente su quella richiesta). Il download va da un
+        // indirizzo scelto dal fornitore, non da noi, e usa un HttpClient
+        // separato proprio per non ereditare mai questo header — se un
+        // domani qualcuno lo rimettesse qui "per semplificare", la chiave
+        // tornerebbe a seguire il download verso qualunque host.
 
         // Non TimeoutSeconds: quello è il limite della rifinitura, dieci
         // secondi, e generare un'immagine ne richiede molti di più.
