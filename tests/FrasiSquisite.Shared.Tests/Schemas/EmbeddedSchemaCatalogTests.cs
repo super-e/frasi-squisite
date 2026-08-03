@@ -74,10 +74,9 @@ public class EmbeddedSchemaCatalogTests
         Assert.Equal(
             "Un pinguino in doppiopetto insieme al suo commercialista " +
             "nella sala d'attesa di un dentista monta una libreria svedese, " +
-            "perché gliel'ha detto l'oroscopo. " +
-            "Ultime parole: «Non è colpa mia, io ho solo firmato». " +
-            "Il pubblico: «Si sapeva che finiva così». " +
-            "Alla fine sono finiti tutti al telegiornale.",
+            "perché gliel'ha detto l'oroscopo, dicendo: «Non è colpa mia, io ho solo firmato». " +
+            "La gente dice: «Si sapeva che finiva così», " +
+            "ed è andata a finire che sono finiti tutti al telegiornale.",
             frase);
     }
 
