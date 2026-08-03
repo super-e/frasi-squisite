@@ -2,6 +2,7 @@ using FrasiSquisite.Domain.Engine;
 using FrasiSquisite.Domain.Filling;
 using FrasiSquisite.Domain.Modes;
 using FrasiSquisite.Domain.Randomness;
+using FrasiSquisite.Server.Ai;
 using FrasiSquisite.Server.Realtime;
 using FrasiSquisite.Server.Rooms;
 using FrasiSquisite.Shared.Protocol;
@@ -23,6 +24,27 @@ builder.Services.AddSingleton<IGameEngine, GameEngine>();
 builder.Services.AddSingleton<RoomCodeGenerator>();
 builder.Services.AddSingleton<IRoomRegistry, RoomRegistry>();
 builder.Services.AddSingleton<GameHost>();
+
+builder.Services.Configure<AiOptions>(builder.Configuration.GetSection(AiOptions.Sezione));
+
+// Quale implementazione registrare e' L'UNICO punto in cui si decide se l'AI
+// e' accesa. Da qui in poi nessun altro file conosce quella distinzione.
+var aiOptions = builder.Configuration.GetSection(AiOptions.Sezione).Get<AiOptions>() ?? new AiOptions();
+
+if (aiOptions.Abilitato)
+{
+    builder.Services.AddHttpClient<IAiTextProvider, OpenAiCompatibleTextProvider>(c =>
+    {
+        c.BaseAddress = new Uri(aiOptions.BaseUrl);
+        c.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", aiOptions.ApiKey);
+        c.Timeout = TimeSpan.FromSeconds(aiOptions.TimeoutSeconds);
+    });
+}
+else
+{
+    builder.Services.AddSingleton<IAiTextProvider, DisabledAiTextProvider>();
+}
 
 var app = builder.Build();
 
