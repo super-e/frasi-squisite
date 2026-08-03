@@ -3,6 +3,7 @@ using System.Text.Json;
 using FrasiSquisite.Domain.Model;
 using FrasiSquisite.Server.Ai;
 using FrasiSquisite.Server.Rooms;
+using FrasiSquisite.Server.Tests.Ai;
 using FrasiSquisite.Shared.Protocol;
 using FrasiSquisite.Shared.Schemas;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -767,5 +768,49 @@ public sealed class GameHubTests : IAsyncLifetime
         await bruno.WaitFor<ErrorMessage>(TimeSpan.FromSeconds(5));
         Assert.Equal("NOT_HOST", bruno.Last<ErrorMessage>().Code);
         Assert.Equal(0, anna.CountOf<GameFinishedMessage>());
+    }
+
+    /// <summary>
+    /// Partita fino alla classifica, l'host chiede l'illustrazione di una
+    /// frase e riceve l'esito pronto (AI Task 5). Un provider finto è
+    /// registrato al posto di quello disattivato di default nei test, così
+    /// la generazione va a buon fine invece di fallire per assenza di
+    /// configurazione: qui si prova la cucitura GameHub -> GameHost ->
+    /// IllustrationRunner -> ImageStore, non il motore (già coperto da
+    /// IllustrazioneTests in FrasiSquisite.Domain.Tests) né il runner (già
+    /// coperto da IllustrationRunnerTests).
+    /// </summary>
+    [Fact]
+    public async Task LHostChiedeLIllustrazioneEArrivaLImmaginePronta()
+    {
+        var testoFinto = new FakeAiTextProvider("a penguin in a pinstripe suit");
+        var immagineFinta = new FakeAiImageProvider { Risposta = [1, 2, 3, 4] };
+
+        await using var factory = _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
+            {
+                services.AddSingleton<IAiTextProvider>(testoFinto);
+                services.AddSingleton<IAiImageProvider>(immagineFinta);
+            }));
+
+        await using var anna = await ConnettiAsync(factory);
+        await using var bruno = await ConnettiAsync(factory);
+
+        var codice = await anna.Connection.InvokeAsync<string>(
+            "CreateRoom", new CreateRoomRequest(ProtocolVersion.Current, Guid.NewGuid(), "Anna"));
+
+        await bruno.Connection.InvokeAsync(
+            "JoinRoom", new JoinRoomRequest(ProtocolVersion.Current, Guid.NewGuid(), "Bruno", codice));
+        await bruno.WaitFor<RoomStateMessage>(TimeSpan.FromSeconds(5));
+
+        await GiocaFinoAllaFineAsync(anna, bruno, codice);
+
+        await anna.Connection.InvokeAsync("RequestIllustration", new RequestIllustrationRequest(codice, 0));
+
+        await anna.WaitFor<IllustrationReadyMessage>(TimeSpan.FromSeconds(5));
+
+        var pronta = anna.Last<IllustrationReadyMessage>();
+        Assert.Equal(0, pronta.PhraseIndex);
+        Assert.False(string.IsNullOrWhiteSpace(pronta.Path));
     }
 }

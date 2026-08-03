@@ -24,6 +24,9 @@ public static class EngineTestExtensions
             // esplicito - il case di default sotto continua a bloccare gli
             // effetti davvero non previsti.
             RequestRefinement => [],
+            // Stessa ragione di RequestRefinement: RequestIllustration è un
+            // effetto interno fra motore e server (spec §5), niente client.
+            RequestIllustration => [],
             _ => throw new InvalidOperationException($"Effetto non gestito: {e.GetType().Name}"),
         });
 }
