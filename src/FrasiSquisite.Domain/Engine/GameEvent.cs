@@ -62,3 +62,10 @@ public sealed record VoteCast(Guid PlayerId, int PhraseIndex) : GameEvent;
 /// telefono bloccherebbe la partita a tempo indefinito (spec §1).
 /// </summary>
 public sealed record VotingCloseRequested(Guid RequestedBy) : GameEvent;
+
+/// <summary>
+/// L'esito della rifinitura. <paramref name="Frasi"/> nullo significa che non
+/// e' arrivata: rete giu', timeout, chiave assente. Il motore tratta i due
+/// casi allo stesso modo — prosegue — quindi non servono due eventi.
+/// </summary>
+public sealed record RefinementFinished(IReadOnlyList<IReadOnlyList<string>>? Frasi) : GameEvent;

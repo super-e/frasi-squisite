@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using FrasiSquisite.Domain.Engine;
+using FrasiSquisite.Server.Ai;
 using FrasiSquisite.Server.Rooms;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
@@ -15,6 +16,7 @@ public sealed class GameHost(
     IGameEngine engine,
     IRoomRegistry rooms,
     IHubContext<GameHub> hub,
+    RefinementRunner runner,
     ILogger<GameHost> logger)
 {
     /// <summary>
@@ -90,8 +92,55 @@ public sealed class GameHost(
         SendToPlayer s => hub.Clients.Group(PlayerGroup(s.PlayerId))
             .SendAsync("ReceiveMessage", s.Message.GetType().Name, s.Message, ct),
 
+        // NON si attende, ed e' deliberato. DispatchAsync tiene il lucchetto
+        // della stanza per tutta l'esecuzione degli effetti: aspettare qui
+        // terrebbe fuori ogni altro evento per tutta la durata della chiamata
+        // al modello, e - peggio - il risultato deve rientrare come EVENTO,
+        // cioe' con un'altra DispatchAsync sulla stessa stanza, che
+        // aspetterebbe quello stesso lucchetto. Stallo.
+        RequestRefinement r => AvviaRifinitura(roomCode, r),
+
         _ => throw new InvalidOperationException($"Effetto non gestito: {effetto.GetType().Name}"),
     };
+
+    /// <summary>
+    /// Avvia la rifinitura in sottofondo e ritorna subito. Il risultato
+    /// rientra come evento, quando il lucchetto della stanza e' gia' stato
+    /// rilasciato.
+    /// </summary>
+    private Task AvviaRifinitura(string roomCode, RequestRefinement richiesta)
+    {
+        _ = Task.Run(async () =>
+        {
+            IReadOnlyList<IReadOnlyList<string>>? rifinite = null;
+
+            try
+            {
+                rifinite = await runner.RifinisciAsync(richiesta.Frasi, richiesta.Template, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                // Il runner non dovrebbe lanciare, ma questo e' un task
+                // slegato: un'eccezione non osservata qui lascerebbe la
+                // stanza in Refining per sempre, e nessuno lo saprebbe.
+                logger.LogError(ex, "Rifinitura fallita per la stanza {RoomCode}.", roomCode);
+            }
+
+            try
+            {
+                await DispatchAsync(roomCode, new RefinementFinished(rifinite));
+            }
+            catch (Exception ex)
+            {
+                // La stanza puo' essere sparita nel frattempo (riavvio, o
+                // tutti usciti): non c'e' piu' nessuno a cui importi, ma
+                // resta l'unica traccia osservabile.
+                logger.LogWarning(ex, "Esito della rifinitura non consegnabile alla stanza {RoomCode}.", roomCode);
+            }
+        });
+
+        return Task.CompletedTask;
+    }
 
     public static string PlayerGroup(Guid playerId) => $"player:{playerId}";
 }

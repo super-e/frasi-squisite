@@ -41,6 +41,10 @@ public class BotTests
             stato = _motore.Handle(stato, new SlotSubmitted(Giocatore(0), $"umano{round}")).State;
         }
 
+        // Dalla fine della scrittura si passa per la rifinitura: nei test del
+        // motore la si conclude senza modifiche, perche' il modello non c'e'.
+        stato = _motore.Handle(stato, new RefinementFinished(null)).State;
+
         Assert.Equal(RoomPhase.Reveal, stato.Phase);
         Assert.All(stato.Phrases, f => Assert.True(f.IsComplete));
     }
@@ -71,6 +75,10 @@ public class BotTests
             stato = _motore.Handle(stato, new SlotSubmitted(Giocatore(0), $"p1r{round}")).State;
         }
 
+        // Dalla fine della scrittura si passa per la rifinitura: nei test del
+        // motore la si conclude senza modifiche, perche' il modello non c'e'.
+        stato = _motore.Handle(stato, new RefinementFinished(null)).State;
+
         // Come nel test sopra: se il bot non avesse riempito la propria
         // casella a ogni round, la fase sarebbe rimasta Writing per sempre.
         Assert.Equal(RoomPhase.Reveal, stato.Phase);
@@ -95,6 +103,10 @@ public class BotTests
         {
             stato = _motore.Handle(stato, new SlotSubmitted(Giocatore(0), $"p2r{round}")).State;
         }
+
+        // Dalla fine della scrittura si passa per la rifinitura: nei test del
+        // motore la si conclude senza modifiche, perche' il modello non c'e'.
+        stato = _motore.Handle(stato, new RefinementFinished(null)).State;
 
         // Il punto del test: senza il riempimento del bot al round 0 della
         // SECONDA partita, questa asserzione fallirebbe con la fase ancora

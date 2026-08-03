@@ -36,6 +36,10 @@ public class RevealTests
             }
         }
 
+        // Dalla fine della scrittura si passa per la rifinitura: nei test del
+        // motore la si conclude senza modifiche, perche' il modello non c'e'.
+        stato = _motore.Handle(stato, new RefinementFinished(null)).State;
+
         return stato;
     }
 

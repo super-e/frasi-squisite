@@ -163,24 +163,10 @@ public sealed partial class GameEngine
 
         if (_mode.IsComplete(prossimo))
         {
-            var reveal = prossimo with
-            {
-                Phase = RoomPhase.Reveal,
-                RevealPhraseIndex = 0,
-                RevealSlotCount = 0,
-            };
-
-            // Nessuna SlotRequestMessage arriva più: senza altri messaggi ogni
-            // client resterebbe fermo sulla schermata di attesa (Screen non
-            // cambia mai da solo). Il RoundProgressMessage saturo evita che
-            // l'attesa resti bloccata a N-1/N, e la RevealStepMessage iniziale
-            // - vuota, nessuna casella ancora scoperta - è ciò che porta tutti
-            // sulla schermata di reveal: solo l'host può poi far avanzare lo
-            // scoprimento vero e proprio (RevealAdvanceRequested).
-            return new EngineResult(reveal, [
-                new BroadcastToRoom(RoomState(reveal)),
+            // Il RoundProgressMessage saturo evita che l'attesa resti bloccata
+            // a N-1/N mentre si passa alla rifinitura.
+            return EntraInRifinitura(prossimo, [
                 new BroadcastToRoom(new RoundProgressMessage(state.Round, state.Players.Count, state.Players.Count)),
-                new BroadcastToRoom(new RevealStepMessage(0, reveal.Phrases.Count, [], false)),
             ]);
         }
 

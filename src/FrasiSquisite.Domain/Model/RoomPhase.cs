@@ -9,6 +9,7 @@ public enum RoomPhase
 {
     Lobby,
     Writing,
+    Refining,
     Reveal,
     Voting,
     Finished,

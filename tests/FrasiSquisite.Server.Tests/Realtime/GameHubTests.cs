@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using FrasiSquisite.Domain.Model;
+using FrasiSquisite.Server.Ai;
 using FrasiSquisite.Server.Rooms;
 using FrasiSquisite.Shared.Protocol;
 using FrasiSquisite.Shared.Schemas;
@@ -256,21 +257,61 @@ public sealed class GameHubTests : IAsyncLifetime
         // E l'errore di Bruno non deve mai comparire nella casella di Anna.
         Assert.Equal(0, anna.CountOf<ErrorMessage>());
 
-        // La fine dell'ultimo round (l'ultimo SubmitSlot appena sopra) ha già
-        // fatto arrivare una RevealStepMessage iniziale e vuota - nessuna
-        // casella ancora scoperta - proprio per portare tutti sulla schermata
-        // di reveal senza che nessuno debba aspettare l'host (spec C1).
-        // WaitFor<RevealStepMessage> da sola quindi non basterebbe più a
-        // sapere che è arrivato il messaggio generato da QUESTO AdvanceReveal:
-        // tornerebbe vera all'istante trovando quello già ricevuto. Si aspetta
-        // perciò che il conteggio salga a due prima di leggere l'ultimo.
-        await anna.Connection.InvokeAsync("AdvanceReveal", codice);
-        await anna.WaitForCount<RevealStepMessage>(2, TimeSpan.FromSeconds(5));
+        // Prima che ci fosse la rifinitura, la fine dell'ultimo round faceva
+        // scoprire la prima casella in modo sincrono, dentro lo stesso
+        // DispatchAsync del SubmitSlot: un solo AdvanceReveal bastava sempre.
+        // Ora in mezzo c'è la fase Refining, e l'uscita da quella fase arriva
+        // da un compito slegato (GameHost.AvviaRifinitura) che rientra con
+        // una SECONDA DispatchAsync quando riprende il lucchetto della
+        // stanza - una latenza non nulla anche con l'AI disattivata, che
+        // risponde comunque in modo asincrono. Quella fine produce comunque
+        // una RevealStepMessage iniziale e vuota (nessuna casella ancora
+        // scoperta), proprio per portare tutti sulla schermata di reveal
+        // senza che nessuno debba aspettare l'host (spec C1) - ma se il primo
+        // AdvanceReveal qui sotto arriva PRIMA che quella transizione sia
+        // avvenuta, la stanza è ancora in Refining e la chiamata viene
+        // respinta con NOT_REVEALING (un errore privato: nessuna
+        // RevealStepMessage), perdendo quella casella. Si rilegge perciò il
+        // conteggio a ogni giro invece di sparare una sola chiamata alla
+        // cieca - lo stesso pattern di GiocaFinoAllaFineAsync più sotto: se
+        // la chiamata viene respinta, la RevealStepMessage iniziale e vuota
+        // fa comunque salire il conteggio, e il giro successivo la riprova
+        // finché non arriva il vero passo.
+        while (anna.CountOf<RevealStepMessage>() < 2)
+        {
+            var passiPrima = anna.CountOf<RevealStepMessage>();
+            await anna.Connection.InvokeAsync("AdvanceReveal", codice);
+            await anna.WaitForCount<RevealStepMessage>(passiPrima + 1, TimeSpan.FromSeconds(5));
+        }
 
         var passo = anna.Last<RevealStepMessage>();
         Assert.Equal(0, passo.PhraseIndex);
         Assert.Equal(2, passo.TotalPhrases);
         Assert.Single(passo.RevealedSlots);
+    }
+
+    /// <summary>
+    /// Un AdvanceReveal alla volta finché non arriva la VoteRequestMessage
+    /// (spec §2.4: una casella scoperta per avanzamento). Rilegge il
+    /// conteggio dei passi a ogni giro invece di sparare un numero fisso di
+    /// chiamate: fra la fine dell'ultimo round e l'ingresso effettivo in
+    /// Reveal c'è di mezzo la fase Refining, la cui uscita arriva da un
+    /// compito slegato (GameHost.AvviaRifinitura) con una latenza non nulla
+    /// anche ad AI disattivata. Una chiamata sparata mentre la stanza è
+    /// ancora in Refining verrebbe respinta con NOT_REVEALING (un errore
+    /// privato, nessuna RevealStepMessage) e quella casella andrebbe persa;
+    /// qui invece, se la chiamata viene respinta, la RevealStepMessage
+    /// iniziale e vuota che chiude comunque la rifinitura fa salire il
+    /// conteggio lo stesso, e il giro successivo la riprova.
+    /// </summary>
+    private static async Task AvanzaRevealFinoAlVotoAsync(Client anna, string codice)
+    {
+        while (anna.CountOf<VoteRequestMessage>() == 0)
+        {
+            var passiPrima = anna.CountOf<RevealStepMessage>();
+            await anna.Connection.InvokeAsync("AdvanceReveal", codice);
+            await anna.WaitForCount<RevealStepMessage>(passiPrima + 1, TimeSpan.FromSeconds(5));
+        }
     }
 
     /// <summary>
@@ -295,16 +336,7 @@ public sealed class GameHubTests : IAsyncLifetime
             await bruno.Connection.InvokeAsync("SubmitSlot", new SubmitSlotRequest(codice, $"bruno{round}"));
         }
 
-        // Un AdvanceReveal alla volta finché non arriva la VoteRequestMessage
-        // (spec §2.4: una casella scoperta per avanzamento). L'ultimo passo di
-        // reveal fa entrare la stanza in Voting nello stesso giro di effetti
-        // in cui manda l'ultima RevealStepMessage, quindi arrivano insieme.
-        while (anna.CountOf<VoteRequestMessage>() == 0)
-        {
-            var passiPrima = anna.CountOf<RevealStepMessage>();
-            await anna.Connection.InvokeAsync("AdvanceReveal", codice);
-            await anna.WaitForCount<RevealStepMessage>(passiPrima + 1, TimeSpan.FromSeconds(5));
-        }
+        await AvanzaRevealFinoAlVotoAsync(anna, codice);
 
         await anna.WaitFor<VoteRequestMessage>(TimeSpan.FromSeconds(5));
 
@@ -631,6 +663,14 @@ public sealed class GameHubTests : IAsyncLifetime
         await using var anna = await ConnettiAsync();
         await using var bruno = await ConnettiAsync();
 
+        // Il requisito §8.5 del design generale: "il gioco e' interamente
+        // giocabile senza AI", verificato e non sperato. Questo test gioca una
+        // partita intera dalla lobby alla classifica, e l'asserzione qui dice
+        // a quali condizioni: senza modello. Senza questa riga la garanzia
+        // riposerebbe sul fatto che nessuno abbia configurato una chiave nei
+        // test — cioe' su un caso, non su una scelta.
+        Assert.IsType<DisabledAiTextProvider>(_factory.Services.GetRequiredService<IAiTextProvider>());
+
         var annaId = Guid.NewGuid();
         var brunoId = Guid.NewGuid();
 
@@ -655,11 +695,15 @@ public sealed class GameHubTests : IAsyncLifetime
 
         // Due frasi da due caselle ciascuna... in realtà N frasi da
         // totalRounds caselle: il reveal chiede un passo per casella di ogni
-        // frase, quindi 2 * totalRounds tocchi.
-        for (var i = 0; i < 2 * totalRounds; i++)
-        {
-            await anna.Connection.InvokeAsync("AdvanceReveal", codice);
-        }
+        // frase, quindi 2 * totalRounds tocchi in tutto. Usa lo stesso
+        // aiutante di GiocaFinoAllaFineAsync invece di sparare 2 * totalRounds
+        // AdvanceReveal alla cieca: fra la fine dell'ultimo round e l'ingresso
+        // in Reveal c'è di mezzo la fase Refining (uscita asincrona, latenza
+        // non nulla anche ad AI disattivata), e una chiamata sparata mentre la
+        // stanza è ancora in Refining verrebbe respinta con NOT_REVEALING,
+        // perdendo quella casella e facendo mancare il reveal all'appuntamento
+        // con la VoteRequestMessage.
+        await AvanzaRevealFinoAlVotoAsync(anna, codice);
 
         await anna.WaitFor<VoteRequestMessage>(TimeSpan.FromSeconds(5));
         await bruno.WaitFor<VoteRequestMessage>(TimeSpan.FromSeconds(5));
@@ -711,10 +755,10 @@ public sealed class GameHubTests : IAsyncLifetime
             await bruno.Connection.InvokeAsync("SubmitSlot", new SubmitSlotRequest(codice, $"bruno{round}"));
         }
 
-        for (var i = 0; i < 2 * totalRounds; i++)
-        {
-            await anna.Connection.InvokeAsync("AdvanceReveal", codice);
-        }
+        // Vedi il commento di AvanzaRevealFinoAlVotoAsync: sparare
+        // 2 * totalRounds AdvanceReveal alla cieca rischia di perdere una
+        // casella contro la fase Refining, che esce in modo asincrono.
+        await AvanzaRevealFinoAlVotoAsync(anna, codice);
 
         await bruno.WaitFor<VoteRequestMessage>(TimeSpan.FromSeconds(5));
 

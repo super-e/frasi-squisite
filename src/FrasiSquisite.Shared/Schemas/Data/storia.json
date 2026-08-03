@@ -2,7 +2,7 @@
   "id": "storia",
   "version": 1,
   "nome": "Storia in otto atti",
-  "template": "{0} {1} {2} {3}, {4}. Ultime parole: «{5}». Il pubblico: «{6}». Alla fine {7}.",
+  "template": "{0} {1} {2} {3}, {4}, dicendo: «{5}». La gente dice: «{6}», ed è andata a finire che {7}.",
   "caselle": [
     { "ruolo": "Chi?",                 "prompt": "Un personaggio o un oggetto", "esempio": "Un pinguino in doppiopetto" },
     { "ruolo": "Con chi?",             "prompt": "Un compagno o un rivale",     "esempio": "insieme al suo commercialista" },
