@@ -52,10 +52,22 @@ if (aiOptions.Abilitato)
         // necessari.
         c.Timeout = TimeSpan.FromSeconds(aiOptions.TimeoutSeconds);
     });
+
+    builder.Services.AddHttpClient<IAiImageProvider, OpenAiCompatibleImageProvider>(c =>
+    {
+        c.BaseAddress = new Uri(aiOptions.BaseUrl);
+        c.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", aiOptions.ApiKey);
+
+        // Non TimeoutSeconds: quello è il limite della rifinitura, dieci
+        // secondi, e generare un'immagine ne richiede molti di più.
+        c.Timeout = TimeSpan.FromSeconds(aiOptions.ImageTimeoutSeconds);
+    });
 }
 else
 {
     builder.Services.AddSingleton<IAiTextProvider, DisabledAiTextProvider>();
+    builder.Services.AddSingleton<IAiImageProvider, DisabledAiImageProvider>();
 }
 
 var app = builder.Build();
