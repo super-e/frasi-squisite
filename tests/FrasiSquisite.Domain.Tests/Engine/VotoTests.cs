@@ -241,6 +241,13 @@ public class VotoTests
         Assert.Equal(testiAttesi[1], finale.Results[0].Text);
     }
 
+    /// <summary>
+    /// Qui N = K, quindi ogni frase è scritta da tutti e tre i giocatori, una
+    /// casella a testa. L'attesa è sui nomi e non su un conteggio: contare K
+    /// autori era vero per coincidenza — K è il numero di caselle, e l'ha
+    /// smesso di essere il numero di persone appena una di loro ne ha scritta
+    /// più d'una (vedi <see cref="OgniAutoreDiUnaFraseECitatoUnaVoltaSola"/>).
+    /// </summary>
     [Fact]
     public void LaClassificaPortaGliAutoriDiOgniFrase()
     {
@@ -255,7 +262,67 @@ public class VotoTests
 
         var finale = Assert.Single(ultimo.Broadcasts<GameFinishedMessage>());
 
-        Assert.All(finale.Results, r => Assert.Equal(K, r.Authors.Count));
+        Assert.All(finale.Results, r => Assert.Equal<string[]>(["G0", "G1", "G2"], [.. r.Authors.Order()]));
+    }
+
+    /// <summary>
+    /// Con tanti giocatori quante caselle ognuno ne scrive esattamente una, e
+    /// il difetto resta invisibile: e' il caso di <see cref="AlVoto"/>, N = K.
+    /// In una partita vera lo schema di default ha otto caselle e i giocatori
+    /// sono due o tre, quindi ognuno ne scrive piu' d'una nella stessa frase e
+    /// la riga diventava "Scritta da: G0 · G1 · G0 · G1 · …".
+    ///
+    /// Gli autori di una frase sono le persone che l'hanno scritta, non
+    /// l'elenco di chi ha riempito ogni casella: la ripetizione non aggiunge
+    /// niente, e l'ordine posizionale direbbe anche quale casella e' di chi,
+    /// che nessuno ha chiesto di rivelare.
+    ///
+    /// La deduplica e' sull'identita', non sul nome: due persone che si
+    /// chiamano allo stesso modo restano due persone.
+    /// </summary>
+    [Fact]
+    public void OgniAutoreDiUnaFraseECitatoUnaVoltaSola()
+    {
+        const int giocatori = 2;
+        const int caselle = 4;
+
+        var stato = GameState.NewRoom("ABCD", TestSchemas.WithSlots(caselle));
+        for (var i = 0; i < giocatori; i++)
+        {
+            stato = _motore.Handle(stato, new PlayerJoined(Giocatore(i), $"G{i}")).State;
+        }
+
+        stato = _motore.Handle(stato, new GameStartRequested(Giocatore(0))).State;
+
+        for (var round = 0; round < caselle; round++)
+        {
+            for (var g = 0; g < giocatori; g++)
+            {
+                stato = _motore.Handle(stato, new SlotSubmitted(Giocatore(g), $"p{round}{g}")).State;
+            }
+        }
+
+        stato = _motore.Handle(stato, new RefinementFinished(null)).State;
+
+        for (var i = 0; i < giocatori * caselle; i++)
+        {
+            stato = _motore.Handle(stato, new RevealAdvanceRequested(Giocatore(0))).State;
+        }
+
+        EngineResult ultimo = null!;
+        for (var i = 0; i < giocatori; i++)
+        {
+            ultimo = _motore.Handle(stato, new VoteCast(Giocatore(i), 0));
+            stato = ultimo.State;
+        }
+
+        var finale = Assert.Single(ultimo.Broadcasts<GameFinishedMessage>());
+
+        Assert.All(finale.Results, r => Assert.Equal(r.Authors.Distinct().Count(), r.Authors.Count));
+
+        // Deduplicare non deve far sparire nessuno: con quattro caselle
+        // spartite fra due giocatori, entrambi hanno contribuito a ogni frase.
+        Assert.All(finale.Results, r => Assert.Equal<string[]>(["G0", "G1"], [.. r.Authors.Order()]));
     }
 
     [Fact]
