@@ -447,7 +447,7 @@
                                          rifiuterebbe comunque gli altri con NOT_HOST, ma
                                          mostrarlo a tutti sarebbe una bugia all'utente. -->
                                     <Button Text="Illustra"
-                                            Command="{Binding Source={RelativeSource AncestorType={x:Type vm:GameSessionViewModel}}, Path=RequestIllustrationCommand}"
+                                            Command="{Binding Source={x:Reference RootPage}, Path=BindingContext.RequestIllustrationCommand}"
                                             CommandParameter="{Binding .}"
                                             IsVisible="{Binding CanRequest}" />
 

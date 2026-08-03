@@ -789,12 +789,18 @@ public partial class GameSessionViewModel : ObservableObject
                 break;
 
             case IllustrationFailedMessage fallita:
+                // ErrorText va scritto solo se la riga esiste ancora: un
+                // fallimento tardivo (partita già ricominciata, FinalResults
+                // svuotata da PulisciStatoDiPartitaConclusa) non ha più niente
+                // a cui riferirsi, e mostrare comunque il banner produrrebbe
+                // un errore orfano - a schermo ma senza alcun contesto che lo
+                // spieghi, perché la classifica a cui apparteneva è sparita.
                 if (RigaDiFrase(fallita.PhraseIndex) is { } rigaFallita)
                 {
                     rigaFallita.IsWaiting = false;
+                    ErrorText = fallita.Message;
                 }
 
-                ErrorText = fallita.Message;
                 break;
 
             case ErrorMessage errore:

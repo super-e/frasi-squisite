@@ -1516,6 +1516,11 @@ public class GameSessionViewModelTests
     /// finale già arrivata, con due righe (indici 0 e 1). <paramref
     /// name="ioSonoHost"/> decide se il giocatore locale è l'host, da cui
     /// dipende il pulsante "Illustra" — gemello di <see cref="InVoto"/>.
+    /// Indice di frase e posizione in classifica deliberatamente disallineati
+    /// (indice 1 in prima posizione, indice 0 in seconda), stesso criterio di
+    /// <see cref="IlMessaggioFinalePopolaLaClassifica"/>: se <c>RigaDiFrase</c>
+    /// cercasse per posizione invece che per indice - un bug vero, perché la
+    /// classifica è ordinata per voti - i test che seguono lo scoprirebbero.
     /// </summary>
     private static (GameSessionViewModel Vm, FakeGameConnection Conn) InFinale(bool ioSonoHost = true)
     {
@@ -1530,8 +1535,8 @@ public class GameSessionViewModelTests
             8));
 
         conn.Emit(new GameFinishedMessage([
-            new PhraseResultView(0, "Prima frase", ["Anna"], 1, true),
-            new PhraseResultView(1, "Seconda frase", ["Anna"], 0, false),
+            new PhraseResultView(1, "Prima frase", ["Anna"], 1, true),
+            new PhraseResultView(0, "Seconda frase", ["Anna"], 0, false),
         ]));
 
         return (vm, conn);
@@ -1557,7 +1562,9 @@ public class GameSessionViewModelTests
 
         await vm.RequestIllustrationCommand.ExecuteAsync(riga);
 
-        Assert.Contains("RequestIllustration(ABCD,0)", conn.Calls);
+        // riga è la prima in classifica ma il suo indice di frase è 1
+        // (InFinale li disallinea di proposito).
+        Assert.Contains("RequestIllustration(ABCD,1)", conn.Calls);
         Assert.True(riga.IsWaiting);
         Assert.False(riga.CanRequest);
     }
@@ -1572,7 +1579,9 @@ public class GameSessionViewModelTests
     {
         var (vm, conn) = InFinale();
 
-        conn.Emit(new IllustrationReadyMessage(0, "/illustrazioni/ab12"));
+        // Indice 1, non 0: è la riga in prima posizione (InFinale disallinea
+        // indice e posizione), e la ricerca deve avvenire per indice.
+        conn.Emit(new IllustrationReadyMessage(1, "/illustrazioni/ab12"));
 
         Assert.Equal("http://test/illustrazioni/ab12", vm.FinalResults[0].ImageUrl);
     }
@@ -1585,7 +1594,8 @@ public class GameSessionViewModelTests
         await vm.RequestIllustrationCommand.ExecuteAsync(riga);
         Assert.True(riga.IsWaiting);
 
-        conn.Emit(new IllustrationReadyMessage(0, "/illustrazioni/ab12"));
+        // riga ha indice di frase 1, non 0 (vedi InFinale).
+        conn.Emit(new IllustrationReadyMessage(1, "/illustrazioni/ab12"));
 
         Assert.False(riga.IsWaiting);
         Assert.Equal("http://test/illustrazioni/ab12", riga.ImageUrl);
@@ -1604,7 +1614,8 @@ public class GameSessionViewModelTests
         await vm.RequestIllustrationCommand.ExecuteAsync(riga);
         Assert.True(riga.IsWaiting);
 
-        conn.Emit(new IllustrationFailedMessage(0, "Generazione fallita, riprova."));
+        // riga ha indice di frase 1, non 0 (vedi InFinale).
+        conn.Emit(new IllustrationFailedMessage(1, "Generazione fallita, riprova."));
 
         Assert.False(riga.IsWaiting);
         Assert.True(riga.CanRequest);
@@ -1615,6 +1626,9 @@ public class GameSessionViewModelTests
     /// <summary>
     /// Un messaggio per una frase che non è in classifica non deve far
     /// esplodere niente: arriva dal server, e il client non lo controlla.
+    /// Il fallimento in particolare non deve nemmeno accendere ErrorText:
+    /// senza una riga a cui riferirsi (es. partita già ricominciata) sarebbe
+    /// un banner d'errore orfano, a schermo senza alcun contesto.
     /// </summary>
     [Fact]
     public void UnMessaggioPerUnaFraseSconosciutaVieneIgnorato()
@@ -1626,6 +1640,7 @@ public class GameSessionViewModelTests
 
         Assert.All(vm.FinalResults, riga => Assert.Null(riga.ImageUrl));
         Assert.All(vm.FinalResults, riga => Assert.False(riga.IsWaiting));
+        Assert.Equal(string.Empty, vm.ErrorText);
     }
 
     [Fact]
