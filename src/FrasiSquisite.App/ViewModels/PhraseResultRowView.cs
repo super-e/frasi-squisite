@@ -1,14 +1,23 @@
+using CommunityToolkit.Mvvm.ComponentModel;
 using FrasiSquisite.Shared.Protocol;
 
 namespace FrasiSquisite.App.ViewModels;
 
 /// <summary>
-/// Una riga della classifica finale. Solo proiezione: l'ordine e il verdetto
-/// arrivano già decisi dal server (spec §7), qui si formattano soltanto le
-/// etichette che la XAML non saprebbe comporre da sola.
+/// Una riga della classifica finale. Testo, voti e autori arrivano già decisi
+/// dal server e non cambiano; l'illustrazione sì, quindi la riga è diventata
+/// osservabile — ma solo per le tre proprietà che cambiano davvero.
 /// </summary>
-public sealed class PhraseResultRowView(PhraseResultView risultato)
+public sealed partial class PhraseResultRowView(PhraseResultView risultato, bool isHost) : ObservableObject
 {
+    /// <summary>
+    /// Serve per cercare la riga giusta quando arriva un
+    /// <see cref="IllustrationReadyMessage"/> o <see cref="IllustrationFailedMessage"/>:
+    /// la classifica è ordinata per voti, quindi la posizione nella lista non
+    /// corrisponde all'indice della frase nel motore.
+    /// </summary>
+    public int PhraseIndex { get; } = risultato.PhraseIndex;
+
     public string Text { get; } = risultato.Text;
 
     public bool IsWinner { get; } = risultato.IsWinner;
@@ -18,4 +27,30 @@ public sealed class PhraseResultRowView(PhraseResultView risultato)
     public string AuthorsLabel { get; } = risultato.Authors.Count == 0
         ? string.Empty
         : $"Scritta da: {string.Join(" · ", risultato.Authors)}";
+
+    /// <summary>
+    /// Il pulsante esiste solo per chi ospita: il server rifiuterebbe comunque
+    /// gli altri, ma mostrare un pulsante che dà errore è una bugia.
+    ///
+    /// Osservabile, non fissata alla costruzione: le righe nascono una volta
+    /// sola, all'arrivo di <see cref="FrasiSquisite.Shared.Protocol.GameFinishedMessage"/>,
+    /// che non torna mai. Se nel frattempo l'host si disconnette e il motore
+    /// ne promuove un altro, GameSessionViewModel lo scopre da una
+    /// RoomStateMessage successiva e aggiorna questa proprietà da fuori
+    /// (OnIsHostChanged) - altrimenti il nuovo host resterebbe senza
+    /// pulsante "Illustra" per il resto della partita.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanRequest))]
+    private bool _isHost = isHost;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanRequest))]
+    private bool _isWaiting;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanRequest))]
+    private string? _imageUrl;
+
+    public bool CanRequest => IsHost && !IsWaiting && ImageUrl is null;
 }

@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using FrasiSquisite.Domain.Engine;
 using FrasiSquisite.Server.Ai;
+using FrasiSquisite.Server.Images;
 using FrasiSquisite.Server.Rooms;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
@@ -17,6 +18,8 @@ public sealed class GameHost(
     IRoomRegistry rooms,
     IHubContext<GameHub> hub,
     RefinementRunner runner,
+    IllustrationRunner illustrazioni,
+    ImageStore deposito,
     ILogger<GameHost> logger)
 {
     /// <summary>
@@ -100,6 +103,10 @@ public sealed class GameHost(
         // aspetterebbe quello stesso lucchetto. Stallo.
         RequestRefinement r => AvviaRifinitura(roomCode, r),
 
+        // Stessa ragione di RequestRefinement: non si attende, o il ritorno
+        // andrebbe in stallo sul lucchetto della stanza.
+        RequestIllustration i => AvviaIllustrazione(roomCode, i),
+
         _ => throw new InvalidOperationException($"Effetto non gestito: {effetto.GetType().Name}"),
     };
 
@@ -136,6 +143,64 @@ public sealed class GameHost(
                 // tutti usciti): non c'e' piu' nessuno a cui importi, ma
                 // resta l'unica traccia osservabile.
                 logger.LogWarning(ex, "Esito della rifinitura non consegnabile alla stanza {RoomCode}.", roomCode);
+            }
+        });
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Genera in sottofondo e torna subito, per la stessa ragione di
+    /// <see cref="AvviaRifinitura"/>. I byte non escono mai da qui: finiscono
+    /// nel deposito, e l'evento di ritorno porta solo il percorso — il motore
+    /// non vede mai un PNG (spec §5).
+    ///
+    /// Al più un <see cref="IllustrationFinished"/> per ogni richiesta: questo
+    /// metodo viene invocato una volta per ogni <see cref="RequestIllustration"/>
+    /// (il motore rifiuta un secondo tocco sullo stesso indice con
+    /// ILLUSTRATION_ALREADY_REQUESTED, vedi GameEngine.Illustration), e la
+    /// dispatch dell'esito qui sotto avviene una volta sola per invocazione.
+    /// La garanzia conta perché il motore, a differenza della rifinitura,
+    /// lascia l'indice nell'insieme dopo un successo apposta per impedire un
+    /// secondo pagamento: un esito di successo duplicato per lo stesso indice
+    /// verrebbe ribroadcastato invece che ignorato.
+    /// </summary>
+    private Task AvviaIllustrazione(string roomCode, RequestIllustration richiesta)
+    {
+        _ = Task.Run(async () =>
+        {
+            string? percorso = null;
+
+            try
+            {
+                var byteImmagine = await illustrazioni.IllustraAsync(richiesta.Frase, CancellationToken.None);
+
+                if (byteImmagine is not null)
+                {
+                    // Salva torna null se l'immagine da sola supera l'intero
+                    // budget del deposito: un salvataggio fallito è un
+                    // fallimento della generazione a tutti gli effetti, non un
+                    // successo con un percorso che punterebbe al nulla.
+                    percorso = deposito.Salva(byteImmagine);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Task slegato: un'eccezione non osservata lascerebbe il
+                // pulsante spento per sempre, e nessuno lo saprebbe.
+                logger.LogError(ex, "Illustrazione fallita per la stanza {RoomCode}.", roomCode);
+            }
+
+            try
+            {
+                await DispatchAsync(roomCode, new IllustrationFinished(richiesta.PhraseIndex, percorso));
+            }
+            catch (Exception ex)
+            {
+                // La stanza puo' essere sparita nel frattempo (riavvio, o
+                // tutti usciti): non c'e' piu' nessuno a cui importi, ma
+                // resta l'unica traccia osservabile.
+                logger.LogWarning(ex, "Esito dell'illustrazione non consegnabile alla stanza {RoomCode}.", roomCode);
             }
         });
 

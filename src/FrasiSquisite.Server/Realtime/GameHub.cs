@@ -65,6 +65,11 @@ public sealed class GameHub(GameHost host, IRoomRegistry rooms, ISchemaCatalog s
     public Task CloseVoting(CloseVotingRequest request) =>
         host.DispatchAsync(request.RoomCode, new VotingCloseRequested(GiocatoreCorrente()));
 
+    // Le guardie (fase, host, indice, doppio tocco) stanno tutte nel motore:
+    // qui si inoltra e basta, come per il voto.
+    public Task RequestIllustration(RequestIllustrationRequest request) =>
+        host.DispatchAsync(request.RoomCode, new IllustrationRequested(GiocatoreCorrente(), request.PhraseIndex));
+
     public Task NewGame(NewGameRequest request) =>
         host.DispatchAsync(request.RoomCode, new NewGameRequested(GiocatoreCorrente()));
 

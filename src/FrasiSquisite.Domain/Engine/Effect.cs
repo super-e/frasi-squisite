@@ -19,3 +19,9 @@ public sealed record BroadcastToRoom(object Message) : Effect;
 public sealed record RequestRefinement(
     IReadOnlyList<IReadOnlyList<string>> Frasi,
     string Template) : Effect;
+
+/// <summary>
+/// Chiede l'illustrazione di una frase. Porta la frase composta e nient'altro:
+/// il motore non sa se dietro ci sia un modello, una cache o niente.
+/// </summary>
+public sealed record RequestIllustration(int PhraseIndex, string Frase) : Effect;

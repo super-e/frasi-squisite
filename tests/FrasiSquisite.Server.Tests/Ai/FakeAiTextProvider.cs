@@ -9,6 +9,13 @@ namespace FrasiSquisite.Server.Tests.Ai;
 /// </summary>
 public sealed class FakeAiTextProvider : IAiTextProvider
 {
+    public FakeAiTextProvider()
+    {
+    }
+
+    /// <summary>Comodo per i test che vogliono solo fissare la risposta senza un initializer.</summary>
+    public FakeAiTextProvider(string? risposta) => Risposta = risposta;
+
     public string? Risposta { get; set; }
 
     /// <summary>Se impostato, la chiamata attende questo prima di rispondere.</summary>

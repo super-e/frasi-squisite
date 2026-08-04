@@ -69,3 +69,19 @@ public sealed record VotingCloseRequested(Guid RequestedBy) : GameEvent;
 /// casi allo stesso modo — prosegue — quindi non servono due eventi.
 /// </summary>
 public sealed record RefinementFinished(IReadOnlyList<IReadOnlyList<string>>? Frasi) : GameEvent;
+
+/// <summary>
+/// L'host chiede l'illustrazione di una frase della classifica (spec §5). Non
+/// è automatica sulla vincitrice: a pareggio bisognerebbe sceglierne una a
+/// caso, a zero voti non ce ne sarebbe nessuna, e ogni partita costerebbe
+/// comunque circa nove centesimi anche quando a nessuno interessa.
+/// </summary>
+public sealed record IllustrationRequested(Guid RequestedBy, int PhraseIndex) : GameEvent;
+
+/// <summary>
+/// L'esito. <paramref name="Path"/> nullo significa fallito — rete giù,
+/// timeout, chiave assente, modello che rifiuta. Diversamente dalla
+/// rifinitura i due casi NON si trattano allo stesso modo: qui l'host ha
+/// chiesto qualcosa esplicitamente e deve sapere che non è arrivata.
+/// </summary>
+public sealed record IllustrationFinished(int PhraseIndex, string? Path) : GameEvent;

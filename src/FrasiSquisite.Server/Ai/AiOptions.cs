@@ -26,6 +26,22 @@ public sealed class AiOptions
     /// </summary>
     public int TimeoutSeconds { get; set; } = 10;
 
+    public string ImageModel { get; set; } = "nano-banana-2";
+
+    /// <summary>
+    /// 1K basta per un telefono e costa circa nove centesimi; 2K e 4K costano
+    /// di più senza che si veda la differenza su uno schermo da sei pollici.
+    /// </summary>
+    public string ImageSize { get; set; } = "1K";
+
+    /// <summary>
+    /// Generare un'immagine richiede molto più tempo che correggere un testo, e
+    /// il limite della rifinitura (dieci secondi) la farebbe fallire sempre.
+    /// Qui non c'è una partita che aspetta: l'host ha premuto un pulsante e sta
+    /// guardando una rotellina, quindi si può essere pazienti.
+    /// </summary>
+    public int ImageTimeoutSeconds { get; set; } = 90;
+
     /// <summary>
     /// L'unico interruttore: senza chiave l'AI e' spenta e il gioco resta
     /// interamente giocabile (spec §7).

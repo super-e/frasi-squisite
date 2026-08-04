@@ -130,6 +130,13 @@ public sealed class FakeGameConnection : IGameConnection
         return Task.CompletedTask;
     }
 
+    public Task RequestIllustrationAsync(string roomCode, int phraseIndex)
+    {
+        LanciaSeImpostato();
+        _calls.Add($"RequestIllustration({roomCode},{phraseIndex})");
+        return Task.CompletedTask;
+    }
+
     public Task NewGameAsync(string roomCode)
     {
         LanciaSeImpostato();

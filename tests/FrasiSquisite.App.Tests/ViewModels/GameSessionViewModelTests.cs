@@ -1508,4 +1508,202 @@ public class GameSessionViewModelTests
         Assert.Equal(ScreenState.Voting, vmVoto.Screen);
         Assert.NotNull(connVoto.MessaggioDuranteInvio);
     }
+
+    // ================= Lotto illustrazione (task-6-brief.md) =================
+
+    /// <summary>
+    /// Punto di partenza dei test dell'illustrazione: stanza nota e classifica
+    /// finale già arrivata, con due righe (indici 0 e 1). <paramref
+    /// name="ioSonoHost"/> decide se il giocatore locale è l'host, da cui
+    /// dipende il pulsante "Illustra" — gemello di <see cref="InVoto"/>.
+    /// Indice di frase e posizione in classifica deliberatamente disallineati
+    /// (indice 1 in prima posizione, indice 0 in seconda), stesso criterio di
+    /// <see cref="IlMessaggioFinalePopolaLaClassifica"/>: se <c>RigaDiFrase</c>
+    /// cercasse per posizione invece che per indice - un bug vero, perché la
+    /// classifica è ordinata per voti - i test che seguono lo scoprirebbero.
+    /// </summary>
+    private static (GameSessionViewModel Vm, FakeGameConnection Conn) InFinale(bool ioSonoHost = true)
+    {
+        var (vm, conn) = Crea();
+        vm.RoomCode = "ABCD";
+
+        conn.Emit(new RoomStateMessage(
+            "ABCD",
+            "Lobby",
+            [new PlayerView(Anna, "Anna", ioSonoHost, true, false)],
+            "storia",
+            8));
+
+        conn.Emit(new GameFinishedMessage([
+            new PhraseResultView(1, "Prima frase", ["Anna"], 1, true),
+            new PhraseResultView(0, "Seconda frase", ["Anna"], 0, false),
+        ]));
+
+        return (vm, conn);
+    }
+
+    [Fact]
+    public void SoloLHostVedeIlPulsanteDellIllustrazione()
+    {
+        var (vmHost, _) = InFinale(ioSonoHost: true);
+
+        Assert.All(vmHost.FinalResults, riga => Assert.True(riga.CanRequest));
+
+        var (vmOspite, _) = InFinale(ioSonoHost: false);
+
+        Assert.All(vmOspite.FinalResults, riga => Assert.False(riga.CanRequest));
+    }
+
+    /// <summary>
+    /// Revisione finale, rilievo 1: le righe di FinalResults nascono una
+    /// volta sola con GameFinishedMessage e non si ricostruiscono mai più.
+    /// Se dopo la classifica l'host originale si disconnette e il motore
+    /// promuove il giocatore locale, la RoomStateMessage che lo annuncia
+    /// arriva DOPO GameFinishedMessage - esattamente l'ordine simulato qui.
+    /// Senza la correzione, IsHost delle righe resta fotografato al momento
+    /// della costruzione (false) e CanRequest pure, anche se
+    /// GameSessionViewModel.IsHost è nel frattempo diventato true.
+    /// </summary>
+    [Fact]
+    public void UnHostPromossoDopoLaClassificaPuoIllustrare()
+    {
+        var (vm, conn) = InFinale(ioSonoHost: false);
+        var riga = vm.FinalResults[0];
+        Assert.False(riga.CanRequest);
+
+        // L'host originale si disconnette, il motore promuove il giocatore
+        // locale (Anna) e trasmette il nuovo stato della stanza - dopo la
+        // classifica finale, non prima.
+        conn.Emit(new RoomStateMessage(
+            "ABCD",
+            "Lobby",
+            [new PlayerView(Anna, "Anna", true, true, false)],
+            "storia",
+            8));
+
+        Assert.True(vm.IsHost);
+        Assert.True(riga.CanRequest);
+    }
+
+    [Fact]
+    public async Task ChiedereLIllustrazioneMettelaRigaInAttesa()
+    {
+        var (vm, conn) = InFinale();
+        var riga = vm.FinalResults[0];
+
+        await vm.RequestIllustrationCommand.ExecuteAsync(riga);
+
+        // riga è la prima in classifica ma il suo indice di frase è 1
+        // (InFinale li disallinea di proposito).
+        Assert.Contains("RequestIllustration(ABCD,1)", conn.Calls);
+        Assert.True(riga.IsWaiting);
+        Assert.False(riga.CanRequest);
+    }
+
+    /// <summary>
+    /// L'indirizzo che arriva è relativo: il server non sa sotto quale nome è
+    /// raggiunto (c'è Caddy davanti). Il client lo combina col proprio
+    /// ServerUrl, che è l'unico posto dove quell'informazione esiste davvero.
+    /// </summary>
+    [Fact]
+    public void LIndirizzoRelativoDiventaAssolutoConIlServerUrl()
+    {
+        var (vm, conn) = InFinale();
+
+        // Indice 1, non 0: è la riga in prima posizione (InFinale disallinea
+        // indice e posizione), e la ricerca deve avvenire per indice.
+        conn.Emit(new IllustrationReadyMessage(1, "/illustrazioni/ab12"));
+
+        Assert.Equal("http://test/illustrazioni/ab12", vm.FinalResults[0].ImageUrl);
+    }
+
+    [Fact]
+    public async Task LImmagineProntaTogliLAttesaEMostraIlRiquadro()
+    {
+        var (vm, conn) = InFinale();
+        var riga = vm.FinalResults[0];
+        await vm.RequestIllustrationCommand.ExecuteAsync(riga);
+        Assert.True(riga.IsWaiting);
+
+        // riga ha indice di frase 1, non 0 (vedi InFinale).
+        conn.Emit(new IllustrationReadyMessage(1, "/illustrazioni/ab12"));
+
+        Assert.False(riga.IsWaiting);
+        Assert.Equal("http://test/illustrazioni/ab12", riga.ImageUrl);
+        Assert.False(riga.CanRequest);
+    }
+
+    /// <summary>
+    /// Senza questo il pulsante resterebbe spento per sempre dopo un guasto e
+    /// l'host non potrebbe riprovare.
+    /// </summary>
+    [Fact]
+    public async Task UnFallimentoRiaccendeIlPulsanteEDiceCosaEAndatoStorto()
+    {
+        var (vm, conn) = InFinale();
+        var riga = vm.FinalResults[0];
+        await vm.RequestIllustrationCommand.ExecuteAsync(riga);
+        Assert.True(riga.IsWaiting);
+
+        // riga ha indice di frase 1, non 0 (vedi InFinale).
+        conn.Emit(new IllustrationFailedMessage(1, "Generazione fallita, riprova."));
+
+        Assert.False(riga.IsWaiting);
+        Assert.True(riga.CanRequest);
+        Assert.Null(riga.ImageUrl);
+        Assert.Equal("Generazione fallita, riprova.", vm.ErrorText);
+    }
+
+    /// <summary>
+    /// Revisione finale, rilievo 2: il fallimento va in broadcast a tutta la
+    /// stanza (il server non sa chi ha premuto il pulsante), ma sui client
+    /// che non hanno chiesto niente il messaggio non significa nulla - non
+    /// possono nemmeno riprovare. Qui nessuno ha eseguito
+    /// RequestIllustrationCommand, quindi IsWaiting della riga è già false:
+    /// il fallimento deve spegnere l'attesa (comunque, innocuamente) ma non
+    /// scrivere il banner d'errore.
+    /// </summary>
+    [Fact]
+    public void UnFallimentoPerUnaRigaMaiRichiestaSuQuestoClientNonMostraIlBanner()
+    {
+        var (vm, conn) = InFinale();
+
+        conn.Emit(new IllustrationFailedMessage(1, "Generazione fallita, riprova."));
+
+        Assert.Equal(string.Empty, vm.ErrorText);
+        Assert.False(vm.FinalResults[0].IsWaiting);
+        Assert.True(vm.FinalResults[0].CanRequest);
+    }
+
+    /// <summary>
+    /// Un messaggio per una frase che non è in classifica non deve far
+    /// esplodere niente: arriva dal server, e il client non lo controlla.
+    /// Il fallimento in particolare non deve nemmeno accendere ErrorText:
+    /// senza una riga a cui riferirsi (es. partita già ricominciata) sarebbe
+    /// un banner d'errore orfano, a schermo senza alcun contesto.
+    /// </summary>
+    [Fact]
+    public void UnMessaggioPerUnaFraseSconosciutaVieneIgnorato()
+    {
+        var (vm, conn) = InFinale();
+
+        conn.Emit(new IllustrationReadyMessage(99, "/illustrazioni/ab12"));
+        conn.Emit(new IllustrationFailedMessage(99, "Generazione fallita."));
+
+        Assert.All(vm.FinalResults, riga => Assert.Null(riga.ImageUrl));
+        Assert.All(vm.FinalResults, riga => Assert.False(riga.IsWaiting));
+        Assert.Equal(string.Empty, vm.ErrorText);
+    }
+
+    [Fact]
+    public async Task RicominciareUnaPartitaPulisceLeImmagini()
+    {
+        var (vm, conn) = InFinale();
+        conn.Emit(new IllustrationReadyMessage(0, "/illustrazioni/ab12"));
+        Assert.NotEmpty(vm.FinalResults);
+
+        await vm.NewGameCommand.ExecuteAsync(null);
+
+        Assert.Empty(vm.FinalResults);
+    }
 }

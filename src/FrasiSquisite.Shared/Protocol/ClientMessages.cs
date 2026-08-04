@@ -28,3 +28,10 @@ public sealed record BackToLobbyRequest(string RoomCode);
 public sealed record CastVoteRequest(string RoomCode, int PhraseIndex);
 
 public sealed record CloseVotingRequest(string RoomCode);
+
+/// <summary>
+/// <paramref name="PhraseIndex"/> è l'indice della frase, lo stesso che porta
+/// ogni riga di <c>PhraseResultView</c>: non l'indice di riga della classifica,
+/// che dipende dall'ordinamento per voti.
+/// </summary>
+public sealed record RequestIllustrationRequest(string RoomCode, int PhraseIndex);

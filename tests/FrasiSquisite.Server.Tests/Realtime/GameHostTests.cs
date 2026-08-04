@@ -3,6 +3,7 @@ using System.Reflection;
 using FrasiSquisite.Domain.Engine;
 using FrasiSquisite.Domain.Model;
 using FrasiSquisite.Server.Ai;
+using FrasiSquisite.Server.Images;
 using FrasiSquisite.Server.Realtime;
 using FrasiSquisite.Server.Tests.Ai;
 using FrasiSquisite.Shared.Schemas;
@@ -64,8 +65,8 @@ public class GameHostTests
         // Le dipendenze restano nulle di proposito: il costruttore primario non
         // le valida e il test non chiama nulla che le usi, gli serve solo che
         // gli inizializzatori di campo girino.
-        var uno = new GameHost(null!, null!, null!, null!, null!);
-        var due = new GameHost(null!, null!, null!, null!, null!);
+        var uno = new GameHost(null!, null!, null!, null!, null!, null!, null!);
+        var due = new GameHost(null!, null!, null!, null!, null!, null!, null!);
 
         Assert.NotNull(campo.GetValue(uno));
         Assert.NotNull(campo.GetValue(due));
@@ -85,6 +86,9 @@ public class GameHostTests
 
     private static RefinementRunner CreaRunner(FakeAiTextProvider ai) =>
         new(ai, Options.Create(new AiOptions()), NullLogger<RefinementRunner>.Instance);
+
+    private static IllustrationRunner CreaIllustrationRunner(FakeAiTextProvider testo, FakeAiImageProvider immagine) =>
+        new(testo, immagine, Options.Create(new AiOptions()), NullLogger<IllustrationRunner>.Instance);
 
     /// <summary>
     /// Attende una condizione invece di dormire un tempo fisso: la suite ha
@@ -159,7 +163,7 @@ public class GameHostTests
         var rooms = new FakeRoomRegistry();
         rooms.Seed("STANZA", StanzaVuota("STANZA"));
 
-        var host = new GameHost(engine, rooms, null!, CreaRunner(ai), NullLogger<GameHost>.Instance);
+        var host = new GameHost(engine, rooms, null!, CreaRunner(ai), null!, null!, NullLogger<GameHost>.Instance);
 
         var dispatch = host.DispatchAsync("STANZA", new GameStartRequested(Guid.NewGuid()));
 
@@ -204,7 +208,7 @@ public class GameHostTests
         var rooms = new FakeRoomRegistry();
         rooms.Seed("STANZA", StanzaVuota("STANZA"));
 
-        var host = new GameHost(engine, rooms, null!, CreaRunner(ai), NullLogger<GameHost>.Instance);
+        var host = new GameHost(engine, rooms, null!, CreaRunner(ai), null!, null!, NullLogger<GameHost>.Instance);
 
         await host.DispatchAsync("STANZA", new GameStartRequested(Guid.NewGuid()));
 
@@ -242,7 +246,7 @@ public class GameHostTests
         rooms.Seed("STANZA", StanzaVuota("STANZA"));
 
         var logger = new LoggerDiTest();
-        var host = new GameHost(engine, rooms, null!, CreaRunner(ai), logger);
+        var host = new GameHost(engine, rooms, null!, CreaRunner(ai), null!, null!, logger);
 
         await host.DispatchAsync("STANZA", new GameStartRequested(Guid.NewGuid()));
 
@@ -259,5 +263,228 @@ public class GameHostTests
         // Il motore non deve mai vedere l'evento: la stanza non c'era più
         // quando è rientrato.
         Assert.DoesNotContain(engine.EventiRicevuti, e => e is RefinementFinished);
+    }
+
+    // Le quattro garanzie qui sotto proteggono AvviaIllustrazione (AI Task 5):
+    // stessa forma delle tre di AvviaRifinitura sopra, perché lo stallo che
+    // evitano è lo stesso - qui cambia solo l'effetto (RequestIllustration),
+    // il runner (IllustrationRunner, che chiama testo e immagine) e l'evento
+    // di ritorno (IllustrationFinished). La quarta è nuova: dimostra che i
+    // byte generati finiscono davvero nel deposito e che l'evento porta solo
+    // il percorso, mai i byte stessi (spec §5).
+
+    /// <summary>
+    /// Se l'host attendesse la generazione, terrebbe il lucchetto della
+    /// stanza per tutta la durata della chiamata — e l'evento di ritorno, che
+    /// passa da quello stesso lucchetto, non entrerebbe mai. Stallo. Il test
+    /// lo dimostra con un provider d'immagine lento: la dispatch deve tornare
+    /// subito.
+    /// </summary>
+    [Fact]
+    public async Task LaDispatchNonAspettaLaGenerazione()
+    {
+        var testo = new FakeAiTextProvider("a penguin in a pinstripe suit");
+        var immagine = new FakeAiImageProvider
+        {
+            Risposta = [1, 2, 3],
+            Ritardo = TimeSpan.FromMilliseconds(400),
+        };
+
+        var engine = new FakeGameEngine(evt => evt switch
+        {
+            GameStartRequested => [new RequestIllustration(0, "un pinguino in doppiopetto")],
+            _ => [],
+        });
+
+        var rooms = new FakeRoomRegistry();
+        rooms.Seed("STANZA", StanzaVuota("STANZA"));
+
+        var host = new GameHost(
+            engine, rooms, null!, null!, CreaIllustrationRunner(testo, immagine), new ImageStore(), NullLogger<GameHost>.Instance);
+
+        var dispatch = host.DispatchAsync("STANZA", new GameStartRequested(Guid.NewGuid()));
+
+        // Soglia ben sotto ai 400ms di ritardo del provider: se il lucchetto
+        // non si liberasse prima che la generazione finisca, "dispatch" non
+        // vincerebbe mai questa corsa.
+        var vincitore = await Task.WhenAny(dispatch, Task.Delay(TimeSpan.FromMilliseconds(150)));
+        Assert.Same(dispatch, vincitore);
+        await dispatch;
+
+        // La generazione deve essere ancora in corso a questo punto: il
+        // motore non ha ancora visto l'evento di esito.
+        Assert.DoesNotContain(engine.EventiRicevuti, e => e is IllustrationFinished);
+
+        // E deve comunque arrivare, non restare dimenticata in sottofondo.
+        await AttendiCondizioneAsync(
+            () => engine.EventiRicevuti.Any(e => e is IllustrationFinished),
+            TimeSpan.FromSeconds(2));
+    }
+
+    /// <summary>
+    /// Senza il primo catch di AvviaIllustrazione, un'eccezione del provider
+    /// risalirebbe non osservata dal compito slegato e IllustrationFinished
+    /// non partirebbe mai: il pulsante resterebbe spento per sempre, senza
+    /// che nessuno se ne accorga (nessun client è in ascolto su quel
+    /// percorso).
+    /// </summary>
+    [Fact]
+    public async Task AncheSeLaGenerazioneEsplodeLEventoDiRitornoArriva()
+    {
+        var testo = new FakeAiTextProvider
+        {
+            ProssimoErrore = new InvalidOperationException("Guasto simulato del modello."),
+        };
+        var immagine = new FakeAiImageProvider();
+
+        var engine = new FakeGameEngine(evt => evt switch
+        {
+            GameStartRequested => [new RequestIllustration(0, "un pinguino in doppiopetto")],
+            _ => [],
+        });
+
+        var rooms = new FakeRoomRegistry();
+        rooms.Seed("STANZA", StanzaVuota("STANZA"));
+
+        var host = new GameHost(
+            engine, rooms, null!, null!, CreaIllustrationRunner(testo, immagine), new ImageStore(), NullLogger<GameHost>.Instance);
+
+        await host.DispatchAsync("STANZA", new GameStartRequested(Guid.NewGuid()));
+
+        await AttendiCondizioneAsync(
+            () => engine.EventiRicevuti.Any(e => e is IllustrationFinished),
+            TimeSpan.FromSeconds(2));
+
+        var esito = (IllustrationFinished)engine.EventiRicevuti.Last(e => e is IllustrationFinished);
+        Assert.Null(esito.Path);
+    }
+
+    /// <summary>
+    /// Senza il secondo catch di AvviaIllustrazione, l'HubException di una
+    /// stanza sparita risalirebbe non osservata dal compito slegato: nessun
+    /// client la vedrebbe comunque (non c'è nessuno in ascolto su una stanza
+    /// che non esiste più), quindi il log è l'unica traccia osservabile che
+    /// resta - ed è quello che questo test verifica.
+    /// </summary>
+    [Fact]
+    public async Task SeLaStanzaESparitaSiLoggaESiTiraAvanti()
+    {
+        var testo = new FakeAiTextProvider("a penguin in a pinstripe suit");
+        var immagine = new FakeAiImageProvider
+        {
+            Risposta = [1, 2, 3],
+            Ritardo = TimeSpan.FromMilliseconds(200),
+        };
+
+        var engine = new FakeGameEngine(evt => evt switch
+        {
+            GameStartRequested => [new RequestIllustration(0, "un pinguino in doppiopetto")],
+            _ => [],
+        });
+
+        var rooms = new FakeRoomRegistry();
+        rooms.Seed("STANZA", StanzaVuota("STANZA"));
+
+        var logger = new LoggerDiTest();
+        var host = new GameHost(
+            engine, rooms, null!, null!, CreaIllustrationRunner(testo, immagine), new ImageStore(), logger);
+
+        await host.DispatchAsync("STANZA", new GameStartRequested(Guid.NewGuid()));
+
+        // La stanza sparisce mentre la generazione è ancora in volo (riavvio
+        // del server, tutti usciti: spec §7.1). Quando il compito slegato
+        // rientra con DispatchAsync(IllustrationFinished), rooms.TryGet
+        // fallisce.
+        rooms.Remove("STANZA");
+
+        await AttendiCondizioneAsync(
+            () => logger.Voci.Any(v => v.Livello == LogLevel.Warning && v.Eccezione is HubException),
+            TimeSpan.FromSeconds(2));
+
+        // Il motore non deve mai vedere l'evento: la stanza non c'era più
+        // quando è rientrato.
+        Assert.DoesNotContain(engine.EventiRicevuti, e => e is IllustrationFinished);
+    }
+
+    /// <summary>
+    /// I byte non viaggiano nell'evento: vanno nel deposito, e l'evento porta
+    /// il percorso. Il motore non deve mai vedere un PNG (spec §5).
+    /// </summary>
+    [Fact]
+    public async Task IByteFinisconoNelDepositoELEventoPortaIlPercorso()
+    {
+        var byteAttesi = new byte[] { 9, 9, 9, 9 };
+        var testo = new FakeAiTextProvider("a penguin in a pinstripe suit");
+        var immagine = new FakeAiImageProvider { Risposta = byteAttesi };
+
+        var engine = new FakeGameEngine(evt => evt switch
+        {
+            GameStartRequested => [new RequestIllustration(0, "un pinguino in doppiopetto")],
+            _ => [],
+        });
+
+        var rooms = new FakeRoomRegistry();
+        rooms.Seed("STANZA", StanzaVuota("STANZA"));
+
+        var deposito = new ImageStore();
+        var host = new GameHost(
+            engine, rooms, null!, null!, CreaIllustrationRunner(testo, immagine), deposito, NullLogger<GameHost>.Instance);
+
+        await host.DispatchAsync("STANZA", new GameStartRequested(Guid.NewGuid()));
+
+        await AttendiCondizioneAsync(
+            () => engine.EventiRicevuti.Any(e => e is IllustrationFinished),
+            TimeSpan.FromSeconds(2));
+
+        var esito = (IllustrationFinished)engine.EventiRicevuti.Last(e => e is IllustrationFinished);
+        Assert.NotNull(esito.Path);
+
+        // Il percorso è il prefisso pubblico più l'identificativo: si toglie
+        // il prefisso per interrogare il deposito con lo stesso identificativo
+        // che l'endpoint HTTP riceverebbe.
+        var id = esito.Path![ImageStore.Prefisso.Length..];
+
+        Assert.True(deposito.TryGet(id, out var byteSalvati));
+        Assert.Equal(byteAttesi, byteSalvati);
+    }
+
+    /// <summary>
+    /// ImageStore.Salva torna null quando l'immagine da sola supera l'intero
+    /// budget del deposito (vedi ImageStore.Salva): un salvataggio fallito va
+    /// trattato come un fallimento della generazione, cioè
+    /// IllustrationFinished(indice, null) — non un successo con un percorso
+    /// che punterebbe al nulla. Se questo caso non venisse gestito, il server
+    /// annuncerebbe a tutta la stanza un'immagine pronta a un indirizzo che
+    /// non esiste.
+    /// </summary>
+    [Fact]
+    public async Task UnSalvataggioFallitoDiventaEsitoNullo()
+    {
+        var byteImmagine = new byte[] { 1, 2, 3, 4, 5 };
+        var testo = new FakeAiTextProvider("a penguin in a pinstripe suit");
+        var immagine = new FakeAiImageProvider { Risposta = byteImmagine };
+
+        var engine = new FakeGameEngine(evt => evt switch
+        {
+            GameStartRequested => [new RequestIllustration(0, "un pinguino in doppiopetto")],
+            _ => [],
+        });
+
+        var rooms = new FakeRoomRegistry();
+        rooms.Seed("STANZA", StanzaVuota("STANZA"));
+
+        // Budget più piccolo dell'immagine stessa: Salva deve rifiutarla.
+        var deposito = new ImageStore(budgetByte: byteImmagine.LongLength - 1);
+        var host = new GameHost(
+            engine, rooms, null!, null!, CreaIllustrationRunner(testo, immagine), deposito, NullLogger<GameHost>.Instance);
+
+        await host.DispatchAsync("STANZA", new GameStartRequested(Guid.NewGuid()));
+
+        await AttendiCondizioneAsync(
+            () => engine.EventiRicevuti.Any(e => e is IllustrationFinished),
+            TimeSpan.FromSeconds(2));
+
+        var esito = (IllustrationFinished)engine.EventiRicevuti.Last(e => e is IllustrationFinished);
+        Assert.Null(esito.Path);
     }
 }

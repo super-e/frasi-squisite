@@ -486,6 +486,28 @@ public partial class GameSessionViewModel : ObservableObject
     [RelayCommand]
     private Task CloseVotingAsync() => EseguiComandoAsync(() => _connection.CloseVotingAsync(RoomCode));
 
+    [RelayCommand]
+    private Task RequestIllustrationAsync(PhraseResultRowView riga) => EseguiComandoAsync(async () =>
+    {
+        // L'attesa si accende PRIMA dell'await: è ciò che impedisce il secondo
+        // tocco mentre il primo è in volo. Il motore rifiuterebbe comunque il
+        // doppione, ma con un errore a schermo invece che con niente.
+        riga.IsWaiting = true;
+
+        try
+        {
+            await _connection.RequestIllustrationAsync(RoomCode, riga.PhraseIndex);
+        }
+        catch
+        {
+            // Se non è nemmeno partita, l'attesa non deve restare accesa: non
+            // arriverà nessun messaggio a spegnerla. Il guasto lo racconta
+            // EseguiComandoAsync, che rilancia.
+            riga.IsWaiting = false;
+            throw;
+        }
+    });
+
     /// <summary>
     /// "Nuova partita" (lotto-d-brief.md): riparte subito, stessi giocatori e
     /// stesso schema. Ripulisce lo stato della partita appena conclusa DOPO
@@ -744,10 +766,57 @@ public partial class GameSessionViewModel : ObservableObject
                 FinalResults.Clear();
                 foreach (var risultato in finale.Results)
                 {
-                    FinalResults.Add(new PhraseResultRowView(risultato));
+                    FinalResults.Add(new PhraseResultRowView(risultato, IsHost));
                 }
 
                 Screen = ScreenState.Finished;
+                break;
+
+            case IllustrationReadyMessage pronta:
+                // Nome diverso da "riga" (usato nel case RoomStateMessage qui
+                // sopra, dentro il foreach): i case di uno switch senza
+                // parentesi condividono lo stesso ambito, quindi lo stesso nome
+                // qui sarebbe un conflitto di dichiarazione.
+                if (RigaDiFrase(pronta.PhraseIndex) is { } rigaPronta)
+                {
+                    rigaPronta.IsWaiting = false;
+                    // L'indirizzo arriva relativo perché il server non sa sotto
+                    // quale nome è raggiunto: davanti c'è un reverse proxy.
+                    // ServerUrl è l'unico posto dove quell'informazione c'è.
+                    rigaPronta.ImageUrl = new Uri(new Uri(ServerUrl), pronta.Path).ToString();
+                }
+
+                break;
+
+            case IllustrationFailedMessage fallita:
+                // Il fallimento va in broadcast a tutta la stanza (il server
+                // non sa chi ha premuto il pulsante), ma il banner deve
+                // parlare solo a chi ha davvero chiesto l'illustrazione: gli
+                // altri client non hanno niente da riprovare, e un errore per
+                // qualcosa che non hanno chiesto non significa nulla sui loro
+                // schermi. IsWaiting su QUESTO client è vero solo per chi ha
+                // premuto il pulsante - RequestIllustrationAsync lo accende
+                // prima dell'await - quindi va letto PRIMA di spegnerlo qui
+                // sotto, che invece resta per tutti: è lo spegnimento
+                // dell'attesa a dover valere ovunque, non il messaggio.
+                //
+                // ErrorText va scritto solo se la riga esiste ancora: un
+                // fallimento tardivo (partita già ricominciata, FinalResults
+                // svuotata da PulisciStatoDiPartitaConclusa) non ha più niente
+                // a cui riferirsi, e mostrare comunque il banner produrrebbe
+                // un errore orfano - a schermo ma senza alcun contesto che lo
+                // spieghi, perché la classifica a cui apparteneva è sparita.
+                if (RigaDiFrase(fallita.PhraseIndex) is { } rigaFallita)
+                {
+                    var questoClientAvevaChiesto = rigaFallita.IsWaiting;
+                    rigaFallita.IsWaiting = false;
+
+                    if (questoClientAvevaChiesto)
+                    {
+                        ErrorText = fallita.Message;
+                    }
+                }
+
                 break;
 
             case ErrorMessage errore:
@@ -755,6 +824,15 @@ public partial class GameSessionViewModel : ObservableObject
                 break;
         }
     }
+
+    /// <summary>
+    /// Torna null se l'indice non è in classifica. Non è paranoia: il messaggio
+    /// arriva dal server e il client non ha modo di verificarlo, e una riga
+    /// cercata per posizione in una lista ordinata per voti sarebbe comunque
+    /// la riga sbagliata.
+    /// </summary>
+    private PhraseResultRowView? RigaDiFrase(int phraseIndex) =>
+        FinalResults.FirstOrDefault(r => r.PhraseIndex == phraseIndex);
 
     /// <summary>
     /// Ripulisce lo stato accumulato dalla partita appena conclusa - risultati
@@ -787,6 +865,18 @@ public partial class GameSessionViewModel : ObservableObject
         OnPropertyChanged(nameof(CanChangeSchema));
         OnPropertyChanged(nameof(ShowFinishedActions));
         OnPropertyChanged(nameof(ShowCloseVoting));
+
+        // Le righe di FinalResults, a differenza di Players, non si
+        // ricostruiscono a ogni RoomStateMessage: nascono una volta sola con
+        // GameFinishedMessage, che non torna. Se l'host si disconnette e il
+        // motore promuove un altro giocatore, questo è l'unico punto in cui
+        // la promozione può ancora raggiungere righe già esistenti - senza,
+        // il nuovo host vedrebbe "Nuova partita" e "Torna alla lobby" (che
+        // dipendono da IsHost qui sopra) ma nessun pulsante "Illustra".
+        foreach (var riga in FinalResults)
+        {
+            riga.IsHost = value;
+        }
     }
 
     partial void OnScreenChanged(ScreenState value)

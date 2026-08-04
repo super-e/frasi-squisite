@@ -95,3 +95,21 @@ public sealed record GameFinishedMessage(IReadOnlyList<PhraseResultView> Results
 public sealed record ErrorMessage(string Code, string Message);
 
 public sealed record ProtocolRejectedMessage(int ServerVersion, string Message);
+
+/// <summary>
+/// <paramref name="Path"/> è relativo (es. <c>/illustrazioni/xY3…</c>) e non
+/// assoluto: il client conosce già l'indirizzo del server, e un indirizzo
+/// assoluto costruito lato server sbaglierebbe ogni volta che c'è un reverse
+/// proxy davanti — che è esattamente la configurazione in cui gira (Caddy).
+///
+/// L'identificativo dentro il percorso è casuale e non l'indice della frase:
+/// il codice stanza è corto e indovinabile, e con l'indice chiunque potrebbe
+/// pescare le illustrazioni di partite altrui provando codici a caso (spec §5).
+/// </summary>
+public sealed record IllustrationReadyMessage(int PhraseIndex, string Path);
+
+/// <summary>
+/// Il pulsante deve tornare disponibile: senza questo messaggio resterebbe in
+/// attesa per sempre, e l'host non saprebbe se riprovare.
+/// </summary>
+public sealed record IllustrationFailedMessage(int PhraseIndex, string Message);
