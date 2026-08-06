@@ -266,8 +266,8 @@ public sealed class GameHubTests : IAsyncLifetime
         // una SECONDA DispatchAsync quando riprende il lucchetto della
         // stanza - una latenza non nulla anche con l'AI disattivata, che
         // risponde comunque in modo asincrono. Quella fine produce comunque
-        // una RevealStepMessage iniziale e vuota (nessuna casella ancora
-        // scoperta), proprio per portare tutti sulla schermata di reveal
+        // una RevealStepMessage iniziale, con nessuna casella ancora
+        // scoperta, proprio per portare tutti sulla schermata di reveal
         // senza che nessuno debba aspettare l'host (spec C1) - ma se il primo
         // AdvanceReveal qui sotto arriva PRIMA che quella transizione sia
         // avvenuta, la stanza è ancora in Refining e la chiamata viene
@@ -275,8 +275,9 @@ public sealed class GameHubTests : IAsyncLifetime
         // RevealStepMessage), perdendo quella casella. Si rilegge perciò il
         // conteggio a ogni giro invece di sparare una sola chiamata alla
         // cieca - lo stesso pattern di GiocaFinoAllaFineAsync più sotto: se
-        // la chiamata viene respinta, la RevealStepMessage iniziale e vuota
-        // fa comunque salire il conteggio, e il giro successivo la riprova
+        // la chiamata viene respinta, la RevealStepMessage iniziale, priva
+        // di caselle scoperte, fa comunque salire il conteggio, e il giro
+        // successivo la riprova
         // finché non arriva il vero passo.
         while (anna.CountOf<RevealStepMessage>() < 2)
         {
@@ -288,7 +289,7 @@ public sealed class GameHubTests : IAsyncLifetime
         var passo = anna.Last<RevealStepMessage>();
         Assert.Equal(0, passo.PhraseIndex);
         Assert.Equal(2, passo.TotalPhrases);
-        Assert.Single(passo.RevealedSlots);
+        Assert.Single(passo.Fragments.Where(f => f.IsSlot && f.IsRevealed));
     }
 
     /// <summary>
@@ -302,8 +303,9 @@ public sealed class GameHubTests : IAsyncLifetime
     /// ancora in Refining verrebbe respinta con NOT_REVEALING (un errore
     /// privato, nessuna RevealStepMessage) e quella casella andrebbe persa;
     /// qui invece, se la chiamata viene respinta, la RevealStepMessage
-    /// iniziale e vuota che chiude comunque la rifinitura fa salire il
-    /// conteggio lo stesso, e il giro successivo la riprova.
+    /// iniziale, priva di caselle scoperte, che chiude comunque la
+    /// rifinitura fa salire il conteggio lo stesso, e il giro successivo la
+    /// riprova.
     /// </summary>
     private static async Task AvanzaRevealFinoAlVotoAsync(Client anna, string codice)
     {

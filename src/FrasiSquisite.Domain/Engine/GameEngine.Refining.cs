@@ -80,10 +80,11 @@ public sealed partial class GameEngine
     /// Porta la stanza nel reveal. Chiamato solo dalla fine della rifinitura:
     /// prima ci si arrivava direttamente dalla fine dell'ultimo round.
     ///
-    /// La RevealStepMessage iniziale - vuota, nessuna casella scoperta - e'
-    /// cio' che porta tutti sulla schermata di reveal: senza, ogni client
-    /// resterebbe fermo dov'era, perche' non arriva piu' nessuna
-    /// SlotRequestMessage e Screen non cambia mai da solo.
+    /// La RevealStepMessage iniziale - nessuna casella ancora scoperta, ma
+    /// già col tessuto connettivo del template (backlog #1) - e' cio' che
+    /// porta tutti sulla schermata di reveal: senza, ogni client resterebbe
+    /// fermo dov'era, perche' non arriva piu' nessuna SlotRequestMessage e
+    /// Screen non cambia mai da solo.
     /// </summary>
     private static EngineResult AvviaReveal(GameState state)
     {
@@ -94,9 +95,11 @@ public sealed partial class GameEngine
             RevealSlotCount = 0,
         };
 
+        var frammenti = FrammentiReveal(reveal.Schema, reveal.Phrases[0], scoperte: 0);
+
         return new EngineResult(reveal, [
             new BroadcastToRoom(RoomState(reveal)),
-            new BroadcastToRoom(new RevealStepMessage(0, reveal.Phrases.Count, [], false)),
+            new BroadcastToRoom(new RevealStepMessage(0, reveal.Phrases.Count, frammenti, false)),
         ]);
     }
 }

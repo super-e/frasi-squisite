@@ -1,6 +1,7 @@
 using FrasiSquisite.Domain.Model;
 using FrasiSquisite.Domain.Voting;
 using FrasiSquisite.Shared.Protocol;
+using FrasiSquisite.Shared.Schemas;
 
 namespace FrasiSquisite.Domain.Engine;
 
@@ -23,12 +24,10 @@ public sealed partial class GameEngine
         var frase = state.Phrases[state.RevealPhraseIndex];
         var completa = scoperte >= frase.Slots.Count;
 
-        var testi = frase.Slots.Take(scoperte).Select(s => s!.Text).ToList();
-
         var passo = new RevealStepMessage(
             state.RevealPhraseIndex,
             state.Phrases.Count,
-            testi,
+            FrammentiReveal(state.Schema, frase, scoperte),
             completa);
 
         if (!completa)
@@ -49,6 +48,19 @@ public sealed partial class GameEngine
 
         return EntraInVoto(state, [new BroadcastToRoom(passo)]);
     }
+
+    /// <summary>
+    /// Il tessuto connettivo del template intercalato alle caselle scoperte
+    /// (backlog #1): è come si legge la pagina del voto, dove
+    /// <see cref="Schema.Compose"/> fa lo stesso lavoro in un colpo solo.
+    /// Le caselle non ancora scoperte arrivano comunque (per punteggiatura e
+    /// posizione corrette lato client) ma senza testo — il voto che segue è
+    /// cieco, e questo è il punto che non deve mai regredire.
+    /// </summary>
+    private static IReadOnlyList<RevealFragment> FrammentiReveal(Schema schema, Phrase frase, int scoperte) =>
+        [.. schema.Segments.Select(s => s.IsSlot
+            ? new RevealFragment(true, s.SlotIndex < scoperte ? frase.Slots[s.SlotIndex]!.Text : string.Empty, s.SlotIndex < scoperte)
+            : new RevealFragment(false, s.Literal, true))];
 
     /// <summary>Le frasi composte secondo il template dello schema.</summary>
     private static IReadOnlyList<string> FrasiComposte(GameState state) =>

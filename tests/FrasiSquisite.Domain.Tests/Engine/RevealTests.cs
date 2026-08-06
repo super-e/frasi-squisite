@@ -53,7 +53,7 @@ public class RevealTests
 
         Assert.Equal(0, passo.PhraseIndex);
         Assert.Equal(N, passo.TotalPhrases);
-        Assert.Single(passo.RevealedSlots);
+        Assert.Equal(1, passo.Fragments.Count(f => f.IsSlot && f.IsRevealed));
         Assert.False(passo.PhraseComplete);
     }
 
@@ -81,7 +81,7 @@ public class RevealTests
         var completo = Assert.Single(ultimo.Broadcasts<RevealStepMessage>());
 
         Assert.True(completo.PhraseComplete);
-        Assert.Equal(K, completo.RevealedSlots.Count);
+        Assert.Equal(K, completo.Fragments.Count(f => f.IsSlot && f.IsRevealed));
     }
 
     [Fact]
@@ -98,7 +98,45 @@ public class RevealTests
         var passo = Assert.Single(risultato.Broadcasts<RevealStepMessage>());
 
         Assert.Equal(1, passo.PhraseIndex);
-        Assert.Single(passo.RevealedSlots);
+        Assert.Equal(1, passo.Fragments.Count(f => f.IsSlot && f.IsRevealed));
+    }
+
+    [Fact]
+    public void IlTestoFissoDelTemplateArrivaSubitoEIntercalatoAlleCaselleScoperte()
+    {
+        var motore = new GameEngine(new RoleSchemaMode(), new StaticWordPool(), new SeededRandomSource(1));
+        var stato = GameState.NewRoom("ABCD", TestSchemas.WithTemplate(K, "Dice: «{0}» e poi «{1}» e infine «{2}»."));
+
+        for (var i = 0; i < N; i++)
+        {
+            stato = motore.Handle(stato, new PlayerJoined(Giocatore(i), $"G{i}")).State;
+        }
+
+        stato = motore.Handle(stato, new GameStartRequested(Giocatore(0))).State;
+
+        for (var round = 0; round < K; round++)
+        {
+            for (var g = 0; g < N; g++)
+            {
+                stato = motore.Handle(stato, new SlotSubmitted(Giocatore(g), $"p{round}{g}")).State;
+            }
+        }
+
+        stato = motore.Handle(stato, new RefinementFinished(null)).State;
+
+        var testoPrimaCasella = stato.Phrases[0].Slots[0]!.Text;
+
+        var primo = motore.Handle(stato, new RevealAdvanceRequested(Giocatore(0)));
+        var passo = Assert.Single(primo.Broadcasts<RevealStepMessage>());
+
+        Assert.Equal(7, passo.Fragments.Count);
+        Assert.Equal((false, "Dice: «", true), (passo.Fragments[0].IsSlot, passo.Fragments[0].Text, passo.Fragments[0].IsRevealed));
+        Assert.Equal((true, testoPrimaCasella, true), (passo.Fragments[1].IsSlot, passo.Fragments[1].Text, passo.Fragments[1].IsRevealed));
+        Assert.Equal((false, "» e poi «", true), (passo.Fragments[2].IsSlot, passo.Fragments[2].Text, passo.Fragments[2].IsRevealed));
+        Assert.Equal((true, string.Empty, false), (passo.Fragments[3].IsSlot, passo.Fragments[3].Text, passo.Fragments[3].IsRevealed));
+        Assert.Equal((false, "» e infine «", true), (passo.Fragments[4].IsSlot, passo.Fragments[4].Text, passo.Fragments[4].IsRevealed));
+        Assert.Equal((true, string.Empty, false), (passo.Fragments[5].IsSlot, passo.Fragments[5].Text, passo.Fragments[5].IsRevealed));
+        Assert.Equal((false, "»."), (passo.Fragments[6].IsSlot, passo.Fragments[6].Text));
     }
 
     [Fact]

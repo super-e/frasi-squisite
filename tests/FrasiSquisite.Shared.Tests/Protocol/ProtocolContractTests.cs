@@ -12,9 +12,9 @@ public class ProtocolContractTests
     // dell'illustrazione spento invece di mostrare l'esito. Anche qui il
     // rifiuto esplicito ("aggiorna l'app") è il comportamento giusto.
     [Fact]
-    public void LaVersioneDelProtocolloE7()
+    public void LaVersioneDelProtocolloE8()
     {
-        Assert.Equal(7, ProtocolVersion.Current);
+        Assert.Equal(8, ProtocolVersion.Current);
     }
 
     // v6 è l'unica versione davvero installata sul campo: l'APK del lotto
@@ -138,12 +138,28 @@ public class ProtocolContractTests
     }
 
     [Fact]
+    public void RoundtripDiRevealFragment()
+    {
+        var originale = new RevealFragment(IsSlot: true, Text: "Il cadavere", IsRevealed: true);
+
+        var json = JsonSerializer.Serialize(originale, ProtocolJson.Options);
+        var ricostruito = JsonSerializer.Deserialize<RevealFragment>(json, ProtocolJson.Options);
+
+        Assert.Equal(originale, ricostruito);
+    }
+
+    [Fact]
     public void RoundtripDiRevealStep()
     {
         var originale = new RevealStepMessage(
             PhraseIndex: 0,
             TotalPhrases: 3,
-            RevealedSlots: ["Il cadavere", "squisito"],
+            Fragments:
+            [
+                new RevealFragment(true, "Il cadavere", true),
+                new RevealFragment(false, " ", true),
+                new RevealFragment(true, string.Empty, false),
+            ],
             PhraseComplete: false);
 
         var json = JsonSerializer.Serialize(originale, ProtocolJson.Options);
@@ -152,7 +168,7 @@ public class ProtocolContractTests
         Assert.NotNull(ricostruito);
         Assert.Equal(originale.PhraseIndex, ricostruito.PhraseIndex);
         Assert.Equal(originale.TotalPhrases, ricostruito.TotalPhrases);
-        Assert.Equal(originale.RevealedSlots, ricostruito.RevealedSlots);
+        Assert.Equal(originale.Fragments, ricostruito.Fragments);
         Assert.Equal(originale.PhraseComplete, ricostruito.PhraseComplete);
     }
 
@@ -173,7 +189,7 @@ public class ProtocolContractTests
         var proprieta = typeof(RevealStepMessage).GetProperties().Select(p => p.Name).ToArray();
 
         Assert.Equal(
-            ["PhraseIndex", "TotalPhrases", "RevealedSlots", "PhraseComplete"],
+            ["PhraseIndex", "TotalPhrases", "Fragments", "PhraseComplete"],
             proprieta);
     }
 

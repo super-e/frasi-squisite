@@ -47,6 +47,17 @@ public sealed record SlotRequestMessage(
 public sealed record RoundProgressMessage(int Round, int Submitted, int Total);
 
 /// <summary>
+/// Un pezzo della frase mostrata nel reveal, nell'ordine di lettura: testo
+/// fisso del template (sempre presente, non rivela nulla su nessuno) o una
+/// casella. Le caselle non ancora scoperte arrivano comunque, con
+/// <see cref="IsRevealed"/> false e <see cref="Text"/> vuoto — così il
+/// client conosce da subito la lunghezza e la punteggiatura della frase
+/// intera, come già succede nella pagina del voto (backlog #1), senza che
+/// il server mandi mai il contenuto di una casella coperta.
+/// </summary>
+public sealed record RevealFragment(bool IsSlot, string Text, bool IsRevealed);
+
+/// <summary>
 /// Il passo di scoprimento non porta gli autori: il voto che segue è cieco
 /// (spec §3). Il campo non è vuoto — non esiste, così come
 /// <see cref="SlotRequestMessage"/> non ha un campo per il testo già scritto.
@@ -55,7 +66,7 @@ public sealed record RoundProgressMessage(int Round, int Submitted, int Total);
 public sealed record RevealStepMessage(
     int PhraseIndex,
     int TotalPhrases,
-    IReadOnlyList<string> RevealedSlots,
+    IReadOnlyList<RevealFragment> Fragments,
     bool PhraseComplete);
 
 /// <summary>

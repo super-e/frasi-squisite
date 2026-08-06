@@ -15,4 +15,17 @@ public static class TestSchemas
 
         return new Schema($"test-{k}", 1, $"Test {k}", caselle, template);
     }
+
+    /// <summary>
+    /// Schema sintetico con K caselle e un template esplicito, per
+    /// verificare l'intercalazione del testo fisso nel reveal (backlog #1).
+    /// </summary>
+    public static Schema WithTemplate(int k, string template)
+    {
+        var caselle = Enumerable.Range(0, k)
+            .Select(i => new Casella($"Ruolo{i}", $"Prompt {i}", $"Esempio {i}"))
+            .ToList();
+
+        return new Schema($"test-{k}-template", 1, $"Test {k}", caselle, template);
+    }
 }
