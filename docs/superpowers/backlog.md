@@ -8,40 +8,7 @@ Ordine indicativo di priorità, non vincolante.
 
 ---
 
-## 1. Il reveal si legge a scatti
-
-**Visto giocando, 4 agosto 2026.**
-
-Durante il reveal le caselle compaiono una per riquadro, e la frase non si
-legge in modo fluido come nella pagina del voto.
-
-**Attenzione a non inseguire il baco sbagliato.** Il testo che il reveal mostra
-**è già quello rifinito**: `GameEngine.Reveal.cs` manda `s.Text`, e
-`ApplicaRifinitura` ha già sostituito il testo di ogni casella. Quello che
-manca è il **testo fisso del template** — `dicendo:`, `La gente dice:`, le
-virgolette, la punteggiatura — che vive nello schema e non nelle caselle,
-quindi compare solo quando la frase viene composta con `Schema.Compose`. È
-esattamente ciò che fa la pagina del voto, ed è per questo che lì si legge
-bene e nel reveal no.
-
-Quindi non è un difetto della rifinitura, ed è una modifica di sola
-presentazione.
-
-**Da decidere:** se mostrare il tessuto connettivo fisso **dentro** i riquadri
-o **fuori**, fra l'uno e l'altro. Enrico è indifferente fra le due. La seconda
-mantiene la corrispondenza uno-a-uno fra riquadro e casella, che è il cuore
-del gioco; la prima è più semplice da disporre a schermo.
-
-**Insieme a questo:** non tutte le frasi si vedono per intero nei riquadri, il
-testo viene tagliato. Va sistemato nello stesso lavoro, perché è lo stesso
-schermo.
-
-**Vincolo da non rompere:** il reveal scopre una casella alla volta. Qualunque
-soluzione mostri la frase intera in anticipo distruggerebbe il gioco.
-
----
-
-## 2. Ingrandire l'illustrazione toccandola
+## 1. Ingrandire l'illustrazione toccandola
 
 **Visto giocando, 4 agosto 2026.** L'immagine si genera correttamente, ma nel
 riquadro della classifica è piccola.
@@ -52,7 +19,7 @@ da un endpoint HTTP con il suo indirizzo, quindi non serve niente lato server:
 
 ---
 
-## 3. Il fallimento intermittente di `GameHubTests`
+## 2. Il fallimento intermittente di `GameHubTests`
 
 **Dieci manifestazioni durante il lotto dell'illustrazione, su almeno cinque
 test diversi.** Sempre la stessa firma: un'attesa che scade **solo** quando
@@ -88,7 +55,7 @@ archiviato come "il solito flake".
 
 ---
 
-## 4. Bot più aderenti allo schema
+## 3. Bot più aderenti allo schema
 
 Il secondo dei tre pezzi del lotto AI, l'unico non ancora fatto. Descritto in
 [spec AI §6](specs/2026-08-03-ai-design.md).
@@ -106,7 +73,7 @@ il limite che vale per tutti gli altri.
 
 ---
 
-## 5. Rilievi minori lasciati aperti dalle revisioni
+## 4. Rilievi minori lasciati aperti dalle revisioni
 
 Nessuno blocca niente. Elencati perché una decisione presa e non scritta
 diventa una svista.
