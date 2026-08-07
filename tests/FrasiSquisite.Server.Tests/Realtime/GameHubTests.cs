@@ -289,7 +289,7 @@ public sealed class GameHubTests : IAsyncLifetime
         var passo = anna.Last<RevealStepMessage>();
         Assert.Equal(0, passo.PhraseIndex);
         Assert.Equal(2, passo.TotalPhrases);
-        Assert.Single(passo.Fragments.Where(f => f.IsSlot && f.IsRevealed));
+        Assert.Single(passo.Fragments, f => f.IsSlot && f.IsRevealed);
     }
 
     /// <summary>
