@@ -232,11 +232,14 @@ public partial class GameSessionViewModel : ObservableObject
         : $"{SchemaNome} — {SlotCount} caselle";
 
     /// <summary>
-    /// Lunga sempre <see cref="SlotCount"/>: le caselle non ancora scoperte ci
-    /// sono già, come segnaposto "···" (<see cref="RevealSlotView.IsRevealed"/>
-    /// false), invece di apparire solo quando arrivano.
+    /// Riflette 1:1 i frammenti mandati dal server per il passo di reveal
+    /// corrente: testo fisso del template e caselle, scoperte o coperte con
+    /// "···" (<see cref="RevealFragmentView.IsRevealed"/> false). Il
+    /// riempimento delle caselle non ancora arrivate lo fa già il server:
+    /// qui non c'è più bisogno di completare la lista con <c>SlotCount</c>
+    /// (backlog #1).
     /// </summary>
-    public ObservableCollection<RevealSlotView> RevealSlots { get; } = [];
+    public ObservableCollection<RevealFragmentView> RevealFragments { get; } = [];
 
     public ObservableCollection<PhraseResultRowView> FinalResults { get; } = [];
 
@@ -725,17 +728,12 @@ public partial class GameSessionViewModel : ObservableObject
                 PhraseNumber = passo.PhraseIndex + 1;
                 TotalPhrases = passo.TotalPhrases;
 
-                // SlotCount arriva con la RoomStateMessage che precede sempre
-                // il reveal nel flusso reale; il fallback alle sole caselle
-                // ricevute copre solo il caso (di solo test) in cui non sia
-                // ancora nota, senza inventare segnaposto in più.
-                var totaleCaselle = SlotCount > 0 ? SlotCount : passo.RevealedSlots.Count;
-                RevealSlots.Clear();
-                for (var i = 0; i < totaleCaselle; i++)
+                RevealFragments.Clear();
+                foreach (var frammento in passo.Fragments)
                 {
-                    RevealSlots.Add(i < passo.RevealedSlots.Count
-                        ? new RevealSlotView(passo.RevealedSlots[i], true)
-                        : new RevealSlotView("···", false));
+                    RevealFragments.Add(frammento.IsSlot
+                        ? new RevealFragmentView(true, frammento.IsRevealed ? frammento.Text : "···", frammento.IsRevealed)
+                        : new RevealFragmentView(false, frammento.Text, true));
                 }
 
                 _fraseCompleta = passo.PhraseComplete;
@@ -845,7 +843,7 @@ public partial class GameSessionViewModel : ObservableObject
     private void PulisciStatoDiPartitaConclusa()
     {
         FinalResults.Clear();
-        RevealSlots.Clear();
+        RevealFragments.Clear();
         _fraseCompleta = false;
         VoteOptions.Clear();
         HasVoted = false;

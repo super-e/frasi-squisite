@@ -17,6 +17,12 @@ public class GameSessionViewModelTests
         return (vm, connessione);
     }
 
+    private static RevealFragment Rivelata(string testo) => new(true, testo, true);
+
+    private static RevealFragment Coperta() => new(true, string.Empty, false);
+
+    private static RevealFragment Letterale(string testo) => new(false, testo, true);
+
     private static (GameSessionViewModel Vm, FakeGameConnection Conn, FakeThemeService Tema) CreaConTema()
     {
         var connessione = new FakeGameConnection();
@@ -226,7 +232,7 @@ public class GameSessionViewModelTests
         conn.Emit(new SlotRequestMessage(4, 5, "Aggettivo", "prompt", "esempio"));
         vm.SlotText = "nuovo";
 
-        conn.MessaggioDuranteInvio = new RevealStepMessage(0, 2, ["Il cadavere"], false);
+        conn.MessaggioDuranteInvio = new RevealStepMessage(0, 2, [Rivelata("Il cadavere")], false);
 
         await vm.SubmitSlotCommand.ExecuteAsync(null);
 
@@ -259,22 +265,25 @@ public class GameSessionViewModelTests
     }
 
     [Fact]
-    public void IlPassoDiRevealPopolaLeCaselleScoperteELascaCoperteLeRestanti()
+    public void IlPassoDiRevealMostraIFrammentiScopertiECopreLeCaselleRestanti()
     {
         var (vm, conn) = Crea();
 
-        conn.Emit(new RoomStateMessage(
-            "ABCD", "Reveal",
-            [new PlayerView(Anna, "Anna", true, true, false)],
-            "surrealista-classico", 3));
-
-        conn.Emit(new RevealStepMessage(0, 1, ["Il cadavere", "squisito"], false));
+        conn.Emit(new RevealStepMessage(0, 1, [
+            Rivelata("Il cadavere"),
+            Letterale(" "),
+            Rivelata("squisito"),
+            Letterale(" "),
+            Coperta(),
+        ], false));
 
         Assert.Equal(ScreenState.Reveal, vm.Screen);
-        Assert.Equal(3, vm.RevealSlots.Count);
-        Assert.Equal(("Il cadavere", true), (vm.RevealSlots[0].Text, vm.RevealSlots[0].IsRevealed));
-        Assert.Equal(("squisito", true), (vm.RevealSlots[1].Text, vm.RevealSlots[1].IsRevealed));
-        Assert.Equal(("···", false), (vm.RevealSlots[2].Text, vm.RevealSlots[2].IsRevealed));
+        Assert.Equal(5, vm.RevealFragments.Count);
+        Assert.Equal((true, "Il cadavere", true), (vm.RevealFragments[0].IsSlot, vm.RevealFragments[0].Text, vm.RevealFragments[0].IsRevealed));
+        Assert.Equal((false, " "), (vm.RevealFragments[1].IsSlot, vm.RevealFragments[1].Text));
+        Assert.Equal((true, "squisito", true), (vm.RevealFragments[2].IsSlot, vm.RevealFragments[2].Text, vm.RevealFragments[2].IsRevealed));
+        Assert.Equal((false, " "), (vm.RevealFragments[3].IsSlot, vm.RevealFragments[3].Text));
+        Assert.Equal((true, "···", false), (vm.RevealFragments[4].IsSlot, vm.RevealFragments[4].Text, vm.RevealFragments[4].IsRevealed));
     }
 
     // Due stati, non più tre (voto cieco, spec §3): "Chi l'ha scritta?" è
@@ -290,13 +299,13 @@ public class GameSessionViewModelTests
         var (vm, conn) = Crea();
         vm.RoomCode = "ABCD";
 
-        conn.Emit(new RevealStepMessage(0, 2, ["Il cadavere"], false));
+        conn.Emit(new RevealStepMessage(0, 2, [Rivelata("Il cadavere")], false));
         Assert.Equal("Rivela la prossima parola", vm.RevealButtonLabel);
 
         await vm.AdvanceRevealCommand.ExecuteAsync(null);
         Assert.Contains("AdvanceReveal(ABCD)", conn.Calls);
 
-        conn.Emit(new RevealStepMessage(0, 2, ["Il cadavere", "squisito"], true));
+        conn.Emit(new RevealStepMessage(0, 2, [Rivelata("Il cadavere"), Rivelata("squisito")], true));
         Assert.Equal("Prossima frase", vm.RevealButtonLabel);
 
         await vm.AdvanceRevealCommand.ExecuteAsync(null);
@@ -308,7 +317,7 @@ public class GameSessionViewModelTests
     {
         var (vm, conn) = Crea();
 
-        conn.Emit(new RevealStepMessage(1, 3, ["berrà"], false));
+        conn.Emit(new RevealStepMessage(1, 3, [Rivelata("berrà")], false));
 
         Assert.Equal(2, vm.PhraseNumber);
         Assert.Equal(3, vm.TotalPhrases);
@@ -394,13 +403,13 @@ public class GameSessionViewModelTests
         // imposta Screen sullo stesso valore che ha già, quindi il setter
         // generato non invoca OnScreenChanged. La regola di pulizia
         // dell'errore non può quindi dipendere dal cambio di schermata.
-        conn.Emit(new RevealStepMessage(0, 3, ["Il cadavere"], false));
+        conn.Emit(new RevealStepMessage(0, 3, [Rivelata("Il cadavere")], false));
         Assert.Equal(ScreenState.Reveal, vm.Screen);
 
         conn.Emit(new ErrorMessage("TIMEOUT", "Richiesta scaduta, riprova."));
         Assert.False(string.IsNullOrEmpty(vm.ErrorText));
 
-        conn.Emit(new RevealStepMessage(0, 3, ["Il cadavere", "squisito"], false));
+        conn.Emit(new RevealStepMessage(0, 3, [Rivelata("Il cadavere"), Rivelata("squisito")], false));
 
         Assert.Equal(ScreenState.Reveal, vm.Screen);
         Assert.Equal(string.Empty, vm.ErrorText);
@@ -1182,7 +1191,7 @@ public class GameSessionViewModelTests
         var (vm, conn) = Crea();
         vm.RoomCode = "ABCD";
 
-        conn.Emit(new RevealStepMessage(0, 1, ["Il cadavere"], true));
+        conn.Emit(new RevealStepMessage(0, 1, [Rivelata("Il cadavere")], true));
         await vm.AdvanceRevealCommand.ExecuteAsync(null);
         conn.Emit(new VoteRequestMessage(["Prima", "Seconda"]));
         await vm.CastVoteCommand.ExecuteAsync(vm.VoteOptions[0]);
@@ -1190,7 +1199,7 @@ public class GameSessionViewModelTests
         conn.Emit(new GameFinishedMessage([new PhraseResultView(0, "Il cadavere squisito", [], 0, false)]));
 
         Assert.NotEmpty(vm.FinalResults);
-        Assert.NotEmpty(vm.RevealSlots);
+        Assert.NotEmpty(vm.RevealFragments);
         Assert.NotEmpty(vm.VoteOptions);
         Assert.True(vm.HasVoted);
         Assert.Equal(1, vm.VotedCount);
@@ -1199,7 +1208,7 @@ public class GameSessionViewModelTests
         await vm.BackToLobbyCommand.ExecuteAsync(null);
 
         Assert.Empty(vm.FinalResults);
-        Assert.Empty(vm.RevealSlots);
+        Assert.Empty(vm.RevealFragments);
         Assert.Empty(vm.VoteOptions);
         Assert.False(vm.HasVoted);
         Assert.Equal(0, vm.VotedCount);
