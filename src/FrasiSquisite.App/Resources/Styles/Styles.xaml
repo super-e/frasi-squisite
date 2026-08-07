@@ -648,7 +648,11 @@
         <Setter Property="TextTransform" Value="Uppercase" />
     </Style>
 
-    <!-- Caselle del reveal: "rivelata" (scoperta) e "coperta" (ancora ···). -->
+    <!-- Caselle del reveal: "rivelata" (scoperta) e "coperta" (ancora ···).
+         MaximumWidthRequest + LineBreakMode esplicito: FlexLayout Wrap non
+         vincola la larghezza dei figli durante la misurazione, quindi senza
+         un tetto una Label con una frase intera in una sola casella viene
+         tagliata invece di andare a capo (backlog #1). -->
     <Style x:Key="RevealSlotRevealedFrame" TargetType="Border">
         <Setter Property="BackgroundColor" Value="{DynamicResource ThemeSurface}" />
         <Setter Property="Stroke" Value="{DynamicResource ThemeInk15Brush}" />
@@ -662,6 +666,8 @@
         <Setter Property="FontFamily" Value="{DynamicResource ThemeHeadFont}" />
         <Setter Property="FontSize" Value="19" />
         <Setter Property="TextColor" Value="{DynamicResource ThemeInk}" />
+        <Setter Property="LineBreakMode" Value="WordWrap" />
+        <Setter Property="MaximumWidthRequest" Value="320" />
     </Style>
 
     <Style x:Key="RevealSlotCoveredFrame" TargetType="Border">
@@ -676,6 +682,17 @@
     <Style x:Key="RevealSlotCoveredText" TargetType="Label">
         <Setter Property="FontSize" Value="19" />
         <Setter Property="TextColor" Value="{DynamicResource ThemeInkMuted}" />
+        <Setter Property="LineBreakMode" Value="WordWrap" />
+        <Setter Property="MaximumWidthRequest" Value="320" />
+    </Style>
+
+    <!-- Tessuto connettivo fisso del template nel reveal, senza riquadro:
+         mai bordato, per non farlo scambiare per una casella (backlog #1). -->
+    <Style x:Key="RevealLiteralText" TargetType="Label">
+        <Setter Property="FontFamily" Value="{DynamicResource ThemeHeadFont}" />
+        <Setter Property="FontSize" Value="19" />
+        <Setter Property="TextColor" Value="{DynamicResource ThemeInkMuted}" />
+        <Setter Property="LineBreakMode" Value="WordWrap" />
     </Style>
 
 </ResourceDictionary>

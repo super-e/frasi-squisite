@@ -358,21 +358,25 @@
                 </Label>
 
                 <FlexLayout Wrap="Wrap" JustifyContent="Center" AlignItems="Center"
-                            BindableLayout.ItemsSource="{Binding RevealSlots}">
+                            BindableLayout.ItemsSource="{Binding RevealFragments}">
                     <BindableLayout.ItemTemplate>
-                        <DataTemplate x:DataType="vm:RevealSlotView">
-                            <!-- Due Border alternativi (invece di uno con trigger)
-                                 perché "coperta" ha un bordo tratteggiato e
-                                 "rivelata" uno pieno: sovrascrivere lo
-                                 StrokeDashArray a runtime è più fragile che
-                                 scegliere fra due stili già corretti. -->
+                        <DataTemplate x:DataType="vm:RevealFragmentView">
+                            <!-- Tre rami alternativi (invece di trigger sullo
+                                 stesso elemento): il testo fisso del template
+                                 non ha bordo, "coperta" ha un bordo
+                                 tratteggiato e "rivelata" uno pieno —
+                                 sovrascrivere lo StrokeDashArray a runtime è
+                                 più fragile che scegliere fra rami già
+                                 corretti (backlog #1). -->
                             <Grid>
+                                <Label Text="{Binding Text}" Style="{StaticResource RevealLiteralText}"
+                                       IsVisible="{Binding IsLiteral}" VerticalOptions="Center" />
                                 <Border Margin="4" Style="{StaticResource RevealSlotRevealedFrame}"
-                                        IsVisible="{Binding IsRevealed}">
+                                        IsVisible="{Binding ShowAsRevealedSlot}">
                                     <Label Text="{Binding Text}" Style="{StaticResource RevealSlotRevealedText}" />
                                 </Border>
                                 <Border Margin="4" Style="{StaticResource RevealSlotCoveredFrame}"
-                                        IsVisible="{Binding IsRevealed, Converter={StaticResource InvertBool}}">
+                                        IsVisible="{Binding ShowAsCoveredSlot}">
                                     <Label Text="{Binding Text}" Style="{StaticResource RevealSlotCoveredText}" />
                                 </Border>
                             </Grid>
