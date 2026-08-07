@@ -57,6 +57,26 @@ public class RevealTests
         Assert.False(passo.PhraseComplete);
     }
 
+    // La maggioranza degli schemi del catalogo non ha un vero tessuto
+    // connettivo: il template è solo "{0} {1} {2}…", quindi ogni spazio fra
+    // le caselle diventerebbe un segmento letterale a sé. Le caselle hanno
+    // già il proprio margine nella UI, quindi un frammento di solo spazio
+    // non aggiunge nulla e va scartato.
+    [Fact]
+    public void IFrammentiDiSoliSpaziNonVengonoMandati()
+    {
+        var stato = PartitaConclusa();
+
+        var primo = _motore.Handle(stato, new RevealAdvanceRequested(Giocatore(0)));
+        var passo = Assert.Single(primo.Broadcasts<RevealStepMessage>());
+
+        // TestSchemas.WithSlots(K) genera il template "{0} {1} {2}": senza
+        // il filtro sui letterali di soli spazi, Fragments conterebbe anche
+        // i due spazi fra le tre caselle (5 frammenti, non 3).
+        Assert.Equal(K, passo.Fragments.Count);
+        Assert.All(passo.Fragments, f => Assert.True(f.IsSlot));
+    }
+
     /// <summary>
     /// Il voto è cieco (spec §3): durante il reveal il messaggio non porta
     /// affatto gli autori. Non è un campo vuoto da riempire più avanti — il

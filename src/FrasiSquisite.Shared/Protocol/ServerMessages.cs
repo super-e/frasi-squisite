@@ -52,7 +52,7 @@ public sealed record RoundProgressMessage(int Round, int Submitted, int Total);
 /// casella. Le caselle non ancora scoperte arrivano comunque, con
 /// <see cref="IsRevealed"/> false e <see cref="Text"/> vuoto — così il
 /// client conosce da subito la lunghezza e la punteggiatura della frase
-/// intera, come già succede nella pagina del voto (backlog #1), senza che
+/// intera, come già succede nella pagina del voto (piano docs/superpowers/plans/2026-08-06-reveal-fluido.md), senza che
 /// il server mandi mai il contenuto di una casella coperta.
 /// </summary>
 public sealed record RevealFragment(bool IsSlot, string Text, bool IsRevealed);

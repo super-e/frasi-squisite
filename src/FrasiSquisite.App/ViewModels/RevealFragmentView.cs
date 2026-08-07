@@ -6,7 +6,7 @@ namespace FrasiSquisite.App.ViewModels;
 /// (nessun riquadro, sempre visibile) o una casella (riquadro pieno se già
 /// scoperta, tratteggiato con "···" se non ancora). Le tre proprietà
 /// computate sono quelle che la UI usa per scegliere il ramo di rendering,
-/// senza binding multipli nel markup (backlog #1).
+/// senza binding multipli nel markup (piano docs/superpowers/plans/2026-08-06-reveal-fluido.md).
 /// </summary>
 public sealed record RevealFragmentView(bool IsSlot, string Text, bool IsRevealed)
 {

@@ -81,7 +81,7 @@ public sealed partial class GameEngine
     /// prima ci si arrivava direttamente dalla fine dell'ultimo round.
     ///
     /// La RevealStepMessage iniziale - nessuna casella ancora scoperta, ma
-    /// già col tessuto connettivo del template (backlog #1) - e' cio' che
+    /// già col tessuto connettivo del template (piano docs/superpowers/plans/2026-08-06-reveal-fluido.md) - e' cio' che
     /// porta tutti sulla schermata di reveal: senza, ogni client resterebbe
     /// fermo dov'era, perche' non arriva piu' nessuna SlotRequestMessage e
     /// Screen non cambia mai da solo.

@@ -237,7 +237,7 @@ public partial class GameSessionViewModel : ObservableObject
     /// "···" (<see cref="RevealFragmentView.IsRevealed"/> false). Il
     /// riempimento delle caselle non ancora arrivate lo fa già il server:
     /// qui non c'è più bisogno di completare la lista con <c>SlotCount</c>
-    /// (backlog #1).
+    /// (piano docs/superpowers/plans/2026-08-06-reveal-fluido.md).
     /// </summary>
     public ObservableCollection<RevealFragmentView> RevealFragments { get; } = [];
 

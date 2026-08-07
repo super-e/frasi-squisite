@@ -367,10 +367,11 @@
                                  tratteggiato e "rivelata" uno pieno —
                                  sovrascrivere lo StrokeDashArray a runtime è
                                  più fragile che scegliere fra rami già
-                                 corretti (backlog #1). -->
+                                 corretti (piano
+                                 docs/superpowers/plans/2026-08-06-reveal-fluido.md). -->
                             <Grid>
                                 <Label Text="{Binding Text}" Style="{StaticResource RevealLiteralText}"
-                                       IsVisible="{Binding IsLiteral}" VerticalOptions="Center" />
+                                       IsVisible="{Binding IsLiteral}" VerticalOptions="Center" Margin="4" />
                                 <Border Margin="4" Style="{StaticResource RevealSlotRevealedFrame}"
                                         IsVisible="{Binding ShowAsRevealedSlot}">
                                     <Label Text="{Binding Text}" Style="{StaticResource RevealSlotRevealedText}" />

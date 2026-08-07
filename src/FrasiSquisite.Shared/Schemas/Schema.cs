@@ -6,9 +6,10 @@ namespace FrasiSquisite.Shared.Schemas;
 /// <summary>
 /// Un pezzo del <see cref="Schema.Template"/>, nell'ordine di lettura: testo
 /// fisso (<see cref="IsSlot"/> false) o casella (<see cref="IsSlot"/> true,
-/// <see cref="SlotIndex"/> l'indice del segnaposto). Serve al reveal
-/// (backlog #1) per intercalare il tessuto connettivo del template alle
-/// caselle già scoperte, senza comporre l'intera frase in anticipo.
+/// <see cref="SlotIndex"/> l'indice del segnaposto). Serve al reveal (piano
+/// docs/superpowers/plans/2026-08-06-reveal-fluido.md) per intercalare il
+/// tessuto connettivo del template alle caselle già scoperte, senza comporre
+/// l'intera frase in anticipo.
 /// </summary>
 public sealed record TemplateSegment
 {
@@ -68,10 +69,15 @@ public sealed record Schema(
 
     /// <summary>
     /// Il <see cref="Template"/> spezzato in ordine di lettura fra testo
-    /// fisso e caselle (backlog #1): a differenza di <see cref="Compose"/>,
-    /// che produce la frase intera in un colpo solo, questa scomposizione
-    /// permette di mostrare il tessuto connettivo anche quando non tutte le
-    /// caselle sono ancora state scoperte.
+    /// fisso e caselle (piano docs/superpowers/plans/2026-08-06-reveal-fluido.md):
+    /// a differenza di <see cref="Compose"/>, che produce la frase intera in
+    /// un colpo solo, questa scomposizione permette di mostrare il tessuto
+    /// connettivo anche quando non tutte le caselle sono ancora state
+    /// scoperte. Riconosce solo i segnaposto semplici <c>{N}</c>: un
+    /// template con parentesi graffe letterali sfuggite (<c>{{</c>/<c>}}</c>,
+    /// che <see cref="Compose"/> gestisce correttamente tramite
+    /// <c>string.Format</c>) le spezzerebbe come se fossero un segnaposto.
+    /// Nessuno schema del catalogo le usa oggi.
     /// </summary>
     public IReadOnlyList<TemplateSegment> Segments
     {

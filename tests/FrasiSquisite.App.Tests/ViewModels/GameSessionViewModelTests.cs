@@ -286,6 +286,22 @@ public class GameSessionViewModelTests
         Assert.Equal((true, "···", false), (vm.RevealFragments[4].IsSlot, vm.RevealFragments[4].Text, vm.RevealFragments[4].IsRevealed));
     }
 
+    // La segretezza è garantita dal tipo, non dalla disciplina (come per
+    // RevealStepMessage stesso — spec §3): Coperta() manda sempre testo
+    // vuoto, quindi da sola non dimostra che il client SCARTA il testo
+    // quando IsRevealed è false invece di mostrarlo per coincidenza. Qui il
+    // frammento arriva con un testo non vuoto e IsRevealed false — un server
+    // malformato o un bug — e il client deve comunque ignorarlo.
+    [Fact]
+    public void UnaCasellaNonRivelataNonMostraMaiIlTestoAncheSeArrivaValorizzato()
+    {
+        var (vm, conn) = Crea();
+
+        conn.Emit(new RevealStepMessage(0, 1, [new RevealFragment(true, "SEGRETO", false)], false));
+
+        Assert.Equal(("···", false), (vm.RevealFragments[0].Text, vm.RevealFragments[0].IsRevealed));
+    }
+
     // Due stati, non più tre (voto cieco, spec §3): "Chi l'ha scritta?" è
     // sparito, gli autori arrivano solo con la classifica finale. Questo
     // test copre entrambe le cose che quello schiacciato copriva: le due

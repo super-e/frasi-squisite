@@ -51,16 +51,24 @@ public sealed partial class GameEngine
 
     /// <summary>
     /// Il tessuto connettivo del template intercalato alle caselle scoperte
-    /// (backlog #1): è come si legge la pagina del voto, dove
-    /// <see cref="Schema.Compose"/> fa lo stesso lavoro in un colpo solo.
-    /// Le caselle non ancora scoperte arrivano comunque (per punteggiatura e
-    /// posizione corrette lato client) ma senza testo — il voto che segue è
-    /// cieco, e questo è il punto che non deve mai regredire.
+    /// (piano docs/superpowers/plans/2026-08-06-reveal-fluido.md): è come si
+    /// legge la pagina del voto, dove <see cref="Schema.Compose"/> fa lo
+    /// stesso lavoro in un colpo solo. Le caselle non ancora scoperte
+    /// arrivano comunque (per punteggiatura e posizione corrette lato
+    /// client) ma senza testo — il voto che segue è cieco, e questo è il
+    /// punto che non deve mai regredire. I segmenti letterali di soli spazi
+    /// non producono un frammento: la maggioranza degli schemi del catalogo
+    /// non ha un vero tessuto connettivo, solo "{0} {1} {2}…", e le caselle
+    /// hanno già il proprio margine — un'etichetta vuota nel FlexLayout non
+    /// aggiungerebbe nulla e potrebbe spostare la centratura quando la riga
+    /// va a capo.
     /// </summary>
     private static IReadOnlyList<RevealFragment> FrammentiReveal(Schema schema, Phrase frase, int scoperte) =>
-        [.. schema.Segments.Select(s => s.IsSlot
-            ? new RevealFragment(true, s.SlotIndex < scoperte ? frase.Slots[s.SlotIndex]!.Text : string.Empty, s.SlotIndex < scoperte)
-            : new RevealFragment(false, s.Literal, true))];
+        [.. schema.Segments
+            .Where(s => s.IsSlot || !string.IsNullOrWhiteSpace(s.Literal))
+            .Select(s => s.IsSlot
+                ? new RevealFragment(true, s.SlotIndex < scoperte ? frase.Slots[s.SlotIndex]!.Text : string.Empty, s.SlotIndex < scoperte)
+                : new RevealFragment(false, s.Literal, true))];
 
     /// <summary>Le frasi composte secondo il template dello schema.</summary>
     private static IReadOnlyList<string> FrasiComposte(GameState state) =>
