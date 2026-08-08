@@ -245,12 +245,7 @@ public sealed class GameHost(
     /// </summary>
     public void AvviaPeriodoDiGrazia(string roomCode, Guid playerId, string connectionId)
     {
-        // Questa disconnessione arriva da una connessione che non è più
-        // quella corrente per il giocatore (un rientro su una connessione
-        // più recente è già avvenuto prima che il server si accorgesse che
-        // questa era morta): il giocatore sta già giocando altrove, non
-        // c'è nulla da fare qui.
-        if (_connessioniCorrenti.TryGetValue((roomCode, playerId), out var corrente) && corrente != connectionId)
+        if (!EConnessioneCorrente(roomCode, playerId, connectionId))
         {
             return;
         }
@@ -337,8 +332,13 @@ public sealed class GameHost(
     /// aspettare 30s farebbe solo apparire per quel tempo un giocatore che
     /// se n'è già andato (rilievo Important 5 della revisione finale).
     /// </summary>
-    public async Task EvictImmediatelyAsync(string roomCode, Guid playerId)
+    public async Task EvictImmediatelyAsync(string roomCode, Guid playerId, string connectionId)
     {
+        if (!EConnessioneCorrente(roomCode, playerId, connectionId))
+        {
+            return;
+        }
+
         try
         {
             await DispatchAsync(roomCode, new PlayerLeft(playerId));
@@ -376,6 +376,18 @@ public sealed class GameHost(
 
     public void RegistraConnessione(string roomCode, Guid playerId, string connectionId) =>
         _connessioniCorrenti[(roomCode, playerId)] = connectionId;
+
+    /// <summary>
+    /// Vero se questa connessione è ancora quella corrente per (stanza,
+    /// giocatore) — o se non ce n'è mai stata registrata nessuna (il
+    /// giocatore non è mai stato registrato, es. nei test unitari che
+    /// chiamano questi metodi direttamente). Condivisa da
+    /// AvviaPeriodoDiGrazia ed EvictImmediatelyAsync: entrambi i percorsi di
+    /// disconnessione devono ignorare una notifica arrivata in ritardo da
+    /// una connessione già superata da un rientro riuscito altrove.
+    /// </summary>
+    private bool EConnessioneCorrente(string roomCode, Guid playerId, string connectionId) =>
+        !_connessioniCorrenti.TryGetValue((roomCode, playerId), out var corrente) || corrente == connectionId;
 
     public static string PlayerGroup(Guid playerId) => $"player:{playerId}";
 }

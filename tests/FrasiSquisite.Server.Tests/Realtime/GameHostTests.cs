@@ -273,6 +273,27 @@ public class GameHostTests
         Assert.DoesNotContain(engine.EventiRicevuti, e => e is PlayerLeft);
     }
 
+    [Fact]
+    public async Task UnaDisconnessioneInLobbyArrivataInRitardoDaUnaConnessioneSuperataNonRimuoveNessuno()
+    {
+        var engine = new FakeGameEngine(_ => []);
+        var rooms = new FakeRoomRegistry();
+        rooms.Seed("STANZA", StanzaVuota("STANZA"));
+        var giocatore = Guid.NewGuid();
+
+        var host = new GameHost(engine, rooms, null!, null!, null!, null!, NullLogger<GameHost>.Instance);
+
+        // Il giocatore è già registrato su una connessione più recente,
+        // come farebbe GameHub.EntraAsync dopo un rientro riuscito in
+        // lobby. La disconnessione che arriva sotto è di una connessione
+        // vecchia, già superata: non deve rimuovere nessuno.
+        host.RegistraConnessione("STANZA", giocatore, "conn-nuova");
+
+        await host.EvictImmediatelyAsync("STANZA", giocatore, "conn-vecchia");
+
+        Assert.DoesNotContain(engine.EventiRicevuti, e => e is PlayerLeft);
+    }
+
     // Le tre garanzie qui sotto proteggono AvviaRifinitura (spec del task
     // "AI Task 5"): il lucchetto si rilascia prima che la rifinitura finisca,
     // l'evento di esito parte anche se la chiamata al modello lancia, e una

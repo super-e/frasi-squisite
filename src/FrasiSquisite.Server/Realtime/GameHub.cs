@@ -131,7 +131,7 @@ public sealed class GameHub(GameHost host, IRoomRegistry rooms, ISchemaCatalog s
             // Important 5 della revisione finale) — si evince subito.
             if (rooms.TryGet(roomCode, out var stanza) && stanza.Phase == RoomPhase.Lobby)
             {
-                _ = host.EvictImmediatelyAsync(roomCode, playerId);
+                _ = host.EvictImmediatelyAsync(roomCode, playerId, Context.ConnectionId);
             }
             else
             {
@@ -161,8 +161,13 @@ public sealed class GameHub(GameHost host, IRoomRegistry rooms, ISchemaCatalog s
             return;
         }
 
-        host.AnnullaPeriodoDiGrazia(request.RoomCode, request.PlayerId);
+        // EntraAsync (che registra questa connessione come quella corrente)
+        // prima di annullare il periodo di grazia: nell'ordine opposto, una
+        // disconnessione arrivata proprio in mezzo alle due chiamate
+        // troverebbe ancora la vecchia connessione registrata e armerebbe
+        // un periodo di grazia che nessuno annullerebbe più.
         await EntraAsync(request.RoomCode, request.PlayerId);
+        host.AnnullaPeriodoDiGrazia(request.RoomCode, request.PlayerId);
         await host.DispatchAsync(request.RoomCode, new PlayerRejoined(request.PlayerId));
     }
 

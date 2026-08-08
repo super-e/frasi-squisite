@@ -164,6 +164,26 @@ public sealed class GameHubTests : IAsyncLifetime
         public Task DelayAsync(TimeSpan durata, CancellationToken ct) => Task.Delay(TimeSpan.FromMilliseconds(200), ct);
     }
 
+    /// <summary>
+    /// Come il VelocizzaGraziaTimer di classe, ma controllabile a comando
+    /// invece che a scadenza fissa: il test sotto su un rientro entro il
+    /// periodo di grazia correva contro un timer reale di 200ms, ed è stato
+    /// osservato fallire sotto carico — qui il periodo di grazia non scade
+    /// finché il test non lo decide esplicitamente.
+    /// </summary>
+    private sealed class TimerControllabilePerTest : IGracePeriodTimer
+    {
+        private readonly TaskCompletionSource _tcs = new();
+
+        public Task DelayAsync(TimeSpan durata, CancellationToken ct)
+        {
+            ct.Register(() => _tcs.TrySetCanceled(ct));
+            return _tcs.Task;
+        }
+
+        public void FaiScadere() => _tcs.TrySetResult();
+    }
+
     private Task<Client> ConnettiAsync() => ConnettiAsync(_factory);
 
     private static async Task<Client> ConnettiAsync(WebApplicationFactory<Program> factory)
@@ -695,8 +715,12 @@ public sealed class GameHubTests : IAsyncLifetime
     [Fact]
     public async Task IlRientroEntroIlPeriodoDiGraziaNonFaSubentrareUnBot()
     {
-        await using var anna = await ConnettiAsync();
-        await using var bruno = await ConnettiAsync();
+        var timer = new TimerControllabilePerTest();
+        await using var factory = _factory.WithWebHostBuilder(
+            builder => builder.ConfigureServices(services => services.AddSingleton<IGracePeriodTimer>(timer)));
+
+        await using var anna = await ConnettiAsync(factory);
+        await using var bruno = await ConnettiAsync(factory);
 
         var codice = await anna.Connection.InvokeAsync<string>(
             "CreateRoom", new CreateRoomRequest(ProtocolVersion.Current, Guid.NewGuid(), "Anna"));
@@ -704,38 +728,25 @@ public sealed class GameHubTests : IAsyncLifetime
         await bruno.Connection.InvokeAsync("JoinRoom", new JoinRoomRequest(ProtocolVersion.Current, brunoId, "Bruno", codice));
         await anna.WaitFor<RoomStateMessage>(TimeSpan.FromSeconds(5));
 
-        // In lobby una disconnessione rimuove per davvero (spec del design,
-        // §6): serve essere a partita avviata perché il rientro abbia senso.
         await anna.Connection.InvokeAsync("StartGame", new StartGameRequest(codice));
         await bruno.WaitFor<SlotRequestMessage>(TimeSpan.FromSeconds(5));
-
-        // La connessione di rientro si stabilisce PRIMA della disconnessione:
-        // l'handshake SignalR (negoziazione + fallback di trasporto contro il
-        // TestServer in memoria, che non supporta i WebSocket veri) ha un
-        // costo reale e variabile a seconda della macchina, del tutto
-        // estraneo a ciò che questo test vuole provare - la garanzia lato
-        // server che una RejoinRoom ricevuta in tempo annulli il periodo di
-        // grazia. Misurare quell'handshake dentro la finestra dei 200ms del
-        // VelocizzaGraziaTimer renderebbe il test intermittente per un
-        // motivo che non ha nulla a che fare con GameHost.AnnullaPeriodoDiGrazia.
-        await using var brunoRientrato = await ConnettiAsync();
 
         var passiPrima = anna.CountOf<RoomStateMessage>();
         await bruno.Connection.StopAsync();
 
-        // Rientra subito, ben prima dei 200ms del VelocizzaGraziaTimer di
-        // questa suite: il periodo di grazia deve annullarsi, non scadere.
-        // La connessione è già in piedi (sopra): qui resta solo la chiamata
-        // RejoinRoom stessa a dover battere il timer, non anche l'handshake.
+        // Nessuna corsa contro un timer reale: il periodo di grazia non
+        // scade finché non lo si fa scadere esplicitamente sotto, quindi
+        // il rientro ha tutto il tempo che gli serve per arrivare prima.
+        await using var brunoRientrato = await ConnettiAsync(factory);
         await brunoRientrato.Connection.InvokeAsync(
             "RejoinRoom", new RejoinRoomRequest(ProtocolVersion.Current, brunoId, codice));
 
         await anna.WaitForCount<RoomStateMessage>(passiPrima + 1, TimeSpan.FromSeconds(5));
 
-        // Margine oltre l'unico RoomStateMessage atteso (quello del
-        // rientro): se il periodo di grazia non fosse stato annullato per
-        // davvero, ne arriverebbe un secondo (da PlayerLeft) entro i 200ms
-        // del VelocizzaGraziaTimer di questa suite, e qui lo si scoprirebbe.
+        // Margine, poi si prova comunque a far scadere il timer: non deve
+        // succedere nulla, perché AnnullaPeriodoDiGrazia l'ha già annullato
+        // il token che questo DelayAsync sta osservando.
+        timer.FaiScadere();
         await Task.Delay(300);
         Assert.Equal(passiPrima + 1, anna.CountOf<RoomStateMessage>());
         Assert.True(anna.Last<RoomStateMessage>().Players.Single(p => p.Id == brunoId).IsConnected);
