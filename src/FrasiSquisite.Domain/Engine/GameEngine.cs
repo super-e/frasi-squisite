@@ -34,6 +34,7 @@ public sealed partial class GameEngine(IGameMode mode, IWordPool pool, IRandomSo
     {
         PlayerJoined e => OnPlayerJoined(state, e),
         PlayerLeft e => OnPlayerLeft(state, e),
+        PlayerRejoined e => OnPlayerRejoined(state, e),
         GameStartRequested e => OnGameStartRequested(state, e),
         SlotSubmitted e => OnSlotSubmitted(state, e),
         RevealAdvanceRequested e => OnRevealAdvance(state, e),

@@ -8,6 +8,15 @@ public sealed record PlayerJoined(Guid PlayerId, string Nickname) : GameEvent;
 
 public sealed record PlayerLeft(Guid PlayerId) : GameEvent;
 
+/// <summary>
+/// Un giocatore disconnesso torna: rimette IsConnected a vero e fa
+/// ripartire verso di lui il messaggio della fase corrente, come se non
+/// fosse mai stato via (design rientro §3.2). Dispatchato da
+/// GameHub.RejoinRoom dopo aver già verificato che il giocatore esista
+/// nella stanza.
+/// </summary>
+public sealed record PlayerRejoined(Guid PlayerId) : GameEvent;
+
 public sealed record GameStartRequested(Guid RequestedBy) : GameEvent;
 
 public sealed record SlotSubmitted(Guid PlayerId, string Text) : GameEvent;

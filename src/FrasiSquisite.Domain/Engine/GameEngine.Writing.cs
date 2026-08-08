@@ -187,18 +187,28 @@ public sealed partial class GameEngine
     {
         for (var i = 0; i < state.Players.Count; i++)
         {
-            var assegnazione = _mode.AssignSlot(state.Round, i, state.Players.Count, state.Schema);
-            var casella = state.Schema.Caselle[assegnazione.SlotIndex];
-
-            // Nota: PhraseIndex resta deliberatamente fuori dal messaggio.
-            yield return new SendToPlayer(
-                state.Players[i].Id,
-                new SlotRequestMessage(
-                    state.Round,
-                    state.Schema.SlotCount,
-                    casella.Ruolo,
-                    casella.Prompt,
-                    casella.Esempio));
+            yield return new SendToPlayer(state.Players[i].Id, SlotRequestFor(state, i));
         }
+    }
+
+    /// <summary>
+    /// La richiesta di casella per un giocatore preso per posizione, non per
+    /// id: è così che SlotRequests la costruiva già inline. Estratta perché
+    /// il rientro (design rientro §3.2) deve poter ricostruire la stessa
+    /// identica richiesta per un solo giocatore, con IndexOfPlayer al posto
+    /// dell'indice di ciclo.
+    /// </summary>
+    private SlotRequestMessage SlotRequestFor(GameState state, int playerIndex)
+    {
+        var assegnazione = _mode.AssignSlot(state.Round, playerIndex, state.Players.Count, state.Schema);
+        var casella = state.Schema.Caselle[assegnazione.SlotIndex];
+
+        // Nota: PhraseIndex resta deliberatamente fuori dal messaggio.
+        return new SlotRequestMessage(
+            state.Round,
+            state.Schema.SlotCount,
+            casella.Ruolo,
+            casella.Prompt,
+            casella.Esempio);
     }
 }

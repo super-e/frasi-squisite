@@ -229,4 +229,59 @@ public sealed partial class GameEngine
     /// </summary>
     private static string? NextBotName(GameState state) =>
         BotNames.FirstOrDefault(nome => state.Players.All(p => p.Nickname != nome));
+
+    private EngineResult OnPlayerRejoined(GameState state, PlayerRejoined e)
+    {
+        var giocatore = state.FindPlayer(e.PlayerId);
+        if (giocatore is null)
+        {
+            // Difesa in profondità: GameHub verifica già che il giocatore
+            // esista nella stanza prima di dispatchare questo evento.
+            return EngineResult.NoChange(state);
+        }
+
+        if (giocatore.IsConnected)
+        {
+            // Rientro duplicato o in corsa: nessuna modifica, stesso schema
+            // idempotente di OnPlayerJoined per un secondo ingresso.
+            return new EngineResult(state, [new BroadcastToRoom(RoomState(state))]);
+        }
+
+        var giocatori = state.Players
+            .Select(p => p.Id == e.PlayerId ? p with { IsConnected = true } : p)
+            .ToList();
+
+        var aggiornato = state with { Players = giocatori };
+
+        List<Effect> effetti = [new BroadcastToRoom(RoomState(aggiornato))];
+
+        if (MessaggioDiRipristino(aggiornato, e.PlayerId) is { } messaggio)
+        {
+            effetti.Add(new SendToPlayer(e.PlayerId, messaggio));
+        }
+
+        return new EngineResult(aggiornato, effetti);
+    }
+
+    /// <summary>
+    /// Il messaggio che il giocatore rientrato avrebbe già ricevuto restando
+    /// connesso, per la fase in cui si trova ora la stanza — null se la fase
+    /// non ne prevede uno oltre allo stato stanza (lobby, rifinitura: niente
+    /// da mostrare oltre a una lista di giocatori o uno spinner). Nessun
+    /// formato nuovo: sono gli stessi tipi di messaggio già usati altrove nel
+    /// motore, solo ricostruiti per un giocatore invece che mandati in
+    /// broadcast o a chi ha appena fatto un'azione.
+    /// </summary>
+    private object? MessaggioDiRipristino(GameState state, Guid playerId) => state.Phase switch
+    {
+        RoomPhase.Writing => SlotRequestFor(state, state.IndexOfPlayer(playerId)),
+        RoomPhase.Reveal => new RevealStepMessage(
+            state.RevealPhraseIndex,
+            state.Phrases.Count,
+            FrammentiReveal(state.Schema, state.Phrases[state.RevealPhraseIndex], state.RevealSlotCount),
+            state.RevealSlotCount >= state.Phrases[state.RevealPhraseIndex].Slots.Count),
+        RoomPhase.Voting => new VoteRequestMessage(FrasiComposte(state)),
+        RoomPhase.Finished => new GameFinishedMessage(Classifica(state, state.Votes)),
+        _ => null,
+    };
 }
