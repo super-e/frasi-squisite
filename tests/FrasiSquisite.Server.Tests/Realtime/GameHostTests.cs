@@ -78,18 +78,61 @@ public class GameHostTests
     /// FaiScadere, o annullando il CancellationToken passato a DelayAsync
     /// (come farebbe AnnullaPeriodoDiGrazia con un token vero). Zero
     /// Task.Delay reali, come richiesto dal design del rientro (§7).
+    ///
+    /// Tiene traccia di ogni chiamata a DelayAsync separatamente (non una
+    /// sola TaskCompletionSource condivisa): serve per il test sui periodi
+    /// di grazia sovrapposti, dove lo stesso GameHost chiama DelayAsync due
+    /// volte per lo stesso giocatore e i due periodi vanno fatti scadere in
+    /// modo indipendente.
+    ///
+    /// AvviaPeriodoDiGrazia schedula DelayAsync su Task.Run, quindi il
+    /// thread del test può arrivare a chiamare FaiScadere prima che la
+    /// chiamata a DelayAsync corrispondente sia stata registrata: FaiScadere
+    /// attende (con un semaforo, non un polling a occhio) finché la
+    /// chiamata numero `indice` non compare, invece di indicizzare a vuoto
+    /// una lista ancora incompleta.
     /// </summary>
     private sealed class TimerControllabile : IGracePeriodTimer
     {
-        private readonly TaskCompletionSource _tcs = new();
+        private readonly List<TaskCompletionSource> _chiamate = [];
+        private readonly SemaphoreSlim _nuovaChiamata = new(0);
 
         public Task DelayAsync(TimeSpan durata, CancellationToken ct)
         {
-            ct.Register(() => _tcs.TrySetCanceled(ct));
-            return _tcs.Task;
+            var tcs = new TaskCompletionSource();
+            ct.Register(() => tcs.TrySetCanceled(ct));
+
+            lock (_chiamate)
+            {
+                _chiamate.Add(tcs);
+            }
+
+            _nuovaChiamata.Release();
+
+            return tcs.Task;
         }
 
-        public void FaiScadere() => _tcs.TrySetResult();
+        /// <summary>Fa scadere la chiamata a DelayAsync numero <paramref name="indice"/> (0-based, nell'ordine di arrivo), attendendo che sia stata registrata se necessario.</summary>
+        public void FaiScadere(int indice = 0)
+        {
+            while (true)
+            {
+                lock (_chiamate)
+                {
+                    if (indice < _chiamate.Count)
+                    {
+                        _chiamate[indice].TrySetResult();
+                        return;
+                    }
+                }
+
+                if (!_nuovaChiamata.Wait(TimeSpan.FromSeconds(5)))
+                {
+                    throw new TimeoutException(
+                        $"Nessuna chiamata a DelayAsync con indice {indice} registrata entro il timeout.");
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -144,6 +187,36 @@ public class GameHostTests
 
         // Margine reale, breve: dà tempo a un eventuale (erroneo) dispatch
         // di completare prima dell'asserzione negativa.
+        await Task.Delay(100);
+        Assert.DoesNotContain(engine.EventiRicevuti, e => e is PlayerLeft);
+    }
+
+    [Fact]
+    public async Task DueDisconnessioniDiFilaPoiUnRientroNonDispatchanoMaiPlayerLeft()
+    {
+        var engine = new FakeGameEngine(_ => []);
+        var rooms = new FakeRoomRegistry();
+        rooms.Seed("STANZA", StanzaVuota("STANZA"));
+        var timer = new TimerControllabile();
+        var giocatore = Guid.NewGuid();
+
+        var host = new GameHost(engine, rooms, null!, null!, null!, null!, NullLogger<GameHost>.Instance, timer);
+
+        // Due disconnessioni di fila per lo stesso giocatore, prima che un
+        // rientro ne annulli uno: senza il fix di AvviaPeriodoDiGrazia, il
+        // primo periodo di grazia resterebbe orfano e dispatcherebbe
+        // comunque PlayerLeft alla propria scadenza, anche dopo che il
+        // rientro sotto è già riuscito.
+        host.AvviaPeriodoDiGrazia("STANZA", giocatore);
+        host.AvviaPeriodoDiGrazia("STANZA", giocatore);
+        host.AnnullaPeriodoDiGrazia("STANZA", giocatore);
+
+        // Prova a far scadere entrambi i DelayAsync sottostanti: nessuno dei
+        // due deve produrre un dispatch, comunque vada a finire la corsa fra
+        // le cancellazioni interne e queste chiamate.
+        timer.FaiScadere(0);
+        timer.FaiScadere(1);
+
         await Task.Delay(100);
         Assert.DoesNotContain(engine.EventiRicevuti, e => e is PlayerLeft);
     }

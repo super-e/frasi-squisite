@@ -235,6 +235,31 @@ public sealed class GameHost(
     public void AvviaPeriodoDiGrazia(string roomCode, Guid playerId)
     {
         var cts = new CancellationTokenSource();
+
+        // Due disconnessioni di fila per lo stesso giocatore prima di un
+        // rientro riuscito lascerebbero il primo periodo di grazia orfano
+        // se non fosse annullato qui: senza questo passo continuerebbe a
+        // contare per conto suo e, scadendo più tardi, dispatcherebbe
+        // PlayerLeft anche dopo che il rientro (sul secondo periodo) è
+        // già avvenuto — l'esatto scenario che questa funzionalità esiste
+        // per evitare.
+        //
+        // Deliberatamente NON si chiama anche precedente.Dispose() qui: il
+        // Task.Run del periodo precedente potrebbe non aver ancora letto
+        // precedente.Token (l'ha ancora da valutare come argomento della
+        // propria chiamata a DelayAsync piu' sotto). Un token letto da un
+        // CancellationTokenSource gia' disposto lancia
+        // ObjectDisposedException invece di restituire un token cancellato,
+        // e quell'eccezione uscirebbe non osservata da un Task fire-and-forget
+        // impedendo per sempre a quel periodo di raggiungere il proprio
+        // ramo "annullato" qui sotto. Cancel() da solo e' sufficiente: un
+        // token gia' cancellato, letto in sicurezza anche dopo, fa comunque
+        // terminare quel Task.Run con OperationCanceledException.
+        if (_periodiDiGrazia.TryRemove((roomCode, playerId), out var precedente))
+        {
+            precedente.Cancel();
+        }
+
         _periodiDiGrazia[(roomCode, playerId)] = cts;
 
         _ = Task.Run(async () =>
@@ -245,17 +270,28 @@ public sealed class GameHost(
             }
             catch (OperationCanceledException)
             {
-                // Annullato da un rientro in tempo (AnnullaPeriodoDiGrazia ha
-                // già rimosso e disposto questo stesso token): nessun
-                // PlayerLeft da dispatchare.
+                // Annullato da un rientro in tempo, o soppiantato da una
+                // seconda disconnessione (AnnullaPeriodoDiGrazia o la nuova
+                // AvviaPeriodoDiGrazia hanno già rimosso e cancellato questo
+                // stesso token): nessun PlayerLeft da dispatchare.
                 return;
             }
 
-            // Scaduto senza essere annullato. Una finestra di corsa residua
-            // con una disconnessione successiva dello stesso giocatore resta
-            // accettata, stesso principio già in uso in GameHub.JoinRoom: è
-            // l'eccezione, non la regola.
-            _periodiDiGrazia.TryRemove((roomCode, playerId), out _);
+            // Scaduto senza essere annullato. La rimozione è sicura
+            // sull'identità: rimuove (e dispatcha PlayerLeft) solo se il
+            // proprio token è ancora quello registrato per questa chiave.
+            // Seconda linea di difesa oltre al passo sopra: se per qualunque
+            // motivo questo periodo di grazia fosse comunque diventato
+            // orfano (sostituito o già annullato), qui si accorge di non
+            // essere più quello corrente e non dispatcha nulla — invece di
+            // espellere un giocatore che nel frattempo è già rientrato.
+            var rimosso = ((ICollection<KeyValuePair<(string, Guid), CancellationTokenSource>>)_periodiDiGrazia)
+                .Remove(new KeyValuePair<(string, Guid), CancellationTokenSource>((roomCode, playerId), cts));
+
+            if (!rimosso)
+            {
+                return;
+            }
 
             try
             {
@@ -280,10 +316,16 @@ public sealed class GameHost(
     /// </summary>
     public void AnnullaPeriodoDiGrazia(string roomCode, Guid playerId)
     {
+        // Solo Cancel(), niente Dispose(): stesso motivo documentato in
+        // AvviaPeriodoDiGrazia. Il Task.Run di questo periodo potrebbe non
+        // aver ancora letto cts.Token; disposto qui, quella lettura
+        // lancerebbe ObjectDisposedException invece di vedere un token
+        // già cancellato, e l'eccezione — non osservata su un task
+        // fire-and-forget — impedirebbe a quel periodo di raggiungere il
+        // proprio ramo "annullato" e di terminare pulito.
         if (_periodiDiGrazia.TryRemove((roomCode, playerId), out var cts))
         {
             cts.Cancel();
-            cts.Dispose();
         }
     }
 
