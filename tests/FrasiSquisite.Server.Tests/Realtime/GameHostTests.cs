@@ -73,6 +73,81 @@ public class GameHostTests
         Assert.NotSame(campo.GetValue(uno), campo.GetValue(due));
     }
 
+    /// <summary>
+    /// Non completa mai da solo: il test decide quando "scade" chiamando
+    /// FaiScadere, o annullando il CancellationToken passato a DelayAsync
+    /// (come farebbe AnnullaPeriodoDiGrazia con un token vero). Zero
+    /// Task.Delay reali, come richiesto dal design del rientro (§7).
+    /// </summary>
+    private sealed class TimerControllabile : IGracePeriodTimer
+    {
+        private readonly TaskCompletionSource _tcs = new();
+
+        public Task DelayAsync(TimeSpan durata, CancellationToken ct)
+        {
+            ct.Register(() => _tcs.TrySetCanceled(ct));
+            return _tcs.Task;
+        }
+
+        public void FaiScadere() => _tcs.TrySetResult();
+    }
+
+    /// <summary>
+    /// La tabella dei periodi di grazia protegge lo stesso genere di stato
+    /// per-stanza di _locks: stesso motivo, campo d'istanza mai statico.
+    /// </summary>
+    [Fact]
+    public void LaTabellaDeiPeriodiDiGraziaEPerIstanzaENonStatica()
+    {
+        var campi = typeof(GameHost)
+            .GetFields(BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static)
+            .Where(f => f.FieldType == typeof(ConcurrentDictionary<(string, Guid), CancellationTokenSource>))
+            .ToList();
+
+        var campo = Assert.Single(campi);
+
+        Assert.False(campo.IsStatic, $"'{campo.Name}' è statico: i periodi di grazia verrebbero condivisi fra host diversi.");
+    }
+
+    [Fact]
+    public async Task IlPeriodoDiGraziaScadutoDispatchaPlayerLeft()
+    {
+        var engine = new FakeGameEngine(_ => []);
+        var rooms = new FakeRoomRegistry();
+        rooms.Seed("STANZA", StanzaVuota("STANZA"));
+        var timer = new TimerControllabile();
+        var giocatore = Guid.NewGuid();
+
+        var host = new GameHost(engine, rooms, null!, null!, null!, null!, NullLogger<GameHost>.Instance, timer);
+
+        host.AvviaPeriodoDiGrazia("STANZA", giocatore);
+        timer.FaiScadere();
+
+        await AttendiCondizioneAsync(
+            () => engine.EventiRicevuti.Any(e => e is PlayerLeft pl && pl.PlayerId == giocatore),
+            TimeSpan.FromSeconds(2));
+    }
+
+    [Fact]
+    public async Task IlPeriodoDiGraziaAnnullatoNonDispatchaNulla()
+    {
+        var engine = new FakeGameEngine(_ => []);
+        var rooms = new FakeRoomRegistry();
+        rooms.Seed("STANZA", StanzaVuota("STANZA"));
+        var timer = new TimerControllabile();
+        var giocatore = Guid.NewGuid();
+
+        var host = new GameHost(engine, rooms, null!, null!, null!, null!, NullLogger<GameHost>.Instance, timer);
+
+        host.AvviaPeriodoDiGrazia("STANZA", giocatore);
+        host.AnnullaPeriodoDiGrazia("STANZA", giocatore);
+
+        // Margine reale, breve: dà tempo a un eventuale (erroneo) dispatch
+        // di completare prima dell'asserzione negativa.
+        await Task.Delay(100);
+        Assert.DoesNotContain(engine.EventiRicevuti, e => e is PlayerLeft);
+    }
+
     // Le tre garanzie qui sotto proteggono AvviaRifinitura (spec del task
     // "AI Task 5"): il lucchetto si rilascia prima che la rifinitura finisca,
     // l'evento di esito parte anche se la chiamata al modello lancia, e una

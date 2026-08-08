@@ -24,6 +24,7 @@ builder.Services.AddSingleton<IGameMode, RoleSchemaMode>();
 builder.Services.AddSingleton<IGameEngine, GameEngine>();
 builder.Services.AddSingleton<RoomCodeGenerator>();
 builder.Services.AddSingleton<IRoomRegistry, RoomRegistry>();
+builder.Services.AddSingleton<IGracePeriodTimer, RealGracePeriodTimer>();
 builder.Services.AddSingleton<GameHost>();
 builder.Services.AddSingleton<RefinementRunner>();
 builder.Services.AddSingleton<IllustrationRunner>();

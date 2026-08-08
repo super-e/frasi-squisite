@@ -20,8 +20,16 @@ public sealed class GameHost(
     RefinementRunner runner,
     IllustrationRunner illustrazioni,
     ImageStore deposito,
-    ILogger<GameHost> logger)
+    ILogger<GameHost> logger,
+    IGracePeriodTimer? timer = null)
 {
+    // Parametro opzionale invece che obbligatorio: i circa dieci test
+    // esistenti che costruiscono GameHost a mano (GameHostTests.cs) non
+    // hanno nulla a che fare col periodo di grazia, e forzarli tutti a
+    // passare un ottavo argomento sarebbe puro rumore. In produzione
+    // Program.cs registra comunque il timer vero esplicitamente in DI.
+    private readonly IGracePeriodTimer _timer = timer ?? new RealGracePeriodTimer();
+
     /// <summary>
     /// Un lucchetto per codice stanza. <b>Deve restare un campo d'istanza, non
     /// statico:</b> protegge lo stato tenuto da <see cref="IRoomRegistry"/>,
@@ -35,6 +43,17 @@ public sealed class GameHost(
     /// </summary>
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks =
         new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Un periodo di grazia in corso per (stanza, giocatore): rientrare
+    /// prima che scada annulla il dispatch di PlayerLeft sottostante, senza
+    /// che nessun bot prenda mai il posto (design rientro §3.1). Campo
+    /// d'istanza per lo stesso motivo di <see cref="_locks"/>.
+    /// </summary>
+    private readonly ConcurrentDictionary<(string RoomCode, Guid PlayerId), CancellationTokenSource> _periodiDiGrazia =
+        new();
+
+    private static readonly TimeSpan DurataPeriodoDiGrazia = TimeSpan.FromSeconds(30);
 
     /// <summary>
     /// Serializza gli eventi per stanza: due invii simultanei leggerebbero lo
@@ -205,6 +224,67 @@ public sealed class GameHost(
         });
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Avvia il periodo di grazia per una disconnessione: se non annullato
+    /// da un rientro entro 30s, dispatcha PlayerLeft esattamente come faceva
+    /// prima GameHub.OnDisconnectedAsync in modo sincrono (design rientro
+    /// §3.1). Sganciato e senza attesa, stesso stile di AvviaRifinitura.
+    /// </summary>
+    public void AvviaPeriodoDiGrazia(string roomCode, Guid playerId)
+    {
+        var cts = new CancellationTokenSource();
+        _periodiDiGrazia[(roomCode, playerId)] = cts;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _timer.DelayAsync(DurataPeriodoDiGrazia, cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                // Annullato da un rientro in tempo (AnnullaPeriodoDiGrazia ha
+                // già rimosso e disposto questo stesso token): nessun
+                // PlayerLeft da dispatchare.
+                return;
+            }
+
+            // Scaduto senza essere annullato. Una finestra di corsa residua
+            // con una disconnessione successiva dello stesso giocatore resta
+            // accettata, stesso principio già in uso in GameHub.JoinRoom: è
+            // l'eccezione, non la regola.
+            _periodiDiGrazia.TryRemove((roomCode, playerId), out _);
+
+            try
+            {
+                await DispatchAsync(roomCode, new PlayerLeft(playerId));
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(
+                    ex,
+                    "Disconnessione del giocatore {PlayerId} dalla stanza {RoomCode}: dispatch di PlayerLeft fallita dopo il periodo di grazia.",
+                    playerId,
+                    roomCode);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Annulla un periodo di grazia pendente: chiamato da
+    /// GameHub.RejoinRoom prima di dispatchare PlayerRejoined. Nessun
+    /// effetto se non ce n'era uno (rientro senza una disconnessione
+    /// recente, o periodo già scaduto).
+    /// </summary>
+    public void AnnullaPeriodoDiGrazia(string roomCode, Guid playerId)
+    {
+        if (_periodiDiGrazia.TryRemove((roomCode, playerId), out var cts))
+        {
+            cts.Cancel();
+            cts.Dispose();
+        }
     }
 
     public static string PlayerGroup(Guid playerId) => $"player:{playerId}";

@@ -4,11 +4,10 @@ using FrasiSquisite.Server.Rooms;
 using FrasiSquisite.Shared.Protocol;
 using FrasiSquisite.Shared.Schemas;
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.Extensions.Logging;
 
 namespace FrasiSquisite.Server.Realtime;
 
-public sealed class GameHub(GameHost host, IRoomRegistry rooms, ISchemaCatalog schemas, ILogger<GameHub> logger) : Hub
+public sealed class GameHub(GameHost host, IRoomRegistry rooms, ISchemaCatalog schemas) : Hub
 {
     private const string RoomKey = "room";
     private const string PlayerKey = "player";
@@ -113,35 +112,45 @@ public sealed class GameHub(GameHost host, IRoomRegistry rooms, ISchemaCatalog s
         await host.DispatchAsync(request.RoomCode, new SchemaSelected(schema, GiocatoreCorrente()));
     }
 
-    public override async Task OnDisconnectedAsync(Exception? exception)
+    public override Task OnDisconnectedAsync(Exception? exception)
     {
         if (Context.Items.TryGetValue(RoomKey, out var room) && room is string roomCode &&
             Context.Items.TryGetValue(PlayerKey, out var player) && player is Guid playerId)
         {
-            try
-            {
-                await host.DispatchAsync(roomCode, new PlayerLeft(playerId));
-            }
-            catch (Exception ex)
-            {
-                // La stanza può essere sparita (es. riavvio del server, che
-                // lancia HubException), ma su un socket già a metà morto anche
-                // IOException, ObjectDisposedException o OperationCanceledException
-                // sono guasti plausibili nell'invio degli effetti. In
-                // disconnessione non c'è più nessun client a cui segnalarlo,
-                // quindi non deve far esplodere la disconnessione - ma va comunque
-                // loggato (a livello Warning, non Error: è un percorso atteso,
-                // non un guasto del server) perché è l'unica traccia osservabile
-                // rimasta di quel che è successo.
-                logger.LogWarning(
-                    ex,
-                    "Disconnessione del giocatore {PlayerId} dalla stanza {RoomCode}: dispatch di PlayerLeft fallita.",
-                    playerId,
-                    roomCode);
-            }
+            // Non dispatcha più PlayerLeft subito: avvia un periodo di
+            // grazia di 30s (design rientro §3.1). Se il giocatore rientra
+            // in tempo, GameHub.RejoinRoom lo annulla prima che scada, e
+            // nessun bot prende mai il suo posto. Il log del fallimento del
+            // dispatch, quando il periodo scade davvero, vive ora dentro
+            // AvviaPeriodoDiGrazia stesso.
+            host.AvviaPeriodoDiGrazia(roomCode, playerId);
         }
 
-        await base.OnDisconnectedAsync(exception);
+        return base.OnDisconnectedAsync(exception);
+    }
+
+    /// <summary>
+    /// A differenza di JoinRoom, funziona anche a partita già iniziata: è
+    /// pensato apposta per quello. Il controllo (la stanza esiste? il
+    /// giocatore è già fra quelli della stanza?) avviene prima di toccare il
+    /// motore, stesso pattern già in uso in SetSchema per uno schema
+    /// inesistente: un rifiuto atteso non è un'eccezione, è un messaggio
+    /// mirato al chiamante (design rientro §3.3).
+    /// </summary>
+    public async Task RejoinRoom(RejoinRoomRequest request)
+    {
+        RichiediProtocolloCompatibile(request.ProtocolVersion);
+
+        if (!rooms.TryGet(request.RoomCode, out var stanza) || stanza.FindPlayer(request.PlayerId) is null)
+        {
+            await Clients.Caller.SendAsync(
+                "ReceiveMessage", nameof(RejoinRejectedMessage), new RejoinRejectedMessage());
+            return;
+        }
+
+        host.AnnullaPeriodoDiGrazia(request.RoomCode, request.PlayerId);
+        await EntraAsync(request.RoomCode, request.PlayerId);
+        await host.DispatchAsync(request.RoomCode, new PlayerRejoined(request.PlayerId));
     }
 
     private async Task EntraAsync(string roomCode, Guid playerId)
