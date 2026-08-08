@@ -9,6 +9,7 @@
              Shell.NavBarIsVisible="False"
              Title="Frasi Squisite">
 
+    <Grid>
     <ScrollView>
         <VerticalStackLayout Padding="24" Spacing="16">
 
@@ -462,7 +463,12 @@
                                     <Image Source="{Binding ImageUrl}"
                                            Aspect="AspectFit"
                                            HeightRequest="240"
-                                           IsVisible="{Binding ImageUrl, Converter={StaticResource NotEmpty}}" />
+                                           IsVisible="{Binding ImageUrl, Converter={StaticResource NotEmpty}}">
+                                        <Image.GestureRecognizers>
+                                            <TapGestureRecognizer Command="{Binding Source={x:Reference RootPage}, Path=BindingContext.ExpandImageCommand}"
+                                                                   CommandParameter="{Binding ImageUrl}" />
+                                        </Image.GestureRecognizers>
+                                    </Image>
                                 </VerticalStackLayout>
                             </Border>
                         </DataTemplate>
@@ -486,4 +492,16 @@
 
         </VerticalStackLayout>
     </ScrollView>
+
+        <!-- L'illustrazione ingrandita: tocco ovunque per chiudere. Qui il
+             BindingContext è già GameSessionViewModel (nessun template di
+             CollectionView in mezzo), quindi i binding sono diretti. -->
+        <Grid BackgroundColor="#CC000000"
+              IsVisible="{Binding ExpandedImageUrl, Converter={StaticResource NotEmpty}}">
+            <Grid.GestureRecognizers>
+                <TapGestureRecognizer Command="{Binding CollapseImageCommand}" />
+            </Grid.GestureRecognizers>
+            <Image Source="{Binding ExpandedImageUrl}" Aspect="AspectFit" Margin="24" />
+        </Grid>
+    </Grid>
 </ContentPage>
