@@ -124,3 +124,11 @@ public sealed record IllustrationReadyMessage(int PhraseIndex, string Path);
 /// attesa per sempre, e l'host non saprebbe se riprovare.
 /// </summary>
 public sealed record IllustrationFailedMessage(int PhraseIndex, string Message);
+
+/// <summary>
+/// Stanza sparita, o il giocatore non è fra quelli della stanza: nessun
+/// campo, perché al client non serve distinguere i due casi (design rientro
+/// §4) — in entrambi il comportamento è lo stesso, cancellare il codice
+/// stanza salvato e tornare/restare alla lobby, senza mostrarlo come errore.
+/// </summary>
+public sealed record RejoinRejectedMessage;

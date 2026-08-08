@@ -6,74 +6,107 @@ namespace FrasiSquisite.Shared.Tests.Protocol;
 
 public class ProtocolContractTests
 {
-    // Il reveal fluido porta il protocollo a v8: RevealStepMessage cambia
-    // forma (RevealedSlots diventa Fragments, per intercalare il tessuto
-    // connettivo del template alle caselle), un client v7 non saprebbe più
-    // decodificarlo. Anche qui il rifiuto esplicito ("aggiorna l'app") è il
-    // comportamento giusto.
+    // Il rientro in partita porta il protocollo a v9: RejoinRoom è un
+    // metodo nuovo dell'hub e RejoinRejectedMessage un tipo nuovo, ma un
+    // client v8 che provasse comunque a rientrare (impossibile: non ha il
+    // pulsante/la chiamata) non avrebbe comunque modo di decodificare la
+    // risposta. Stesso rifiuto esplicito ("aggiorna l'app").
     [Fact]
-    public void LaVersioneDelProtocolloE8()
+    public void LaVersioneDelProtocolloE9()
     {
-        Assert.Equal(8, ProtocolVersion.Current);
+        Assert.Equal(9, ProtocolVersion.Current);
     }
 
-    // v7 è l'unica versione davvero installata sul campo: l'APK del lotto
-    // precedente, uscito prima che il reveal fluido portasse il protocollo a
-    // v8. Questo caso era rimasto scoperto quando Current è avanzato: la
-    // convenzione del file (allungare la catena a ogni avanzamento, senza
-    // perdere i casi vecchi) impone di aggiungerlo qui, in cima, e di
-    // rinumerare "quante versioni prima" tutti i casi già coperti.
+    // v8 è l'unica versione davvero installata sul campo: l'APK del lotto
+    // precedente, uscito prima che il rientro in partita portasse il
+    // protocollo a v9. Questo caso era rimasto scoperto quando Current è
+    // avanzato: la convenzione del file (allungare la catena a ogni
+    // avanzamento, senza perdere i casi vecchi) impone di aggiungerlo qui,
+    // in cima, e di rinumerare "quante versioni prima" tutti i casi già
+    // coperti.
     [Fact]
     public void UnClientDellaVersionePrecedenteNonECompatibile()
+    {
+        Assert.False(ProtocolVersion.IsCompatible(8));
+    }
+
+    // Un client v7 è incompatibile tanto quanto uno v8: il caso non va perso
+    // quando la versione corrente avanza, altrimenti una regressione che
+    // accettasse "solo" v7 passerebbe inosservata.
+    [Fact]
+    public void UnClientDiDueVersioniPrimaNonECompatibile()
     {
         Assert.False(ProtocolVersion.IsCompatible(7));
     }
 
-    // Un client v6 è incompatibile tanto quanto uno v7: il caso non va perso
-    // quando la versione corrente avanza, altrimenti una regressione che
-    // accettasse "solo" v6 passerebbe inosservata.
-    [Fact]
-    public void UnClientDiDueVersioniPrimaNonECompatibile()
-    {
-        Assert.False(ProtocolVersion.IsCompatible(6));
-    }
-
-    // Stessa cautela per v5: la catena di incompatibilità pregresse resta
+    // Stessa cautela per v6: la catena di incompatibilità pregresse resta
     // tutta coperta man mano che la versione corrente avanza (spec del
     // progetto: "i test che asseriscono ProtocolVersion vanno aggiornati...
     // tenendo anche i casi vecchi").
     [Fact]
     public void UnClientDiTreVersioniPrimaNonECompatibile()
     {
+        Assert.False(ProtocolVersion.IsCompatible(6));
+    }
+
+    // E per v5.
+    [Fact]
+    public void UnClientDiQuattroVersioniPrimaNonECompatibile()
+    {
         Assert.False(ProtocolVersion.IsCompatible(5));
     }
 
     // E per v4.
     [Fact]
-    public void UnClientDiQuattroVersioniPrimaNonECompatibile()
+    public void UnClientDiCinqueVersioniPrimaNonECompatibile()
     {
         Assert.False(ProtocolVersion.IsCompatible(4));
     }
 
     // E per v3.
     [Fact]
-    public void UnClientDiCinqueVersioniPrimaNonECompatibile()
+    public void UnClientDiSeiVersioniPrimaNonECompatibile()
     {
         Assert.False(ProtocolVersion.IsCompatible(3));
     }
 
     // E per v2.
     [Fact]
-    public void UnClientDiSeiVersioniPrimaNonECompatibile()
+    public void UnClientDiSetteVersioniPrimaNonECompatibile()
     {
         Assert.False(ProtocolVersion.IsCompatible(2));
     }
 
     // E per v1, la prima versione mai esistita.
     [Fact]
-    public void UnClientDiSetteVersioniPrimaNonECompatibile()
+    public void UnClientDiOttoVersioniPrimaNonECompatibile()
     {
         Assert.False(ProtocolVersion.IsCompatible(1));
+    }
+
+    [Fact]
+    public void RoundtripDiRejoinRoomRequest()
+    {
+        var originale = new RejoinRoomRequest(
+            ProtocolVersion: 9,
+            PlayerId: Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            RoomCode: "ABCD");
+
+        var json = JsonSerializer.Serialize(originale, ProtocolJson.Options);
+        var ricostruito = JsonSerializer.Deserialize<RejoinRoomRequest>(json, ProtocolJson.Options);
+
+        Assert.Equal(originale, ricostruito);
+    }
+
+    [Fact]
+    public void RoundtripDiRejoinRejectedMessage()
+    {
+        var originale = new RejoinRejectedMessage();
+
+        var json = JsonSerializer.Serialize(originale, ProtocolJson.Options);
+        var ricostruito = JsonSerializer.Deserialize<RejoinRejectedMessage>(json, ProtocolJson.Options);
+
+        Assert.Equal(originale, ricostruito);
     }
 
     [Fact]

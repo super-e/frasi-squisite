@@ -4,6 +4,12 @@ public sealed record CreateRoomRequest(int ProtocolVersion, Guid PlayerId, strin
 
 public sealed record JoinRoomRequest(int ProtocolVersion, Guid PlayerId, string Nickname, string RoomCode);
 
+/// <summary>
+/// A differenza di JoinRoomRequest non porta Nickname: il giocatore esiste
+/// già nella stanza, il nickname non cambia (design rientro §4).
+/// </summary>
+public sealed record RejoinRoomRequest(int ProtocolVersion, Guid PlayerId, string RoomCode);
+
 public sealed record StartGameRequest(string RoomCode);
 
 public sealed record SubmitSlotRequest(string RoomCode, string Text);
