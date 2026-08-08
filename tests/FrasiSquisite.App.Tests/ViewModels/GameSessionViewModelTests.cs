@@ -1300,6 +1300,30 @@ public class GameSessionViewModelTests
         Assert.False(vm.ShowFinishedActions);
     }
 
+    // L'illustrazione ingrandita è uno stato di sola UI, indipendente dalle
+    // righe della classifica: un solo overlay alla volta, quindi basta una
+    // proprietà sul ViewModel di pagina invece che una per riga.
+    [Fact]
+    public void ExpandImageImpostaLUrlDellImmagineIngrandita()
+    {
+        var (vm, _, _) = Crea();
+
+        vm.ExpandImageCommand.Execute("http://test/immagine.png");
+
+        Assert.Equal("http://test/immagine.png", vm.ExpandedImageUrl);
+    }
+
+    [Fact]
+    public void CollapseImageAzzeraLUrlDellImmagineIngrandita()
+    {
+        var (vm, _, _) = Crea();
+        vm.ExpandImageCommand.Execute("http://test/immagine.png");
+
+        vm.CollapseImageCommand.Execute(null);
+
+        Assert.Null(vm.ExpandedImageUrl);
+    }
+
     // "Tornando in lobby le collezioni di partita risultano vuote" (brief del
     // lotto): senza questa pulizia la partita successiva mostrerebbe pezzi
     // di quella appena conclusa.
@@ -1315,6 +1339,7 @@ public class GameSessionViewModelTests
         await vm.CastVoteCommand.ExecuteAsync(vm.VoteOptions[0]);
         conn.Emit(new VoteProgressMessage(1, 3));
         conn.Emit(new GameFinishedMessage([new PhraseResultView(0, "Il cadavere squisito", [], 0, false)]));
+        vm.ExpandImageCommand.Execute("http://test/immagine.png");
 
         Assert.NotEmpty(vm.FinalResults);
         Assert.NotEmpty(vm.RevealFragments);
@@ -1322,6 +1347,7 @@ public class GameSessionViewModelTests
         Assert.True(vm.HasVoted);
         Assert.Equal(1, vm.VotedCount);
         Assert.Equal(3, vm.VotersExpected);
+        Assert.NotNull(vm.ExpandedImageUrl);
 
         await vm.BackToLobbyCommand.ExecuteAsync(null);
 
@@ -1331,6 +1357,7 @@ public class GameSessionViewModelTests
         Assert.False(vm.HasVoted);
         Assert.Equal(0, vm.VotedCount);
         Assert.Equal(0, vm.VotersExpected);
+        Assert.Null(vm.ExpandedImageUrl);
     }
 
     // Stessa pulizia per "Nuova partita": la partita successiva parte dritta
@@ -1346,12 +1373,14 @@ public class GameSessionViewModelTests
         await vm.CastVoteCommand.ExecuteAsync(vm.VoteOptions[0]);
         conn.Emit(new VoteProgressMessage(1, 3));
         conn.Emit(new GameFinishedMessage([new PhraseResultView(0, "Il cadavere squisito", [], 0, false)]));
+        vm.ExpandImageCommand.Execute("http://test/immagine.png");
 
         Assert.NotEmpty(vm.FinalResults);
         Assert.NotEmpty(vm.VoteOptions);
         Assert.True(vm.HasVoted);
         Assert.Equal(1, vm.VotedCount);
         Assert.Equal(3, vm.VotersExpected);
+        Assert.NotNull(vm.ExpandedImageUrl);
 
         await vm.NewGameCommand.ExecuteAsync(null);
 
@@ -1360,6 +1389,7 @@ public class GameSessionViewModelTests
         Assert.False(vm.HasVoted);
         Assert.Equal(0, vm.VotedCount);
         Assert.Equal(0, vm.VotersExpected);
+        Assert.Null(vm.ExpandedImageUrl);
     }
 
     // ================= Lotto E (revisione del lotto D, punto 1) =================

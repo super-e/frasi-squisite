@@ -289,6 +289,13 @@ public partial class GameSessionViewModel : ObservableObject
 
     public ObservableCollection<PhraseResultRowView> FinalResults { get; } = [];
 
+    /// <summary>
+    /// L'illustrazione ingrandita a schermo intero, o null se nessuna è
+    /// aperta. Un solo overlay alla volta: non serve stato per riga.
+    /// </summary>
+    [ObservableProperty]
+    private string? _expandedImageUrl;
+
     [ObservableProperty]
     private bool _hasVoted;
 
@@ -556,6 +563,20 @@ public partial class GameSessionViewModel : ObservableObject
             throw;
         }
     });
+
+    /// <summary>
+    /// Apre l'illustrazione a schermo intero. Nessuna chiamata al server:
+    /// l'indirizzo è già noto al client (spec 2026-08-08).
+    /// </summary>
+    [RelayCommand]
+    private void ExpandImage(string url) => ExpandedImageUrl = url;
+
+    /// <summary>
+    /// Chiude l'illustrazione ingrandita. Tocco ovunque sull'overlay, non
+    /// solo su un pulsante di chiusura dedicato.
+    /// </summary>
+    [RelayCommand]
+    private void CollapseImage() => ExpandedImageUrl = null;
 
     /// <summary>
     /// "Nuova partita" (lotto-d-brief.md): riparte subito, stessi giocatori e
@@ -915,6 +936,7 @@ public partial class GameSessionViewModel : ObservableObject
         HasVoted = false;
         VotedCount = 0;
         VotersExpected = 0;
+        ExpandedImageUrl = null;
     }
 
     private void AggiornaEtichettaRevealButton() =>
