@@ -14,6 +14,8 @@ public sealed class FakeGameConnection : IGameConnection
 
     public event Action? ConnectionInterrupted;
 
+    public event Action? Reconnected;
+
     public bool IsConnected { get; private set; }
 
     public IReadOnlyList<string> Calls => _calls;
@@ -59,6 +61,8 @@ public sealed class FakeGameConnection : IGameConnection
 
     public void EmitConnectionInterrupted() => ConnectionInterrupted?.Invoke();
 
+    public void EmitReconnected() => Reconnected?.Invoke();
+
     public Task ConnectAsync(string serverUrl, CancellationToken ct = default)
     {
         LanciaSeImpostato();
@@ -78,6 +82,13 @@ public sealed class FakeGameConnection : IGameConnection
     {
         LanciaSeImpostato();
         _calls.Add($"JoinRoom({nickname},{roomCode})");
+        return Task.CompletedTask;
+    }
+
+    public Task RejoinRoomAsync(Guid playerId, string roomCode)
+    {
+        LanciaSeImpostato();
+        _calls.Add($"RejoinRoom({playerId},{roomCode})");
         return Task.CompletedTask;
     }
 

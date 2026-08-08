@@ -10,11 +10,78 @@ public class GameSessionViewModelTests
 {
     private static readonly Guid Anna = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001");
 
-    private static (GameSessionViewModel Vm, FakeGameConnection Conn) Crea()
+    private static (GameSessionViewModel Vm, FakeGameConnection Conn, FakeRoomSession Sessione) Crea()
     {
         var connessione = new FakeGameConnection();
-        var vm = new GameSessionViewModel(connessione, Anna, new FakeThemeService(), new FakePlayerProfile()) { ServerUrl = "http://test" };
-        return (vm, connessione);
+        var sessione = new FakeRoomSession();
+        var vm = new GameSessionViewModel(connessione, Anna, new FakeThemeService(), new FakePlayerProfile(), sessione) { ServerUrl = "http://test" };
+        return (vm, connessione, sessione);
+    }
+
+    [Fact]
+    public async Task AllAvvioSenzaStanzaSalvataNonTentaAlcunRientro()
+    {
+        var (vm, conn, _) = Crea();
+
+        await vm.TryRejoinAsync();
+
+        Assert.DoesNotContain(conn.Calls, c => c.StartsWith("RejoinRoom"));
+    }
+
+    [Fact]
+    public async Task ConUnaStanzaSalvataAllAvvioTentaIlRientro()
+    {
+        var (vm, conn, sessione) = Crea();
+        sessione.Save("ABCD");
+
+        await vm.TryRejoinAsync();
+
+        Assert.Contains($"RejoinRoom({Anna},ABCD)", conn.Calls);
+    }
+
+    [Fact]
+    public async Task UnRifiutoDelRientroCancellaLaSessioneSalvataSenzaMostrareUnErrore()
+    {
+        var (vm, conn, sessione) = Crea();
+        sessione.Save("ABCD");
+
+        await vm.TryRejoinAsync();
+        conn.Emit(new RejoinRejectedMessage());
+
+        Assert.True(sessione.Cancellato);
+        Assert.Equal(string.Empty, vm.ErrorText);
+    }
+
+    [Fact]
+    public void UnaStanzaRicevutaVieneSalvataInSessione()
+    {
+        var (vm, conn, sessione) = Crea();
+
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby", [new PlayerView(Anna, "Anna", true, true, false)], "storia", 8));
+
+        Assert.Equal("ABCD", sessione.RoomCode);
+    }
+
+    [Fact]
+    public async Task IlRipristinoDellaConnessioneTentaDiNuovoIlRientro()
+    {
+        var (vm, conn, _) = Crea();
+        vm.RoomCode = "ABCD";
+
+        conn.EmitReconnected();
+
+        // OnReconnected scatena TryRejoinAsync in modo asincrono (fire-and-
+        // forget, come vuole un handler di evento void): il FakeGameConnection
+        // risponde in modo sincrono, ma un breve margine reale evita un test
+        // fragile legato ai dettagli di scheduling di un Task già completato.
+        var scadenza = DateTime.UtcNow + TimeSpan.FromSeconds(1);
+        while (DateTime.UtcNow < scadenza && !conn.Calls.Any(c => c.StartsWith("RejoinRoom")))
+        {
+            await Task.Delay(5);
+        }
+
+        Assert.Contains($"RejoinRoom({Anna},ABCD)", conn.Calls);
     }
 
     private static RevealFragment Rivelata(string testo) => new(true, testo, true);
@@ -27,7 +94,7 @@ public class GameSessionViewModelTests
     {
         var connessione = new FakeGameConnection();
         var tema = new FakeThemeService();
-        var vm = new GameSessionViewModel(connessione, Anna, tema, new FakePlayerProfile()) { ServerUrl = "http://test" };
+        var vm = new GameSessionViewModel(connessione, Anna, tema, new FakePlayerProfile(), new FakeRoomSession()) { ServerUrl = "http://test" };
         return (vm, connessione, tema);
     }
 
@@ -35,7 +102,7 @@ public class GameSessionViewModelTests
     {
         var connessione = new FakeGameConnection();
         var profilo = new FakePlayerProfile { Nickname = nicknameSalvato };
-        var vm = new GameSessionViewModel(connessione, Anna, new FakeThemeService(), profilo) { ServerUrl = "http://test" };
+        var vm = new GameSessionViewModel(connessione, Anna, new FakeThemeService(), profilo, new FakeRoomSession()) { ServerUrl = "http://test" };
         return (vm, connessione, profilo);
     }
 
@@ -47,7 +114,7 @@ public class GameSessionViewModelTests
     /// </summary>
     private static (GameSessionViewModel Vm, FakeGameConnection Conn) InVoto(bool ioSonoHost = false)
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new RoomStateMessage(
             "ABCD",
@@ -64,7 +131,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void AllAvvioSiEAllaSchermataIniziale()
     {
-        var (vm, _) = Crea();
+        var (vm, _, _) = Crea();
 
         Assert.Equal(ScreenState.Home, vm.Screen);
     }
@@ -72,7 +139,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task CreareUnaStanzaChiamaLaConnessioneEMemorizzaIlCodice()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         conn.NextRoomCode = "WXYZ";
         vm.Nickname = "Anna";
 
@@ -85,7 +152,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void RicevereLoStatoDellaStanzaPortaInLobbyEPopolaIGiocatori()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new RoomStateMessage(
             "ABCD", "Lobby",
@@ -114,7 +181,7 @@ public class GameSessionViewModelTests
     [InlineData("Finished", ScreenState.Home)]
     public void LoStatoDellaStanzaCambiaSchermataSoloPerLeFasiGestite(string fase, ScreenState atteso)
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new RoomStateMessage(
             "ABCD", fase,
@@ -134,7 +201,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void LoStatoDiStanzaInRifinituraPortaTuttiSullaSchermataDiAttesa()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new RoomStateMessage(
             "ABCD",
@@ -149,7 +216,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void DallaRifinituraSiEsceQuandoArrivaIlPrimoPassoDiReveal()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         conn.Emit(new RoomStateMessage(
             "ABCD", "Refining", [new PlayerView(Anna, "Anna", true, true, false)], "storia", 8));
 
@@ -161,7 +228,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void RicevereUnaRichiestaDiCasellaPortaInScritturaEMostraIlRuolo()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new SlotRequestMessage(0, 5, "Soggetto", "Un soggetto, con l'articolo", "Il cadavere"));
 
@@ -176,7 +243,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task InviareUnaCasellaSvuotaIlCampoEPortaInAttesa()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
         conn.Emit(new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio"));
         vm.SlotText = "Il cadavere";
@@ -204,7 +271,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task UnaRichiestaDiCasellaArrivataDuranteLInvioNonVieneSovrascritta()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
         conn.Emit(new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio"));
         vm.SlotText = "Il cadavere";
@@ -227,7 +294,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task IlRevealArrivatoDuranteLInvioNonVieneSovrascritto()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
         conn.Emit(new SlotRequestMessage(4, 5, "Aggettivo", "prompt", "esempio"));
         vm.SlotText = "nuovo";
@@ -242,7 +309,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task NonSiPuoInviareUnTestoNonValido()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
         conn.Emit(new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio"));
         vm.SlotText = "   ";
@@ -256,7 +323,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void IlProgressoDelRoundAggiornaIlConteggio()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new RoundProgressMessage(0, 2, 4));
 
@@ -267,7 +334,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void IlPassoDiRevealMostraIFrammentiScopertiECopreLeCaselleRestanti()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new RevealStepMessage(0, 1, [
             Rivelata("Il cadavere"),
@@ -295,7 +362,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void UnaCasellaNonRivelataNonMostraMaiIlTestoAncheSeArrivaValorizzato()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new RevealStepMessage(0, 1, [new RevealFragment(true, "SEGRETO", false)], false));
 
@@ -312,7 +379,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task IlPulsanteDiRevealMostraLetichettaGiustaEChiamaSempreIlServer()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
 
         conn.Emit(new RevealStepMessage(0, 2, [Rivelata("Il cadavere")], false));
@@ -331,7 +398,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void FraseNDiMRiflettePhraseIndexETotalPhrasesDelPasso()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new RevealStepMessage(1, 3, [Rivelata("berrà")], false));
 
@@ -342,7 +409,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void LaFinePartitaMostraLeFrasiComposte()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new GameFinishedMessage([
             new PhraseResultView(0, "Il cadavere squisito berrà il vino nuovo", [], 0, false),
@@ -355,7 +422,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void IlMessaggioFinalePopolaLaClassifica()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new GameFinishedMessage([
             new PhraseResultView(1, "Il notaio divora il tramonto", ["Anna", "Bruno"], 2, true),
@@ -374,7 +441,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void ConUnSoloVotoLEtichettaESingolare()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new GameFinishedMessage([
             new PhraseResultView(0, "Frase", ["Anna"], 1, true),
@@ -386,7 +453,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void UnErroreDalServerVieneMostrato()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new ErrorMessage("NOT_HOST", "Solo chi ha creato la stanza può avviare."));
 
@@ -396,7 +463,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void UnErroreNonSopravviveAlCambioDiSchermata()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new ErrorMessage("NOT_HOST", "Solo chi ha creato la stanza può avviare."));
         Assert.False(string.IsNullOrEmpty(vm.ErrorText));
@@ -413,7 +480,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void UnErroreNonSopravviveAUnMessaggioSullaStessaSchermata()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         // Si arriva sulla schermata di Reveal e ci si resta: RevealStepMessage
         // imposta Screen sullo stesso valore che ha già, quindi il setter
@@ -434,7 +501,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void UnErroreNonVieneCancellatoDalProprioArrivo()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new ErrorMessage("NOT_HOST", "Solo chi ha creato la stanza può avviare."));
 
@@ -450,7 +517,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task UnGuastoDiTrasportoNellaCreazioneDellaStanzaVieneMostratoENonPropaga()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         conn.NextFailure = new HttpRequestException("host irraggiungibile");
         vm.Nickname = "Anna";
 
@@ -463,7 +530,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task UnHubExceptionMostraIlMessaggioDelServerVerbatim()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         conn.NextFailure = new HubException("Stanza non trovata.");
         vm.Nickname = "Bruno";
         vm.JoinCode = "ABCD";
@@ -476,7 +543,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task UnGuastoNellInvioDellaCasellaVieneMostratoENonPortaInAttesa()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
         conn.Emit(new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio"));
         vm.SlotText = "Il cadavere";
@@ -496,7 +563,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void UnInterruzioneDiConnessioneMostraUnAvviso()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         Assert.Equal(string.Empty, vm.ConnectionBanner);
 
@@ -511,7 +578,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void HoUnCodiceMostraIlCampoDelCodiceEIndietroLoNasconde()
     {
-        var (vm, _) = Crea();
+        var (vm, _, _) = Crea();
 
         Assert.False(vm.IsJoiningByCode);
 
@@ -528,7 +595,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void LIngranaggioApreImpostazioniEIndietroTornaAllaHome()
     {
-        var (vm, _) = Crea();
+        var (vm, _, _) = Crea();
 
         vm.OpenSettingsCommand.Execute(null);
         Assert.Equal(ScreenState.Settings, vm.Screen);
@@ -558,7 +625,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task AggiungereUnBotChiamaLaConnessione()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
 
         await vm.AddBotCommand.ExecuteAsync(null);
@@ -569,7 +636,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task RimuovereUnBotChiamaLaConnessioneConLIdDelBot()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
         var botId = Guid.NewGuid();
         conn.Emit(new RoomStateMessage(
@@ -586,7 +653,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void LoStatoDiModificaEntraEEsceConStartECancel()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         var botId = Guid.NewGuid();
         conn.Emit(new RoomStateMessage(
             "ABCD", "Lobby",
@@ -606,7 +673,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task ConfermareLaModificaChiamaLaConnessioneEEsceDallaModifica()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
         var botId = Guid.NewGuid();
         conn.Emit(new RoomStateMessage(
@@ -626,7 +693,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task ConfermareUnNomeNonValidoNonChiamaLaConnessione()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
         var botId = Guid.NewGuid();
         conn.Emit(new RoomStateMessage(
@@ -646,7 +713,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void CanAddBotEFalsoPerUnNonHost()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new RoomStateMessage(
             "ABCD", "Lobby",
@@ -660,7 +727,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void CanAddBotEFalsoAStanzaPiena()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         var giocatori = new List<PlayerView> { new(Anna, "Anna", true, true, false) };
         for (var i = 1; i < GameSessionViewModel.MaxPlayers; i++)
@@ -678,7 +745,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void CanAddBotEVeroPerHostInLobbyConPostoLibero()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new RoomStateMessage(
             "ABCD", "Lobby",
@@ -696,7 +763,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void ModificareUnSecondoBotChiudeLaModificaDelPrimo()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         var adaId = Guid.NewGuid();
         var brunoId = Guid.NewGuid();
         conn.Emit(new RoomStateMessage(
@@ -726,7 +793,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task ConfermareLaRigaChiusaDopoAverApertoUnAltraNonRinominaNulla()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
         var adaId = Guid.NewGuid();
         var brunoId = Guid.NewGuid();
@@ -760,7 +827,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task AnnullareLaRigaChiusaDopoAverApertoUnAltraNonCorrompeLaModificaTracciata()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
         var adaId = Guid.NewGuid();
         var brunoId = Guid.NewGuid();
@@ -797,7 +864,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void UnaRoomStateMessageDuranteLaModificaDiUnBotNeConservaLoStato()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         var adaId = Guid.NewGuid();
         conn.Emit(new RoomStateMessage(
             "ABCD", "Lobby",
@@ -829,7 +896,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void UnaRoomStateMessageSenzaPiuIlBotInModificaAnnullaLaModifica()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         var adaId = Guid.NewGuid();
         conn.Emit(new RoomStateMessage(
             "ABCD", "Lobby",
@@ -856,7 +923,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void UnNonHostNonVedeIControlliDelBot()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         var hostId = Guid.NewGuid();
         var botId = Guid.NewGuid();
         conn.Emit(new RoomStateMessage(
@@ -876,7 +943,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void LHostVedeIControlliDelBot()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         var botId = Guid.NewGuid();
         conn.Emit(new RoomStateMessage(
             "ABCD", "Lobby",
@@ -896,7 +963,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void CanChangeSchemaEFalsoPerUnNonHost()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new RoomStateMessage(
             "ABCD", "Lobby",
@@ -911,7 +978,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void CanChangeSchemaEVeroPerHostInLobby()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new RoomStateMessage(
             "ABCD", "Lobby",
@@ -926,7 +993,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task SceglierUnoSchemaChiamaLaConnessione()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
 
         await vm.SelectSchemaCommand.ExecuteAsync("proverbio");
@@ -945,7 +1012,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void IlConteggioDelleCaselleSeguiLoSchemaSelezionato()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         var schemiDisponibili = new[]
         {
             new SchemaView("surrealista-classico", "Surrealista classico", 5),
@@ -979,7 +1046,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void SchemaSummaryEVuotaPrimaDiRicevereUnaRoomStateMessage()
     {
-        var (vm, _) = Crea();
+        var (vm, _, _) = Crea();
 
         Assert.Equal(string.Empty, vm.SchemaSummary);
     }
@@ -991,7 +1058,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void SchemaSummaryComponeNomeTrattinoENumeroDiCaselle()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         var schemiDisponibili = new[] { new SchemaView("proverbio", "Proverbio della nonna", 3) };
 
         conn.Emit(new RoomStateMessage(
@@ -1012,7 +1079,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void CambiareLoSchemaNotificaSchemaSummary()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         var schemiDisponibili = new[]
         {
             new SchemaView("surrealista-classico", "Surrealista classico", 5),
@@ -1044,7 +1111,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void SenzaSchemiDisponibiliIlRiepilogoRipiegaSullId()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new RoomStateMessage(
             "ABCD", "Lobby",
@@ -1057,7 +1124,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void LoSchemaSelezionatoEMarcatoComeTaleTraLeOpzioni()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         var schemiDisponibili = new[]
         {
             new SchemaView("surrealista-classico", "Surrealista classico", 5),
@@ -1079,7 +1146,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task CreareUnaStanzaConNicknameNonValidoVieneRifiutatoSenzaChiamareLaConnessione()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         vm.Nickname = "   ";
 
         await vm.CreateRoomCommand.ExecuteAsync(null);
@@ -1091,7 +1158,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task CreareUnaStanzaNormalizzaIlNicknamePrimaDiInviarlo()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         vm.Nickname = "  Anna   Banana  ";
 
         await vm.CreateRoomCommand.ExecuteAsync(null);
@@ -1103,7 +1170,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task EntrareInUnaStanzaConNicknameNonValidoVieneRifiutatoSenzaChiamareLaConnessione()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         vm.Nickname = "   ";
         vm.JoinCode = "ABCD";
 
@@ -1118,7 +1185,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task NuovaPartitaChiamaLaConnessioneConIlCodiceStanza()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
 
         await vm.NewGameCommand.ExecuteAsync(null);
@@ -1129,7 +1196,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task TornaAllaLobbyChiamaLaConnessioneConIlCodiceStanza()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
 
         await vm.BackToLobbyCommand.ExecuteAsync(null);
@@ -1140,7 +1207,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void ShowFinishedActionsEVeroSoloPerLHostSullaSchermataFinale()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new GameFinishedMessage([new PhraseResultView(0, "Il cadavere squisito", [], 0, false)]));
         Assert.Equal(ScreenState.Finished, vm.Screen);
@@ -1154,7 +1221,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void ShowFinishedActionsEVeroPerLHostSullaSchermataFinale()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new RoomStateMessage(
             "ABCD", "Lobby",
@@ -1170,7 +1237,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void ShowFinishedActionsEFalsoPerUnNonHostSullaSchermataFinale()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new RoomStateMessage(
             "ABCD", "Lobby",
@@ -1186,7 +1253,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void ShowFinishedActionsEFalsoPerLHostFuoriDallaSchermataFinale()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new RoomStateMessage(
             "ABCD", "Lobby",
@@ -1204,7 +1271,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task TornareAllaLobbySvuotaLeCollezioniDellaPartitaConclusa()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
 
         conn.Emit(new RevealStepMessage(0, 1, [Rivelata("Il cadavere")], true));
@@ -1237,7 +1304,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task NuovaPartitaSvuotaLeCollezioniDellaPartitaConclusa()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
 
         conn.Emit(new VoteRequestMessage(["Prima", "Seconda"]));
@@ -1272,7 +1339,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task UnGuastoDiTrasportoInNuovaPartitaNonCancellaLeFrasiFinali()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
         conn.Emit(new GameFinishedMessage([new PhraseResultView(0, "Il cadavere squisito", [], 0, false)]));
         Assert.NotEmpty(vm.FinalResults);
@@ -1287,7 +1354,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task UnGuastoDiTrasportoInTornaAllaLobbyNonCancellaLeFrasiFinali()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
         conn.Emit(new GameFinishedMessage([new PhraseResultView(0, "Il cadavere squisito", [], 0, false)]));
         Assert.NotEmpty(vm.FinalResults);
@@ -1302,7 +1369,7 @@ public class GameSessionViewModelTests
     [Fact]
     public async Task EntrareInUnaStanzaNormalizzaIlNicknamePrimaDiInviarlo()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         vm.Nickname = "  Bruno   Verdi  ";
         vm.JoinCode = "abcd";
 
@@ -1327,7 +1394,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void SenzaUnNicknameSalvatoLaViewModelPartePartitaConNicknameVuoto()
     {
-        var (vm, _) = Crea();
+        var (vm, _, _) = Crea();
 
         Assert.Equal(string.Empty, vm.Nickname);
     }
@@ -1391,7 +1458,7 @@ public class GameSessionViewModelTests
     [Fact]
     public void LaRichiestaDiVotoPortaAllaSchermataDiVoto()
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
 
         conn.Emit(new VoteRequestMessage(["Prima frase", "Seconda frase"]));
 
@@ -1512,7 +1579,7 @@ public class GameSessionViewModelTests
         // Armare l'aggancio del voto e invocare l'invio di una casella non
         // deve emettere nulla: sono due proprietà distinte della connessione
         // finta apposta per questo.
-        var (vmScrittura, connScrittura) = Crea();
+        var (vmScrittura, connScrittura, _) = Crea();
         vmScrittura.RoomCode = "ABCD";
         connScrittura.Emit(new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio"));
         vmScrittura.SlotText = "Il cadavere";
@@ -1549,7 +1616,7 @@ public class GameSessionViewModelTests
     /// </summary>
     private static (GameSessionViewModel Vm, FakeGameConnection Conn) InFinale(bool ioSonoHost = true)
     {
-        var (vm, conn) = Crea();
+        var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
 
         conn.Emit(new RoomStateMessage(

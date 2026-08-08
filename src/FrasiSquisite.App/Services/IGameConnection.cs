@@ -9,15 +9,21 @@ public interface IGameConnection
     event Action<object>? MessageReceived;
 
     /// <summary>
-    /// Il trasporto è stato interrotto (o si è riconnesso con una nuova
-    /// connessione che non recupera l'appartenenza alla stanza SignalR): da
-    /// qui in poi un bot gioca al posto del giocatore, finché non esiste un
-    /// rejoin di partita (Fase 2, fuori scope). Un solo evento basta: al
-    /// chiamante non serve distinguere "riconnessione in corso" da
-    /// "riconnesso" da "chiuso", perché la conseguenza per il giocatore è
-    /// identica in tutti e tre i casi.
+    /// Il trasporto sta tentando di riconnettersi, o si è chiuso del tutto:
+    /// in entrambi i casi mostra il banner "connessione instabile". Non
+    /// scatta più su un vero ripristino del trasporto — quello è
+    /// <see cref="Reconnected"/>, separato apposta da quando esiste un
+    /// tentativo di rientro (design rientro §5.2).
     /// </summary>
     event Action? ConnectionInterrupted;
+
+    /// <summary>
+    /// Il trasporto si è ripristinato (.WithAutomaticReconnect), ma con un
+    /// nuovo ConnectionId che non recupera da solo l'appartenenza alla
+    /// stanza SignalR: chi ascolta deve tentare un rientro esplicito
+    /// (design rientro §5.2), non limitarsi a mostrare un banner.
+    /// </summary>
+    event Action? Reconnected;
 
     bool IsConnected { get; }
 
@@ -26,6 +32,9 @@ public interface IGameConnection
     Task<string> CreateRoomAsync(Guid playerId, string nickname);
 
     Task JoinRoomAsync(Guid playerId, string nickname, string roomCode);
+
+    /// <summary>A differenza di JoinRoomAsync funziona anche a partita già iniziata (design rientro §3.3).</summary>
+    Task RejoinRoomAsync(Guid playerId, string roomCode);
 
     Task StartGameAsync(string roomCode);
 

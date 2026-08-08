@@ -37,11 +37,13 @@ public static class MauiProgram
         builder.Services.AddSingleton<IThemeStore, PreferencesThemeStore>();
         builder.Services.AddSingleton<IThemeService, ThemeService>();
         builder.Services.AddSingleton<IPlayerProfile, PreferencesPlayerProfile>();
+        builder.Services.AddSingleton<IRoomSession, PreferencesRoomSession>();
         builder.Services.AddSingleton(sp => new GameSessionViewModel(
             sp.GetRequiredService<IGameConnection>(),
             PlayerIdentity.Current(),
             sp.GetRequiredService<IThemeService>(),
-            sp.GetRequiredService<IPlayerProfile>()));
+            sp.GetRequiredService<IPlayerProfile>(),
+            sp.GetRequiredService<IRoomSession>()));
         builder.Services.AddSingleton<GamePage>();
 
         return builder.Build();

@@ -42,15 +42,22 @@ public partial class GameSessionViewModel : ObservableObject
     private readonly Guid _playerId;
     private readonly IThemeService _themeService;
     private readonly IPlayerProfile _playerProfile;
+    private readonly IRoomSession _roomSession;
 
     private bool _fraseCompleta;
 
-    public GameSessionViewModel(IGameConnection connection, Guid playerId, IThemeService themeService, IPlayerProfile playerProfile)
+    public GameSessionViewModel(
+        IGameConnection connection,
+        Guid playerId,
+        IThemeService themeService,
+        IPlayerProfile playerProfile,
+        IRoomSession roomSession)
     {
         _connection = connection;
         _playerId = playerId;
         _themeService = themeService;
         _playerProfile = playerProfile;
+        _roomSession = roomSession;
 
         _selectedTheme = themeService.Current;
         // Il tema può cambiare solo da Impostazioni, che passa sempre da
@@ -69,7 +76,40 @@ public partial class GameSessionViewModel : ObservableObject
         // fin dal primo istante, anche prima che l'utente tocchi qualcosa.
         _connection.MessageReceived += OnMessage;
         _connection.ConnectionInterrupted += OnConnectionInterrupted;
+        _connection.Reconnected += OnReconnected;
     }
+
+    /// <summary>
+    /// Tenta un rientro silenzioso nella stanza salvata (design rientro
+    /// §5.2): usa RoomCode se già popolato (si crede già in una stanza — il
+    /// caso del trasporto appena tornato), altrimenti quello persistito da
+    /// IRoomSession (il caso dell'avvio a freddo, dove RoomCode è ancora
+    /// vuoto). Nessun banner d'errore su un fallimento: dal punto di vista
+    /// dell'utente non è un errore, è solo "quella partita non c'è più" - il
+    /// fallimento silenzioso copre anche un guasto di puro trasporto (app
+    /// offline all'avvio), per restare quanto più possibile senza attrito.
+    /// </summary>
+    public async Task TryRejoinAsync()
+    {
+        var codice = RoomCode.Length > 0 ? RoomCode : _roomSession.RoomCode;
+        if (codice.Length == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await EnsureConnectedAsync();
+            await _connection.RejoinRoomAsync(_playerId, codice);
+        }
+        catch
+        {
+            _roomSession.Clear();
+            RoomCode = string.Empty;
+        }
+    }
+
+    private void OnReconnected() => _ = TryRejoinAsync();
 
     [ObservableProperty]
     private ScreenState _screen = ScreenState.Home;
@@ -585,12 +625,10 @@ public partial class GameSessionViewModel : ObservableObject
 
     private void OnConnectionInterrupted()
     {
-        // Il trasporto SignalR può riconnettersi da solo (.WithAutomaticReconnect),
-        // ma con un nuovo ConnectionId che non recupera l'appartenenza ai gruppi
-        // della stanza: il server ha già marcato il giocatore disconnesso e ci
-        // gioca un bot al suo posto. Il rejoin di partita è Fase 2 e resta fuori
-        // scope, quindi l'avviso non si azzera da solo nemmeno se il trasporto
-        // torna su (Reconnected): per questa sessione non cambia nulla.
+        // Il trasporto è giù o ci sta provando (Reconnecting/Closed): il
+        // giocatore potrebbe restare temporaneamente sostituito da un bot
+        // finché non rientra per davvero. Reconnected (sopra, OnReconnected)
+        // è separato apposta: solo lì ha senso tentare un rientro, non qui.
         ConnectionBanner = "Connessione persa: un bot sta giocando al tuo posto.";
     }
 
@@ -617,6 +655,7 @@ public partial class GameSessionViewModel : ObservableObject
         {
             case RoomStateMessage stato:
                 RoomCode = stato.RoomCode;
+                _roomSession.Save(stato.RoomCode);
 
                 // Calcolato prima di ricostruire le righe: ShowBotControls di
                 // ogni riga dipende da chi guarda, non da chi è quella riga
@@ -819,6 +858,13 @@ public partial class GameSessionViewModel : ObservableObject
 
             case ErrorMessage errore:
                 ErrorText = errore.Message;
+                break;
+
+            // Nessun banner: dal punto di vista dell'utente non è un errore,
+            // è solo "quella partita non c'è più" (design rientro §5.2).
+            case RejoinRejectedMessage:
+                _roomSession.Clear();
+                RoomCode = string.Empty;
                 break;
         }
     }

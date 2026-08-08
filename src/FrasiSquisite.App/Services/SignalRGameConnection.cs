@@ -13,6 +13,8 @@ public sealed class SignalRGameConnection : IGameConnection, IAsyncDisposable
 
     public event Action? ConnectionInterrupted;
 
+    public event Action? Reconnected;
+
     public bool IsConnected => _connection?.State == HubConnectionState.Connected;
 
     public async Task ConnectAsync(string serverUrl, CancellationToken ct = default)
@@ -35,14 +37,12 @@ public sealed class SignalRGameConnection : IGameConnection, IAsyncDisposable
             }
         });
 
-        // Il riconnettersi a livello di trasporto (.WithAutomaticReconnect) apre
-        // una connessione nuova, con un ConnectionId diverso: non recupera da
-        // solo l'appartenenza ai gruppi SignalR della stanza, che il server ha
-        // già rimosso marcando il giocatore disconnesso (e facendoci giocare un
-        // bot al suo posto). I tre eventi hanno quindi la stessa conseguenza
-        // visibile per il giocatore: senza questo avviso il client resterebbe
-        // "connesso" (IsConnected true) ma sordo a ogni messaggio successivo,
-        // senza che nulla in schermata lo segnali (spec I1).
+        // Reconnecting/Closed: il trasporto è giù o ci sta provando, stesso
+        // banner di prima (spec I1). Reconnected è diverso da quando esiste
+        // il rientro (design rientro §5.2): il trasporto è tornato, ma con
+        // un ConnectionId nuovo che non recupera da solo l'appartenenza al
+        // gruppo SignalR della stanza — chi ascolta deve tentare un rientro
+        // esplicito, non limitarsi a mostrare un banner.
         _connection.Reconnecting += _ =>
         {
             SollevaConnectionInterrupted();
@@ -50,7 +50,7 @@ public sealed class SignalRGameConnection : IGameConnection, IAsyncDisposable
         };
         _connection.Reconnected += _ =>
         {
-            SollevaConnectionInterrupted();
+            SollevaReconnected();
             return Task.CompletedTask;
         };
         _connection.Closed += _ =>
@@ -76,6 +76,9 @@ public sealed class SignalRGameConnection : IGameConnection, IAsyncDisposable
     private void SollevaConnectionInterrupted() =>
         EseguiSulThreadUI(() => ConnectionInterrupted?.Invoke());
 
+    private void SollevaReconnected() =>
+        EseguiSulThreadUI(() => Reconnected?.Invoke());
+
     private static void EseguiSulThreadUI(Action azione)
     {
         try
@@ -100,6 +103,9 @@ public sealed class SignalRGameConnection : IGameConnection, IAsyncDisposable
 
     public Task JoinRoomAsync(Guid playerId, string nickname, string roomCode) =>
         Hub.InvokeAsync("JoinRoom", new JoinRoomRequest(ProtocolVersion.Current, playerId, nickname, roomCode));
+
+    public Task RejoinRoomAsync(Guid playerId, string roomCode) =>
+        Hub.InvokeAsync("RejoinRoom", new RejoinRoomRequest(ProtocolVersion.Current, playerId, roomCode));
 
     public Task StartGameAsync(string roomCode) =>
         Hub.InvokeAsync("StartGame", new StartGameRequest(roomCode));
@@ -169,6 +175,7 @@ public sealed class SignalRGameConnection : IGameConnection, IAsyncDisposable
         nameof(IllustrationReadyMessage) => payload.Deserialize<IllustrationReadyMessage>(ProtocolJson.Options),
         nameof(IllustrationFailedMessage) => payload.Deserialize<IllustrationFailedMessage>(ProtocolJson.Options),
         nameof(ErrorMessage) => payload.Deserialize<ErrorMessage>(ProtocolJson.Options),
+        nameof(RejoinRejectedMessage) => payload.Deserialize<RejoinRejectedMessage>(ProtocolJson.Options),
         _ => null,
     };
 }
