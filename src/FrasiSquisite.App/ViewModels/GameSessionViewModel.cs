@@ -104,8 +104,14 @@ public partial class GameSessionViewModel : ObservableObject
         }
         catch
         {
-            _roomSession.Clear();
-            RoomCode = string.Empty;
+            // Un guasto qui è di trasporto puro (server irraggiungibile,
+            // offline all'avvio): non significa "quella partita non c'è
+            // più" - solo un vero RejoinRejectedMessage lo dice (gestito
+            // nel case sotto, in OnMessage). Cancellare la sessione qui
+            // perderebbe la partita salvata proprio nel caso più comune
+            // che questo metodo esiste per proteggere: rete lenta o
+            // assente al primo avvio (rilievo Critical 2 della revisione
+            // finale).
         }
     }
 
@@ -749,11 +755,24 @@ public partial class GameSessionViewModel : ObservableObject
                 break;
 
             case SlotRequestMessage richiesta:
+                Round = richiesta.Round + 1;
+                TotalRounds = richiesta.TotalRounds;
+
+                // Un rientro dopo che il periodo di grazia è scaduto trova
+                // la propria casella del round corrente già riempita da un
+                // bot (rilievo Important 3 della revisione finale):
+                // mostrare comunque un campo editabile porterebbe a un
+                // invio respinto con ALREADY_SUBMITTED. Si mostra l'attesa,
+                // come dopo un invio proprio riuscito.
+                if (richiesta.GiaInviato)
+                {
+                    Screen = ScreenState.Waiting;
+                    break;
+                }
+
                 Ruolo = richiesta.Ruolo;
                 Prompt = richiesta.Prompt;
                 Esempio = richiesta.Esempio;
-                Round = richiesta.Round + 1;
-                TotalRounds = richiesta.TotalRounds;
                 SlotText = string.Empty;
                 Screen = ScreenState.Writing;
                 break;
@@ -865,6 +884,7 @@ public partial class GameSessionViewModel : ObservableObject
             case RejoinRejectedMessage:
                 _roomSession.Clear();
                 RoomCode = string.Empty;
+                Screen = ScreenState.Home;
                 break;
         }
     }

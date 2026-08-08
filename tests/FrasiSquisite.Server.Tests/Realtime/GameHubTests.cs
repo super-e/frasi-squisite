@@ -741,6 +741,39 @@ public sealed class GameHubTests : IAsyncLifetime
         Assert.True(anna.Last<RoomStateMessage>().Players.Single(p => p.Id == brunoId).IsConnected);
     }
 
+    /// <summary>
+    /// La soglia di attesa qui sotto (150ms) è deliberatamente più stretta
+    /// dei 200ms del VelocizzaGraziaTimer di questa suite, non un margine
+    /// comodo qualsiasi: è ciò che rende il test capace di accorgersi di
+    /// una regressione. Con una soglia più larga (es. 1s) questo test
+    /// passerebbe comunque anche se la disconnessione in lobby tornasse ad
+    /// aspettare il periodo di grazia come ogni altra fase, perché quel
+    /// periodo qui dura solo 200ms — il test non proverebbe più nulla di
+    /// specifico sull'evizione immediata (rilievo Important 5 della
+    /// revisione finale).
+    /// </summary>
+    [Fact]
+    public async Task UnaDisconnessioneInLobbyRimuoveSubitoSenzaAspettareIlPeriodoDiGrazia()
+    {
+        await using var anna = await ConnettiAsync();
+        await using var bruno = await ConnettiAsync();
+
+        var codice = await anna.Connection.InvokeAsync<string>(
+            "CreateRoom", new CreateRoomRequest(ProtocolVersion.Current, Guid.NewGuid(), "Anna"));
+        var brunoId = Guid.NewGuid();
+        await bruno.Connection.InvokeAsync("JoinRoom", new JoinRoomRequest(ProtocolVersion.Current, brunoId, "Bruno", codice));
+        await anna.WaitFor<RoomStateMessage>(TimeSpan.FromSeconds(5));
+
+        var passiPrima = anna.CountOf<RoomStateMessage>();
+        await bruno.Connection.StopAsync();
+
+        // Ancora in lobby: deve rimuovere subito, ben prima dei 200ms del
+        // VelocizzaGraziaTimer che questa suite userebbe per un periodo di
+        // grazia vero.
+        await anna.WaitForCount<RoomStateMessage>(passiPrima + 1, TimeSpan.FromMilliseconds(150));
+        Assert.DoesNotContain(anna.Last<RoomStateMessage>().Players, p => p.Id == brunoId);
+    }
+
     [Fact]
     public async Task IlRientroDopoIlPeriodoDiGraziaFunzionaComunque()
     {

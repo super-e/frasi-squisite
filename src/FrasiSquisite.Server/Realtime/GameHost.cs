@@ -53,6 +53,17 @@ public sealed class GameHost(
     private readonly ConcurrentDictionary<(string RoomCode, Guid PlayerId), CancellationTokenSource> _periodiDiGrazia =
         new();
 
+    /// <summary>
+    /// La connessione SignalR attualmente valida per (stanza, giocatore):
+    /// scritta a ogni ingresso riuscito (creazione, join, rientro). Serve ad
+    /// AvviaPeriodoDiGrazia per riconoscere una disconnessione arrivata in
+    /// ritardo da una connessione già superata da un rientro riuscito su
+    /// una connessione più recente — altrimenti riarmerebbe un periodo di
+    /// grazia per un giocatore che sta già giocando altrove (rilievo
+    /// Critical 1 della revisione finale).
+    /// </summary>
+    private readonly ConcurrentDictionary<(string RoomCode, Guid PlayerId), string> _connessioniCorrenti = new();
+
     private static readonly TimeSpan DurataPeriodoDiGrazia = TimeSpan.FromSeconds(30);
 
     /// <summary>
@@ -232,8 +243,18 @@ public sealed class GameHost(
     /// prima GameHub.OnDisconnectedAsync in modo sincrono (design rientro
     /// §3.1). Sganciato e senza attesa, stesso stile di AvviaRifinitura.
     /// </summary>
-    public void AvviaPeriodoDiGrazia(string roomCode, Guid playerId)
+    public void AvviaPeriodoDiGrazia(string roomCode, Guid playerId, string connectionId)
     {
+        // Questa disconnessione arriva da una connessione che non è più
+        // quella corrente per il giocatore (un rientro su una connessione
+        // più recente è già avvenuto prima che il server si accorgesse che
+        // questa era morta): il giocatore sta già giocando altrove, non
+        // c'è nulla da fare qui.
+        if (_connessioniCorrenti.TryGetValue((roomCode, playerId), out var corrente) && corrente != connectionId)
+        {
+            return;
+        }
+
         var cts = new CancellationTokenSource();
 
         // Due disconnessioni di fila per lo stesso giocatore prima di un
@@ -309,6 +330,30 @@ public sealed class GameHost(
     }
 
     /// <summary>
+    /// Disconnessione in lobby: nessun periodo di grazia, PlayerLeft
+    /// dispatchato subito. In lobby N non è ancora fissato e un rientro
+    /// tardivo non è comunque previsto (design rientro §6 — GameHub.RejoinRoom
+    /// rifiuterebbe comunque un giocatore già rimosso dalla lista), quindi
+    /// aspettare 30s farebbe solo apparire per quel tempo un giocatore che
+    /// se n'è già andato (rilievo Important 5 della revisione finale).
+    /// </summary>
+    public async Task EvictImmediatelyAsync(string roomCode, Guid playerId)
+    {
+        try
+        {
+            await DispatchAsync(roomCode, new PlayerLeft(playerId));
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Disconnessione in lobby del giocatore {PlayerId} dalla stanza {RoomCode}: dispatch di PlayerLeft fallita.",
+                playerId,
+                roomCode);
+        }
+    }
+
+    /// <summary>
     /// Annulla un periodo di grazia pendente: chiamato da
     /// GameHub.RejoinRoom prima di dispatchare PlayerRejoined. Nessun
     /// effetto se non ce n'era uno (rientro senza una disconnessione
@@ -328,6 +373,9 @@ public sealed class GameHost(
             cts.Cancel();
         }
     }
+
+    public void RegistraConnessione(string roomCode, Guid playerId, string connectionId) =>
+        _connessioniCorrenti[(roomCode, playerId)] = connectionId;
 
     public static string PlayerGroup(Guid playerId) => $"player:{playerId}";
 }

@@ -53,6 +53,41 @@ public class GameSessionViewModelTests
     }
 
     [Fact]
+    public async Task UnGuastoDiTrasportoDuranteIlRientroNonCancellaLaSessioneSalvata()
+    {
+        var (vm, conn, sessione) = Crea();
+        sessione.Save("ABCD");
+        conn.NextFailure = new InvalidOperationException("guasto di trasporto simulato");
+
+        await vm.TryRejoinAsync();
+
+        Assert.False(sessione.Cancellato);
+        Assert.Equal("ABCD", sessione.RoomCode);
+    }
+
+    [Fact]
+    public void UnRifiutoDelRientroRiportaAllaHome()
+    {
+        var (vm, conn, sessione) = Crea();
+        sessione.Save("ABCD");
+        vm.Screen = ScreenState.Writing;
+
+        conn.Emit(new RejoinRejectedMessage());
+
+        Assert.Equal(ScreenState.Home, vm.Screen);
+    }
+
+    [Fact]
+    public void UnaCasellaGiaRiempitaAlRientroMostraLAttesaInveceDellaScrittura()
+    {
+        var (vm, conn, _) = Crea();
+
+        conn.Emit(new SlotRequestMessage(0, 5, "Ruolo0", "Prompt0", "Esempio0", GiaInviato: true));
+
+        Assert.Equal(ScreenState.Waiting, vm.Screen);
+    }
+
+    [Fact]
     public void UnaStanzaRicevutaVieneSalvataInSessione()
     {
         var (vm, conn, sessione) = Crea();
@@ -230,7 +265,7 @@ public class GameSessionViewModelTests
     {
         var (vm, conn, _) = Crea();
 
-        conn.Emit(new SlotRequestMessage(0, 5, "Soggetto", "Un soggetto, con l'articolo", "Il cadavere"));
+        conn.Emit(new SlotRequestMessage(0, 5, "Soggetto", "Un soggetto, con l'articolo", "Il cadavere", GiaInviato: false));
 
         Assert.Equal(ScreenState.Writing, vm.Screen);
         Assert.Equal("Soggetto", vm.Ruolo);
@@ -245,7 +280,7 @@ public class GameSessionViewModelTests
     {
         var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
-        conn.Emit(new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio"));
+        conn.Emit(new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio", GiaInviato: false));
         vm.SlotText = "Il cadavere";
 
         await vm.SubmitSlotCommand.ExecuteAsync(null);
@@ -273,10 +308,10 @@ public class GameSessionViewModelTests
     {
         var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
-        conn.Emit(new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio"));
+        conn.Emit(new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio", GiaInviato: false));
         vm.SlotText = "Il cadavere";
 
-        conn.MessaggioDuranteInvio = new SlotRequestMessage(1, 5, "Aggettivo", "un aggettivo", "squisito");
+        conn.MessaggioDuranteInvio = new SlotRequestMessage(1, 5, "Aggettivo", "un aggettivo", "squisito", GiaInviato: false);
 
         await vm.SubmitSlotCommand.ExecuteAsync(null);
 
@@ -296,7 +331,7 @@ public class GameSessionViewModelTests
     {
         var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
-        conn.Emit(new SlotRequestMessage(4, 5, "Aggettivo", "prompt", "esempio"));
+        conn.Emit(new SlotRequestMessage(4, 5, "Aggettivo", "prompt", "esempio", GiaInviato: false));
         vm.SlotText = "nuovo";
 
         conn.MessaggioDuranteInvio = new RevealStepMessage(0, 2, [Rivelata("Il cadavere")], false);
@@ -311,7 +346,7 @@ public class GameSessionViewModelTests
     {
         var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
-        conn.Emit(new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio"));
+        conn.Emit(new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio", GiaInviato: false));
         vm.SlotText = "   ";
 
         await vm.SubmitSlotCommand.ExecuteAsync(null);
@@ -545,7 +580,7 @@ public class GameSessionViewModelTests
     {
         var (vm, conn, _) = Crea();
         vm.RoomCode = "ABCD";
-        conn.Emit(new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio"));
+        conn.Emit(new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio", GiaInviato: false));
         vm.SlotText = "Il cadavere";
         conn.NextFailure = new HubException("Non è il momento di scrivere.");
 
@@ -1581,7 +1616,7 @@ public class GameSessionViewModelTests
         // finta apposta per questo.
         var (vmScrittura, connScrittura, _) = Crea();
         vmScrittura.RoomCode = "ABCD";
-        connScrittura.Emit(new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio"));
+        connScrittura.Emit(new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio", GiaInviato: false));
         vmScrittura.SlotText = "Il cadavere";
         connScrittura.MessaggioDuranteVoto = new VoteRequestMessage(["Prima", "Seconda"]);
 
@@ -1593,7 +1628,7 @@ public class GameSessionViewModelTests
         // E viceversa: armare l'aggancio dell'invio casella e votare non
         // deve emettere nulla.
         var (vmVoto, connVoto) = InVoto();
-        connVoto.MessaggioDuranteInvio = new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio");
+        connVoto.MessaggioDuranteInvio = new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio", GiaInviato: false);
 
         await vmVoto.CastVoteCommand.ExecuteAsync(vmVoto.VoteOptions[0]);
 

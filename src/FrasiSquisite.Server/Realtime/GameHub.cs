@@ -123,7 +123,20 @@ public sealed class GameHub(GameHost host, IRoomRegistry rooms, ISchemaCatalog s
             // nessun bot prende mai il suo posto. Il log del fallimento del
             // dispatch, quando il periodo scade davvero, vive ora dentro
             // AvviaPeriodoDiGrazia stesso.
-            host.AvviaPeriodoDiGrazia(roomCode, playerId);
+            //
+            // Eccezione: in lobby N non è ancora fissato e un rientro
+            // tardivo non è comunque previsto (design rientro §6), quindi il
+            // periodo di grazia non farebbe che lasciare per 30s un
+            // giocatore già andato via ancora visibile nella lista (rilievo
+            // Important 5 della revisione finale) — si evince subito.
+            if (rooms.TryGet(roomCode, out var stanza) && stanza.Phase == RoomPhase.Lobby)
+            {
+                _ = host.EvictImmediatelyAsync(roomCode, playerId);
+            }
+            else
+            {
+                host.AvviaPeriodoDiGrazia(roomCode, playerId, Context.ConnectionId);
+            }
         }
 
         return base.OnDisconnectedAsync(exception);
@@ -160,6 +173,7 @@ public sealed class GameHub(GameHost host, IRoomRegistry rooms, ISchemaCatalog s
 
         await Groups.AddToGroupAsync(Context.ConnectionId, roomCode);
         await Groups.AddToGroupAsync(Context.ConnectionId, GameHost.PlayerGroup(playerId));
+        host.RegistraConnessione(roomCode, playerId, Context.ConnectionId);
     }
 
     private Guid GiocatoreCorrente() =>

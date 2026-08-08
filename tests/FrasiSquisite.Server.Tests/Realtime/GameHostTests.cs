@@ -112,9 +112,22 @@ public class GameHostTests
             return tcs.Task;
         }
 
-        /// <summary>Fa scadere la chiamata a DelayAsync numero <paramref name="indice"/> (0-based, nell'ordine di arrivo), attendendo che sia stata registrata se necessario.</summary>
-        public void FaiScadere(int indice = 0)
+        /// <summary>
+        /// Fa scadere la chiamata a DelayAsync numero <paramref name="indice"/>
+        /// (0-based, nell'ordine di arrivo), attendendo che sia stata
+        /// registrata se necessario, fino a <paramref name="timeout"/> (5s se
+        /// omesso, come richiesto da ogni test esistente che aspetta una
+        /// chiamata vera). Un timeout più breve serve solo al test che prova
+        /// il contrario — che NESSUNA chiamata sia mai arrivata (rilievo
+        /// Critical 1 della revisione finale, guardia di identità della
+        /// connessione in AvviaPeriodoDiGrazia): lì aspettare 5s veri per
+        /// ogni corsa della suite sarebbe solo spreco, la risposta è già
+        /// nota dopo una manciata di millisecondi.
+        /// </summary>
+        public void FaiScadere(int indice = 0, TimeSpan? timeout = null)
         {
+            var limite = timeout ?? TimeSpan.FromSeconds(5);
+
             while (true)
             {
                 lock (_chiamate)
@@ -126,7 +139,7 @@ public class GameHostTests
                     }
                 }
 
-                if (!_nuovaChiamata.Wait(TimeSpan.FromSeconds(5)))
+                if (!_nuovaChiamata.Wait(limite))
                 {
                     throw new TimeoutException(
                         $"Nessuna chiamata a DelayAsync con indice {indice} registrata entro il timeout.");
@@ -163,7 +176,7 @@ public class GameHostTests
 
         var host = new GameHost(engine, rooms, null!, null!, null!, null!, NullLogger<GameHost>.Instance, timer);
 
-        host.AvviaPeriodoDiGrazia("STANZA", giocatore);
+        host.AvviaPeriodoDiGrazia("STANZA", giocatore, "conn-1");
         timer.FaiScadere();
 
         await AttendiCondizioneAsync(
@@ -182,7 +195,7 @@ public class GameHostTests
 
         var host = new GameHost(engine, rooms, null!, null!, null!, null!, NullLogger<GameHost>.Instance, timer);
 
-        host.AvviaPeriodoDiGrazia("STANZA", giocatore);
+        host.AvviaPeriodoDiGrazia("STANZA", giocatore, "conn-1");
         host.AnnullaPeriodoDiGrazia("STANZA", giocatore);
 
         // Margine reale, breve: dà tempo a un eventuale (erroneo) dispatch
@@ -207,8 +220,8 @@ public class GameHostTests
         // primo periodo di grazia resterebbe orfano e dispatcherebbe
         // comunque PlayerLeft alla propria scadenza, anche dopo che il
         // rientro sotto è già riuscito.
-        host.AvviaPeriodoDiGrazia("STANZA", giocatore);
-        host.AvviaPeriodoDiGrazia("STANZA", giocatore);
+        host.AvviaPeriodoDiGrazia("STANZA", giocatore, "conn-1");
+        host.AvviaPeriodoDiGrazia("STANZA", giocatore, "conn-1");
         host.AnnullaPeriodoDiGrazia("STANZA", giocatore);
 
         // Prova a far scadere entrambi i DelayAsync sottostanti: nessuno dei
@@ -216,6 +229,45 @@ public class GameHostTests
         // le cancellazioni interne e queste chiamate.
         timer.FaiScadere(0);
         timer.FaiScadere(1);
+
+        await Task.Delay(100);
+        Assert.DoesNotContain(engine.EventiRicevuti, e => e is PlayerLeft);
+    }
+
+    /// <summary>
+    /// Non chiama timer.FaiScadere(0) col timeout di 5s di default: con la
+    /// guardia della connessione attiva (fix del rilievo Critical 1),
+    /// AvviaPeriodoDiGrazia ritorna PRIMA di arrivare a chiamare
+    /// DelayAsync — non c'è quindi alcuna chiamata numero 0 da far
+    /// scadere, e aspettarla coi 5s di default bloccherebbe questo test
+    /// (e quindi finirebbe comunque per fallire con un TimeoutException,
+    /// non con l'asserzione qui sotto). Un timeout breve rende invece la
+    /// mancata chiamata la controprova diretta che la guardia ha
+    /// funzionato: senza la guardia (codice pre-fix) la chiamata arriva
+    /// comunque, quasi subito, e Assert.Throws qui sotto fallirebbe
+    /// perché FaiScadere non lancerebbe nulla — la prova RED di questo
+    /// test.
+    /// </summary>
+    [Fact]
+    public async Task UnaDisconnessioneArrivataInRitardoDaUnaConnessioneSuperataNonDispatchaNulla()
+    {
+        var engine = new FakeGameEngine(_ => []);
+        var rooms = new FakeRoomRegistry();
+        rooms.Seed("STANZA", StanzaVuota("STANZA"));
+        var timer = new TimerControllabile();
+        var giocatore = Guid.NewGuid();
+
+        var host = new GameHost(engine, rooms, null!, null!, null!, null!, NullLogger<GameHost>.Instance, timer);
+
+        // Il giocatore è già registrato su una connessione più recente
+        // ("conn-nuova"), come farebbe GameHub.EntraAsync dopo un rientro
+        // riuscito. La disconnessione che arriva sotto è di una connessione
+        // vecchia ("conn-vecchia"), già superata: non deve riarmare nulla.
+        host.RegistraConnessione("STANZA", giocatore, "conn-nuova");
+
+        host.AvviaPeriodoDiGrazia("STANZA", giocatore, "conn-vecchia");
+
+        Assert.Throws<TimeoutException>(() => timer.FaiScadere(0, TimeSpan.FromMilliseconds(300)));
 
         await Task.Delay(100);
         Assert.DoesNotContain(engine.EventiRicevuti, e => e is PlayerLeft);

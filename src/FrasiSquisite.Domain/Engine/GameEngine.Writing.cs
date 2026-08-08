@@ -198,7 +198,7 @@ public sealed partial class GameEngine
     /// identica richiesta per un solo giocatore, con IndexOfPlayer al posto
     /// dell'indice di ciclo.
     /// </summary>
-    private SlotRequestMessage SlotRequestFor(GameState state, int playerIndex)
+    private SlotRequestMessage SlotRequestFor(GameState state, int playerIndex, bool giaInviato = false)
     {
         var assegnazione = _mode.AssignSlot(state.Round, playerIndex, state.Players.Count, state.Schema);
         var casella = state.Schema.Caselle[assegnazione.SlotIndex];
@@ -209,6 +209,7 @@ public sealed partial class GameEngine
             state.Schema.SlotCount,
             casella.Ruolo,
             casella.Prompt,
-            casella.Esempio);
+            casella.Esempio,
+            giaInviato);
     }
 }

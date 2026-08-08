@@ -117,7 +117,8 @@ public class ProtocolContractTests
             TotalRounds: 5,
             Ruolo: "Soggetto",
             Prompt: "Un soggetto, con l'articolo",
-            Esempio: "Il cadavere");
+            Esempio: "Il cadavere",
+            GiaInviato: false);
 
         var json = JsonSerializer.Serialize(messaggio, ProtocolJson.Options);
 
@@ -137,7 +138,7 @@ public class ProtocolContractTests
         var proprieta = typeof(SlotRequestMessage).GetProperties().Select(p => p.Name).ToArray();
 
         Assert.Equal(
-            ["Round", "TotalRounds", "Ruolo", "Prompt", "Esempio"],
+            ["Round", "TotalRounds", "Ruolo", "Prompt", "Esempio", "GiaInviato"],
             proprieta);
     }
 

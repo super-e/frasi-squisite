@@ -274,7 +274,7 @@ public sealed partial class GameEngine
     /// </summary>
     private object? MessaggioDiRipristino(GameState state, Guid playerId) => state.Phase switch
     {
-        RoomPhase.Writing => SlotRequestFor(state, state.IndexOfPlayer(playerId)),
+        RoomPhase.Writing => SlotRequestFor(state, state.IndexOfPlayer(playerId), state.SubmittedThisRound.Contains(playerId)),
         RoomPhase.Reveal => new RevealStepMessage(
             state.RevealPhraseIndex,
             state.Phrases.Count,

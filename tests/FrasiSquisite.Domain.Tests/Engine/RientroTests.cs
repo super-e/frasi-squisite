@@ -54,6 +54,21 @@ public class RientroTests
     }
 
     [Fact]
+    public void IlRientroDopoIlPeriodoDiGraziaSegnalaLaCasellaGiaRiempita()
+    {
+        var stato = PartitaAvviata(n: 3, k: 5);
+        // Il periodo di grazia è già scaduto: PlayerLeft ha marcato
+        // Giocatore(1) disconnesso E FillDisconnected ha già riempito la
+        // sua casella del round corrente con un bot.
+        stato = _motore.Handle(stato, new PlayerLeft(Giocatore(1))).State;
+
+        var risultato = _motore.Handle(stato, new PlayerRejoined(Giocatore(1)));
+
+        var richiesta = Assert.Single(risultato.MessagesTo<SlotRequestMessage>(Giocatore(1)));
+        Assert.True(richiesta.GiaInviato);
+    }
+
+    [Fact]
     public void IlRientroDuplicatoNonCambiaNulla()
     {
         var stato = PartitaAvviata(n: 3, k: 5);

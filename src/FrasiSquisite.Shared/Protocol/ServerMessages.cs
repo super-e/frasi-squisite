@@ -42,7 +42,8 @@ public sealed record SlotRequestMessage(
     int TotalRounds,
     string Ruolo,
     string Prompt,
-    string Esempio);
+    string Esempio,
+    bool GiaInviato);
 
 public sealed record RoundProgressMessage(int Round, int Submitted, int Total);
 
