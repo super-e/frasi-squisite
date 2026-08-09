@@ -1711,6 +1711,24 @@ public class GameSessionViewModelTests
         Assert.All(vmOspite.FinalResults, riga => Assert.False(riga.CanRequest));
     }
 
+    // Rilievo della revisione finale: PulisciStatoDiPartitaConclusa() gira
+    // solo nei comandi che solo l'host può eseguire (NewGame/BackToLobby).
+    // Un non-host lascia la schermata finale per un messaggio del server,
+    // mai passando da lì - senza il guard in OnScreenChanged, l'immagine
+    // ingrandita resterebbe appesa sopra la schermata successiva.
+    [Fact]
+    public void UnCambioDiSchermataFuoriDaiComandiDellHostAzzeraLimmagineIngrandita()
+    {
+        var (vm, conn) = InFinale(ioSonoHost: false);
+        vm.ExpandImageCommand.Execute("http://test/immagine.png");
+        Assert.NotNull(vm.ExpandedImageUrl);
+
+        conn.Emit(new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio", GiaInviato: false));
+
+        Assert.Equal(ScreenState.Writing, vm.Screen);
+        Assert.Null(vm.ExpandedImageUrl);
+    }
+
     /// <summary>
     /// Revisione finale, rilievo 1: le righe di FinalResults nascono una
     /// volta sola con GameFinishedMessage e non si ricostruiscono mai più.

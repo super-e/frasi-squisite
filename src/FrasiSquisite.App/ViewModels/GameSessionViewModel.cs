@@ -971,6 +971,16 @@ public partial class GameSessionViewModel : ObservableObject
         OnPropertyChanged(nameof(CanChangeSchema));
         OnPropertyChanged(nameof(ShowFinishedActions));
         OnPropertyChanged(nameof(ShowCloseVoting));
+
+        // L'overlay vive sopra tutte le schermate, non dentro quella finale:
+        // chi non è host cambia schermata per un messaggio del server, non
+        // passando da PulisciStatoDiPartitaConclusa (che copre solo i comandi
+        // che solo l'host può eseguire) - senza questo, l'immagine resterebbe
+        // appesa sopra la schermata successiva per tutti gli altri giocatori.
+        if (value != ScreenState.Finished)
+        {
+            ExpandedImageUrl = null;
+        }
     }
 
     partial void OnPlayerCountChanged(int value) => OnPropertyChanged(nameof(CanAddBot));

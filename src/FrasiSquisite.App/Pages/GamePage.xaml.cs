@@ -22,4 +22,18 @@ public partial class GamePage : ContentPage
         base.OnAppearing();
         _ = _viewModel.TryRejoinAsync();
     }
+
+    // Il tasto Indietro di Android è la convenzione più forte per chiudere
+    // un overlay a schermo intero: senza questo, chiude l'app invece,
+    // perché GamePage è l'unica ShellContent (vedi commento sopra).
+    protected override bool OnBackButtonPressed()
+    {
+        if (_viewModel.ExpandedImageUrl is not null)
+        {
+            _viewModel.CollapseImageCommand.Execute(null);
+            return true;
+        }
+
+        return base.OnBackButtonPressed();
+    }
 }
