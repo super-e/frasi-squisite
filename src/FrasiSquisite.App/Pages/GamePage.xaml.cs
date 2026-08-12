@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using FrasiSquisite.App.ViewModels;
 
 namespace FrasiSquisite.App.Pages;
@@ -6,11 +7,22 @@ public partial class GamePage : ContentPage
 {
     private readonly GameSessionViewModel _viewModel;
 
+    // Stato del pizzico/trascinamento sull'illustrazione ingrandita: solo
+    // di vista, mai nel ViewModel - è geometria di un gesto, non stato di
+    // gioco (design pinch-to-zoom §3.1).
+    private double _scaleCorrente = 1;
+    private double _scalePartenza = 1;
+    private double _xOffset;
+    private double _yOffset;
+    private double _xOffsetPartenza;
+    private double _yOffsetPartenza;
+
     public GamePage(GameSessionViewModel viewModel)
     {
         InitializeComponent();
         BindingContext = viewModel;
         _viewModel = viewModel;
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
     }
 
     // Copre l'avvio a freddo (design rientro §5.2): GamePage è l'unica
@@ -35,5 +47,115 @@ public partial class GamePage : ContentPage
         }
 
         return base.OnBackButtonPressed();
+    }
+
+    // Tocco sull'overlay (design pinch-to-zoom §3.4): chiude solo a 1x. Da
+    // zoomato, un tocco per errore mentre si esplora l'immagine non deve
+    // buttare fuori dall'overlay - riporta invece a 1x, un secondo tocco
+    // chiude come di consueto.
+    private void OnOverlayTapped(object? sender, TappedEventArgs e)
+    {
+        if (_scaleCorrente > 1.01)
+        {
+            AzzeraZoomImmagine(animato: true);
+            return;
+        }
+
+        _viewModel.CollapseImageCommand.Execute(null);
+    }
+
+    // Ancoraggio al punto pizzicato (AnchorX/AnchorY) invece del calcolo
+    // manuale della traslazione: più semplice, e sufficiente per un
+    // overlay che deve solo zoomare in modo naturale, non restare
+    // perfettamente fermo sotto le dita in ogni istante (design §3.2).
+    private void OnPinchUpdated(object? sender, PinchGestureUpdatedEventArgs e)
+    {
+        if (e.Status == GestureStatus.Started)
+        {
+            _scalePartenza = _scaleCorrente;
+            return;
+        }
+
+        if (e.Status != GestureStatus.Running)
+        {
+            return;
+        }
+
+        ImmagineIngrandita.AnchorX = e.ScaleOrigin.X;
+        ImmagineIngrandita.AnchorY = e.ScaleOrigin.Y;
+
+        _scaleCorrente = Math.Clamp(_scalePartenza * e.Scale, 1, 4);
+        ImmagineIngrandita.Scale = _scaleCorrente;
+    }
+
+    // Trascinamento attivo solo da zoomato (design §3.3): a 1x non c'è
+    // nulla da spostare. Il rientro elastico si applica solo al rilascio
+    // (Completed), non a ogni frame di Running, altrimenti il
+    // trascinamento risulterebbe "gommoso" invece che diretto.
+    private void OnPanUpdated(object? sender, PanUpdatedEventArgs e)
+    {
+        if (_scaleCorrente <= 1.01)
+        {
+            return;
+        }
+
+        switch (e.StatusType)
+        {
+            case GestureStatus.Started:
+                _xOffsetPartenza = _xOffset;
+                _yOffsetPartenza = _yOffset;
+                break;
+
+            case GestureStatus.Running:
+                ImmagineIngrandita.TranslationX = _xOffsetPartenza + e.TotalX;
+                ImmagineIngrandita.TranslationY = _yOffsetPartenza + e.TotalY;
+                break;
+
+            case GestureStatus.Completed:
+                var limiteX = ImmagineIngrandita.Width * (_scaleCorrente - 1) / 2;
+                var limiteY = ImmagineIngrandita.Height * (_scaleCorrente - 1) / 2;
+
+                _xOffset = Math.Clamp(_xOffsetPartenza + e.TotalX, -limiteX, limiteX);
+                _yOffset = Math.Clamp(_yOffsetPartenza + e.TotalY, -limiteY, limiteY);
+
+                _ = ImmagineIngrandita.TranslateTo(_xOffset, _yOffset, 150, Easing.CubicOut);
+                break;
+        }
+    }
+
+    // Azzera zoom e posizione: alla riapertura (fuori scope la
+    // persistenza dello zoom, design §1) e ogni volta che l'overlay si
+    // chiude da qualunque via - tocco a 1x, tasto Indietro, o il
+    // ViewModel che lo chiude da solo (es. cambio schermata di un
+    // non-host, vedi il rilievo Important #1 della revisione finale del
+    // lotto precedente). Senza questo, la prossima apertura ripartirebbe
+    // zoomata.
+    private void AzzeraZoomImmagine(bool animato)
+    {
+        _scaleCorrente = 1;
+        _scalePartenza = 1;
+        _xOffset = 0;
+        _yOffset = 0;
+
+        if (animato)
+        {
+            _ = ImmagineIngrandita.ScaleTo(1, 150, Easing.CubicOut);
+            _ = ImmagineIngrandita.TranslateTo(0, 0, 150, Easing.CubicOut);
+        }
+        else
+        {
+            ImmagineIngrandita.Scale = 1;
+            ImmagineIngrandita.TranslationX = 0;
+            ImmagineIngrandita.TranslationY = 0;
+        }
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(GameSessionViewModel.ExpandedImageUrl)
+            && _viewModel.ExpandedImageUrl is null)
+        {
+            AzzeraZoomImmagine(animato: false);
+        }
     }
 }

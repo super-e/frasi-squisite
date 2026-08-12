@@ -493,15 +493,24 @@
         </VerticalStackLayout>
     </ScrollView>
 
-        <!-- L'illustrazione ingrandita: tocco ovunque per chiudere. Qui il
-             BindingContext è già GameSessionViewModel (nessun template di
-             CollectionView in mezzo), quindi i binding sono diretti. -->
+        <!-- L'illustrazione ingrandita: pizzico per zoomare, trascina per
+             esplorare quando ingrandita. Il tocco per chiudere è passato
+             da Command a un evento code-behind (OnOverlayTapped) perché la
+             decisione "chiudi o azzera lo zoom" dipende da stato di sola
+             vista (la scala corrente), che il ViewModel non conosce e non
+             deve conoscere - non è stato di gioco. -->
         <Grid BackgroundColor="#CC000000"
               IsVisible="{Binding ExpandedImageUrl, Converter={StaticResource NotEmpty}}">
             <Grid.GestureRecognizers>
-                <TapGestureRecognizer Command="{Binding CollapseImageCommand}" />
+                <TapGestureRecognizer Tapped="OnOverlayTapped" />
             </Grid.GestureRecognizers>
-            <Image Source="{Binding ExpandedImageUrl}" Aspect="AspectFit" Margin="24" />
+            <Image x:Name="ImmagineIngrandita"
+                   Source="{Binding ExpandedImageUrl}" Aspect="AspectFit" Margin="24">
+                <Image.GestureRecognizers>
+                    <PinchGestureRecognizer PinchUpdated="OnPinchUpdated" />
+                    <PanGestureRecognizer PanUpdated="OnPanUpdated" />
+                </Image.GestureRecognizers>
+            </Image>
         </Grid>
     </Grid>
 </ContentPage>
