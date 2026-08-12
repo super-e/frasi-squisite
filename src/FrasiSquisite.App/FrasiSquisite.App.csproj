@@ -46,6 +46,28 @@
 		<TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
 	</PropertyGroup>
 
+	<!-- Firma dedicata per le build Release Android: senza, ogni PC firma con
+	     un keystore di debug generato al volo e diverso da macchina a
+	     macchina, e il telefono rifiuta di aggiornare un'app già installata
+	     con un certificato diverso. Il keystore vero e le password NON stanno
+	     qui: arrivano da variabili d'ambiente da impostare una volta per
+	     macchina (FRASI_KEYSTORE_PATH, FRASI_KEYSTORE_ALIAS,
+	     FRASI_KEYSTORE_PASSWORD), così questo file resta sicuro da mettere
+	     in git. Se le variabili non sono impostate, la build Release fallisce
+	     con un errore chiaro invece di ricadere in silenzio sul keystore di
+	     debug. -->
+	<!-- Confronto diretto su net10.0-android (non via GetTargetPlatformIdentifier
+	     come sopra): il progetto ha un solo TargetFrameworks (riga 5) e la
+	     versione con 'And' fra due funzioni MSBuild annidate con virgolette
+	     genera un errore di parsing (MSB4092) sul tokenizer delle Condition. -->
+	<PropertyGroup Condition="'$(Configuration)' == 'Release' And '$(TargetFramework)' == 'net10.0-android'">
+		<AndroidKeyStore>true</AndroidKeyStore>
+		<AndroidSigningKeyStore>$(FRASI_KEYSTORE_PATH)</AndroidSigningKeyStore>
+		<AndroidSigningKeyAlias>$(FRASI_KEYSTORE_ALIAS)</AndroidSigningKeyAlias>
+		<AndroidSigningKeyPass>$(FRASI_KEYSTORE_PASSWORD)</AndroidSigningKeyPass>
+		<AndroidSigningStorePass>$(FRASI_KEYSTORE_PASSWORD)</AndroidSigningStorePass>
+	</PropertyGroup>
+
 	<ItemGroup>
 		<!-- App Icon -->
 		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#512BD4" />
