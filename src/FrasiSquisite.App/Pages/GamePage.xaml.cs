@@ -70,22 +70,36 @@ public partial class GamePage : ContentPage
     // perfettamente fermo sotto le dita in ogni istante (design §3.2).
     private void OnPinchUpdated(object? sender, PinchGestureUpdatedEventArgs e)
     {
-        if (e.Status == GestureStatus.Started)
+        switch (e.Status)
         {
-            _scalePartenza = _scaleCorrente;
-            return;
+            case GestureStatus.Started:
+                _scalePartenza = _scaleCorrente;
+                break;
+
+            case GestureStatus.Running:
+                ImmagineIngrandita.AnchorX = e.ScaleOrigin.X;
+                ImmagineIngrandita.AnchorY = e.ScaleOrigin.Y;
+
+                _scaleCorrente = Math.Clamp(_scalePartenza * e.Scale, 1, 4);
+                ImmagineIngrandita.Scale = _scaleCorrente;
+                break;
+
+            case GestureStatus.Completed:
+            case GestureStatus.Canceled:
+                // Pizzicando fino a tornare (quasi) a 1x, lo spostamento del
+                // trascinamento precedente resterebbe visibile anche a zoom
+                // annullato: qui si azzera insieme allo zoom, non solo alla
+                // chiusura dell'overlay (rilievo Important #1 della
+                // revisione). Canceled trattato come Completed: un'
+                // interruzione del gesto (es. un popup di sistema) non deve
+                // lasciare lo stato fuori dai limiti previsti (rilievo
+                // Important #2).
+                if (_scaleCorrente <= 1.01)
+                {
+                    AzzeraZoomImmagine(animato: true);
+                }
+                break;
         }
-
-        if (e.Status != GestureStatus.Running)
-        {
-            return;
-        }
-
-        ImmagineIngrandita.AnchorX = e.ScaleOrigin.X;
-        ImmagineIngrandita.AnchorY = e.ScaleOrigin.Y;
-
-        _scaleCorrente = Math.Clamp(_scalePartenza * e.Scale, 1, 4);
-        ImmagineIngrandita.Scale = _scaleCorrente;
     }
 
     // Trascinamento attivo solo da zoomato (design §3.3): a 1x non c'è
@@ -112,6 +126,7 @@ public partial class GamePage : ContentPage
                 break;
 
             case GestureStatus.Completed:
+            case GestureStatus.Canceled:
                 var limiteX = ImmagineIngrandita.Width * (_scaleCorrente - 1) / 2;
                 var limiteY = ImmagineIngrandita.Height * (_scaleCorrente - 1) / 2;
 
