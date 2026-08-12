@@ -7,12 +7,19 @@ public partial class GamePage : ContentPage
 {
     private readonly GameSessionViewModel _viewModel;
 
-    // Aritmetica di scala/spostamento estratta in una classe pura e
-    // testabile (design pinch-to-zoom, rilievo Critical della revisione
-    // finale): qui restano solo la lettura dei gesti MAUI e la scrittura
-    // sulla Image, mai calcoli che potrebbero sbagliare senza un test a
+    // Aritmetica di scala estratta in una classe pura e testabile
+    // (design pinch-to-zoom, rilievi Critical della revisione finale):
+    // qui restano solo la lettura dei gesti MAUI e la scrittura sulla
+    // Image, mai calcoli che potrebbero sbagliare senza un test a
     // scoprirlo.
     private readonly ZoomPanState _zoom = new();
+
+    private double _scalaInizioPizzico;
+    private double _xTraslazioneInizioPizzico;
+    private double _yTraslazioneInizioPizzico;
+    private double _pivotXOffset;
+    private double _pivotYOffset;
+
     private double _xOffsetPartenza;
     private double _yOffsetPartenza;
 
@@ -52,9 +59,9 @@ public partial class GamePage : ContentPage
     // zoomato, un tocco per errore mentre si esplora l'immagine non deve
     // buttare fuori dall'overlay - riporta invece a 1x, un secondo tocco
     // chiude come di consueto. Presente sia sul Grid genitore sia
-    // sull'Image stessa (rilievo della revisione: un tocco sull'immagine,
-    // che ora porta anche PinchGestureRecognizer e PanGestureRecognizer,
-    // potrebbe non risalire al Grid).
+    // sull'Image stessa (rilievo della revisione: un tocco sull'immagine
+    // potrebbe non risalire al Grid, ora che porta anche
+    // PinchGestureRecognizer e PanGestureRecognizer).
     private void OnOverlayTapped(object? sender, TappedEventArgs e)
     {
         if (_zoom.EZoomato)
@@ -66,41 +73,65 @@ public partial class GamePage : ContentPage
         _viewModel.CollapseImageCommand.Execute(null);
     }
 
-    // PinchGestureUpdatedEventArgs.Scale è relativo all'ultimo evento
-    // ricevuto, non cumulativo dall'inizio del gesto (rilievo Critical
-    // della revisione: il codice precedente lo trattava come cumulativo,
-    // perdendo così l'accumulo di ogni frame intermedio).
-    // ZoomPanState.ApplicaDeltaPizzico applica il delta correttamente,
-    // frame per frame - non serve più uno stato "di inizio gesto" per la
-    // scala.
+    // Il pivot di scala resta fisso al centro (AnchorX/AnchorY di
+    // default, mai toccato): un pivot che segue le dita a ogni frame
+    // rompeva la matematica simmetrica dei limiti elastici in
+    // ZoomPanState, pensata per uno zoom centrato (rilievo della
+    // revisione). Per dare comunque la sensazione di zoomare sotto le
+    // dita, la traslazione compensa la differenza fra pivot al centro e
+    // punto pizzicato: la formula tiene fisso sullo schermo il punto a
+    // offset (pivotXOffset, pivotYOffset) dal centro mentre la scala
+    // cambia da quella di inizio gesto a quella corrente.
     private void OnPinchUpdated(object? sender, PinchGestureUpdatedEventArgs e)
     {
-        if (e.Status == GestureStatus.Running)
+        switch (e.Status)
         {
-            ImmagineIngrandita.CancelAnimations();
-            ImmagineIngrandita.AnchorX = e.ScaleOrigin.X;
-            ImmagineIngrandita.AnchorY = e.ScaleOrigin.Y;
+            case GestureStatus.Started:
+                ImmagineIngrandita.CancelAnimations();
+                // Riallinea allo stato visivo reale: se un'animazione era
+                // in corso, CancelAnimations lascia la Image al valore
+                // raggiunto in quel momento, non a quello di partenza né
+                // di arrivo (rilievo della revisione).
+                _zoom.ImpostaScala(ImmagineIngrandita.Scale);
 
-            _zoom.ApplicaDeltaPizzico(e.Scale);
-            ImmagineIngrandita.Scale = _zoom.Scala;
-            return;
-        }
+                _scalaInizioPizzico = _zoom.Scala;
+                _xTraslazioneInizioPizzico = ImmagineIngrandita.TranslationX;
+                _yTraslazioneInizioPizzico = ImmagineIngrandita.TranslationY;
+                _pivotXOffset = (e.ScaleOrigin.X - 0.5) * ImmagineIngrandita.Width;
+                _pivotYOffset = (e.ScaleOrigin.Y - 0.5) * ImmagineIngrandita.Height;
+                break;
 
-        if (e.Status is GestureStatus.Completed or GestureStatus.Canceled)
-        {
-            if (_zoom.EZoomato)
-            {
-                // Pizzicando in giù senza tornare fino a 1x, i limiti del
-                // trascinamento si restringono con la nuova scala: senza
-                // questo, uno spostamento valido alla scala precedente
-                // potrebbe restare fuori dai nuovi limiti (rilievo della
-                // revisione).
-                RientraNeiLimitiElastici(animato: true);
-            }
-            else
-            {
-                AzzeraZoomImmagine(animato: true);
-            }
+            case GestureStatus.Running:
+                // PinchGestureUpdatedEventArgs.Scale è relativo all'ultimo
+                // evento ricevuto, non cumulativo dall'inizio del gesto
+                // (rilievo Critical della revisione: il codice precedente
+                // lo trattava come cumulativo, perdendo così l'accumulo
+                // di ogni frame intermedio).
+                _zoom.ApplicaDeltaPizzico(e.Scale);
+                ImmagineIngrandita.Scale = _zoom.Scala;
+
+                ImmagineIngrandita.TranslationX = _xTraslazioneInizioPizzico
+                    + (_scalaInizioPizzico - _zoom.Scala) * _pivotXOffset;
+                ImmagineIngrandita.TranslationY = _yTraslazioneInizioPizzico
+                    + (_scalaInizioPizzico - _zoom.Scala) * _pivotYOffset;
+                break;
+
+            case GestureStatus.Completed:
+            case GestureStatus.Canceled:
+                if (_zoom.EZoomato)
+                {
+                    // Pizzicando in giù senza tornare fino a 1x, i limiti
+                    // del trascinamento si restringono con la nuova
+                    // scala: senza questo, uno spostamento valido alla
+                    // scala precedente potrebbe restare fuori dai nuovi
+                    // limiti (rilievo della revisione).
+                    RientraNeiLimitiElastici(animato: true);
+                }
+                else
+                {
+                    AzzeraZoomImmagine(animato: true);
+                }
+                break;
         }
     }
 
@@ -117,8 +148,12 @@ public partial class GamePage : ContentPage
         {
             case GestureStatus.Started:
                 ImmagineIngrandita.CancelAnimations();
-                _xOffsetPartenza = _zoom.OffsetX;
-                _yOffsetPartenza = _zoom.OffsetY;
+                // Dalla vista, non da uno stato memorizzato a parte: se
+                // un'animazione era in corso, è la posizione visiva reale
+                // al momento dell'annullamento, non un valore
+                // potenzialmente disallineato (rilievo della revisione).
+                _xOffsetPartenza = ImmagineIngrandita.TranslationX;
+                _yOffsetPartenza = ImmagineIngrandita.TranslationY;
                 break;
 
             case GestureStatus.Running:
@@ -147,12 +182,13 @@ public partial class GamePage : ContentPage
     private void RientraNeiLimitiElastici(bool animato)
     {
         var latoContenuto = Math.Min(ImmagineIngrandita.Width, ImmagineIngrandita.Height);
-        var (x, y) = _zoom.RientraNeiLimiti(
+        var (x, y) = ZoomPanState.RientraNeiLimiti(
             ImmagineIngrandita.TranslationX,
             ImmagineIngrandita.TranslationY,
             ImmagineIngrandita.Width,
             ImmagineIngrandita.Height,
-            latoContenuto);
+            latoContenuto,
+            _zoom.Scala);
 
         if (animato)
         {
@@ -175,8 +211,6 @@ public partial class GamePage : ContentPage
     private void AzzeraZoomImmagine(bool animato)
     {
         _zoom.Azzera();
-        ImmagineIngrandita.AnchorX = 0.5;
-        ImmagineIngrandita.AnchorY = 0.5;
 
         if (animato)
         {

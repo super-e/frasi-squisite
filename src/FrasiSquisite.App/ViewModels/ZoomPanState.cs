@@ -1,14 +1,14 @@
 namespace FrasiSquisite.App.ViewModels;
 
 /// <summary>
-/// Stato geometrico del pizzico/trascinamento sull'illustrazione
-/// ingrandita: scala e spostamento, con l'aritmetica di accumulo e i
-/// limiti elastici. Pura e senza dipendenze MAUI apposta - è la parte
-/// di GamePage.xaml.cs (design pinch-to-zoom) che si può testare, dopo
-/// che la revisione finale del lotto ha trovato due bug proprio in
-/// questa aritmetica (PinchGestureUpdatedEventArgs.Scale è un delta
-/// per-frame, non cumulativo; PanUpdatedEventArgs.TotalX/Y sono zero a
-/// fine gesto). Vive in ViewModels/ non perché sia un ViewModel MVVM,
+/// Stato geometrico del pizzico sull'illustrazione ingrandita: solo la
+/// scala accumulata. Il calcolo dei limiti elastici del trascinamento è
+/// puro (nessuno stato memorizzato) perché la posizione vera vive
+/// sempre nella Image stessa (TranslationX/Y) - due fonti di verità per
+/// la stessa cosa avevano già causato un rilievo della revisione
+/// (l'annullamento di un'animazione in corso disallineava lo stato
+/// memorizzato dalla posizione visiva reale). Pura e senza dipendenze
+/// MAUI apposta - vive in ViewModels/ non perché sia un ViewModel MVVM,
 /// ma perché è l'unica cartella che FrasiSquisite.App.Tests collega
 /// per intero (vedi FrasiSquisite.App.Tests.csproj).
 /// </summary>
@@ -19,8 +19,6 @@ public sealed class ZoomPanState
     private const double TolleranzaZoomato = 1.01;
 
     public double Scala { get; private set; } = ScalaMinima;
-    public double OffsetX { get; private set; }
-    public double OffsetY { get; private set; }
 
     public bool EZoomato => Scala > TolleranzaZoomato;
 
@@ -33,29 +31,32 @@ public sealed class ZoomPanState
         Scala = Math.Clamp(Scala * delta, ScalaMinima, ScalaMassima);
 
     /// <summary>
-    /// Applica i limiti elastici e li memorizza. <paramref
+    /// Riallinea la scala alla posizione visiva reale, quando un gesto
+    /// nuovo interrompe un'animazione in corso (CancelAnimations lascia
+    /// la Image al valore raggiunto in quel momento, non a quello di
+    /// partenza né di arrivo).
+    /// </summary>
+    public void ImpostaScala(double valore) =>
+        Scala = Math.Clamp(valore, ScalaMinima, ScalaMassima);
+
+    public void Azzera() => Scala = ScalaMinima;
+
+    /// <summary>
+    /// Limiti elastici del trascinamento, assumendo un pivot di scala
+    /// centrato (AnchorX/AnchorY = 0.5, mai spostato). <paramref
     /// name="latoContenuto"/> è il lato (largo o alto, il minore)
     /// dell'immagine effettivamente disegnata dentro l'Image con
     /// Aspect="AspectFit" - non le dimensioni della view, che includono
     /// il bordo vuoto quando l'immagine non riempie il suo contenitore.
+    /// Funzione pura: non legge né scrive stato di questa classe.
     /// </summary>
-    public (double X, double Y) RientraNeiLimiti(
+    public static (double X, double Y) RientraNeiLimiti(
         double xRichiesto, double yRichiesto,
-        double larghezzaView, double altezzaView, double latoContenuto)
+        double larghezzaView, double altezzaView, double latoContenuto, double scala)
     {
-        var limiteX = Math.Max(0, (latoContenuto * Scala - larghezzaView) / 2);
-        var limiteY = Math.Max(0, (latoContenuto * Scala - altezzaView) / 2);
+        var limiteX = Math.Max(0, (latoContenuto * scala - larghezzaView) / 2);
+        var limiteY = Math.Max(0, (latoContenuto * scala - altezzaView) / 2);
 
-        OffsetX = Math.Clamp(xRichiesto, -limiteX, limiteX);
-        OffsetY = Math.Clamp(yRichiesto, -limiteY, limiteY);
-
-        return (OffsetX, OffsetY);
-    }
-
-    public void Azzera()
-    {
-        Scala = ScalaMinima;
-        OffsetX = 0;
-        OffsetY = 0;
+        return (Math.Clamp(xRichiesto, -limiteX, limiteX), Math.Clamp(yRichiesto, -limiteY, limiteY));
     }
 }

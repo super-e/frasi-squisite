@@ -1,6 +1,6 @@
-using FrasiSquisite.App.ViewModels;
-
 namespace FrasiSquisite.App.Tests.ViewModels;
+
+using FrasiSquisite.App.ViewModels;
 
 public class ZoomPanStateTests
 {
@@ -56,11 +56,42 @@ public class ZoomPanStateTests
     }
 
     [Fact]
-    public void UnImmagineQuadrataSuUnaViewPiuAltaCheLargaNonHaSpostamentoA1x()
+    public void ImpostaScalaRiallineaAllaPosizioneVisivaReale()
+    {
+        var stato = new ZoomPanState();
+        stato.ApplicaDeltaPizzico(3);
+
+        stato.ImpostaScala(1.4);
+
+        Assert.Equal(1.4, stato.Scala);
+    }
+
+    [Fact]
+    public void ImpostaScalaRestaNeiLimiti()
     {
         var stato = new ZoomPanState();
 
-        var (x, y) = stato.RientraNeiLimiti(500, 500, larghezzaView: 400, altezzaView: 800, latoContenuto: 400);
+        stato.ImpostaScala(10);
+
+        Assert.Equal(4, stato.Scala);
+    }
+
+    [Fact]
+    public void AzzeraRiportaScalaAUno()
+    {
+        var stato = new ZoomPanState();
+        stato.ApplicaDeltaPizzico(2);
+
+        stato.Azzera();
+
+        Assert.Equal(1, stato.Scala);
+        Assert.False(stato.EZoomato);
+    }
+
+    [Fact]
+    public void UnImmagineQuadrataSuUnaViewPiuAltaCheLargaNonHaSpostamentoA1x()
+    {
+        var (x, y) = ZoomPanState.RientraNeiLimiti(500, 500, larghezzaView: 400, altezzaView: 800, latoContenuto: 400, scala: 1);
 
         Assert.Equal(0, x);
         Assert.Equal(0, y);
@@ -74,39 +105,9 @@ public class ZoomPanStateTests
     [Fact]
     public void IlLimiteUsaIlLatoDelContenutoNonLaViewIntera()
     {
-        var stato = new ZoomPanState();
-        stato.ApplicaDeltaPizzico(2);
-
-        var (x, y) = stato.RientraNeiLimiti(1000, 1000, larghezzaView: 400, altezzaView: 800, latoContenuto: 400);
+        var (x, y) = ZoomPanState.RientraNeiLimiti(1000, 1000, larghezzaView: 400, altezzaView: 800, latoContenuto: 400, scala: 2);
 
         Assert.Equal(200, x);
         Assert.Equal(0, y);
-    }
-
-    [Fact]
-    public void RientraNeiLimitiMemorizzaLoStato()
-    {
-        var stato = new ZoomPanState();
-        stato.ApplicaDeltaPizzico(2);
-
-        stato.RientraNeiLimiti(1000, 1000, larghezzaView: 400, altezzaView: 800, latoContenuto: 400);
-
-        Assert.Equal(200, stato.OffsetX);
-        Assert.Equal(0, stato.OffsetY);
-    }
-
-    [Fact]
-    public void AzzeraRiportaScalaEOffsetAiValoriIniziali()
-    {
-        var stato = new ZoomPanState();
-        stato.ApplicaDeltaPizzico(2);
-        stato.RientraNeiLimiti(1000, 1000, larghezzaView: 400, altezzaView: 800, latoContenuto: 400);
-
-        stato.Azzera();
-
-        Assert.Equal(1, stato.Scala);
-        Assert.Equal(0, stato.OffsetX);
-        Assert.Equal(0, stato.OffsetY);
-        Assert.False(stato.EZoomato);
     }
 }
