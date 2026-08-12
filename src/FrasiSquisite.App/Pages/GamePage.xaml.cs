@@ -7,13 +7,12 @@ public partial class GamePage : ContentPage
 {
     private readonly GameSessionViewModel _viewModel;
 
-    // Stato del pizzico/trascinamento sull'illustrazione ingrandita: solo
-    // di vista, mai nel ViewModel - è geometria di un gesto, non stato di
-    // gioco (design pinch-to-zoom §3.1).
-    private double _scaleCorrente = 1;
-    private double _scalePartenza = 1;
-    private double _xOffset;
-    private double _yOffset;
+    // Aritmetica di scala/spostamento estratta in una classe pura e
+    // testabile (design pinch-to-zoom, rilievo Critical della revisione
+    // finale): qui restano solo la lettura dei gesti MAUI e la scrittura
+    // sulla Image, mai calcoli che potrebbero sbagliare senza un test a
+    // scoprirlo.
+    private readonly ZoomPanState _zoom = new();
     private double _xOffsetPartenza;
     private double _yOffsetPartenza;
 
@@ -52,10 +51,13 @@ public partial class GamePage : ContentPage
     // Tocco sull'overlay (design pinch-to-zoom §3.4): chiude solo a 1x. Da
     // zoomato, un tocco per errore mentre si esplora l'immagine non deve
     // buttare fuori dall'overlay - riporta invece a 1x, un secondo tocco
-    // chiude come di consueto.
+    // chiude come di consueto. Presente sia sul Grid genitore sia
+    // sull'Image stessa (rilievo della revisione: un tocco sull'immagine,
+    // che ora porta anche PinchGestureRecognizer e PanGestureRecognizer,
+    // potrebbe non risalire al Grid).
     private void OnOverlayTapped(object? sender, TappedEventArgs e)
     {
-        if (_scaleCorrente > 1.01)
+        if (_zoom.EZoomato)
         {
             AzzeraZoomImmagine(animato: true);
             return;
@@ -64,51 +66,49 @@ public partial class GamePage : ContentPage
         _viewModel.CollapseImageCommand.Execute(null);
     }
 
-    // Ancoraggio al punto pizzicato (AnchorX/AnchorY) invece del calcolo
-    // manuale della traslazione: più semplice, e sufficiente per un
-    // overlay che deve solo zoomare in modo naturale, non restare
-    // perfettamente fermo sotto le dita in ogni istante (design §3.2).
+    // PinchGestureUpdatedEventArgs.Scale è relativo all'ultimo evento
+    // ricevuto, non cumulativo dall'inizio del gesto (rilievo Critical
+    // della revisione: il codice precedente lo trattava come cumulativo,
+    // perdendo così l'accumulo di ogni frame intermedio).
+    // ZoomPanState.ApplicaDeltaPizzico applica il delta correttamente,
+    // frame per frame - non serve più uno stato "di inizio gesto" per la
+    // scala.
     private void OnPinchUpdated(object? sender, PinchGestureUpdatedEventArgs e)
     {
-        switch (e.Status)
+        if (e.Status == GestureStatus.Running)
         {
-            case GestureStatus.Started:
-                _scalePartenza = _scaleCorrente;
-                break;
+            ImmagineIngrandita.CancelAnimations();
+            ImmagineIngrandita.AnchorX = e.ScaleOrigin.X;
+            ImmagineIngrandita.AnchorY = e.ScaleOrigin.Y;
 
-            case GestureStatus.Running:
-                ImmagineIngrandita.AnchorX = e.ScaleOrigin.X;
-                ImmagineIngrandita.AnchorY = e.ScaleOrigin.Y;
+            _zoom.ApplicaDeltaPizzico(e.Scale);
+            ImmagineIngrandita.Scale = _zoom.Scala;
+            return;
+        }
 
-                _scaleCorrente = Math.Clamp(_scalePartenza * e.Scale, 1, 4);
-                ImmagineIngrandita.Scale = _scaleCorrente;
-                break;
-
-            case GestureStatus.Completed:
-            case GestureStatus.Canceled:
-                // Pizzicando fino a tornare (quasi) a 1x, lo spostamento del
-                // trascinamento precedente resterebbe visibile anche a zoom
-                // annullato: qui si azzera insieme allo zoom, non solo alla
-                // chiusura dell'overlay (rilievo Important #1 della
-                // revisione). Canceled trattato come Completed: un'
-                // interruzione del gesto (es. un popup di sistema) non deve
-                // lasciare lo stato fuori dai limiti previsti (rilievo
-                // Important #2).
-                if (_scaleCorrente <= 1.01)
-                {
-                    AzzeraZoomImmagine(animato: true);
-                }
-                break;
+        if (e.Status is GestureStatus.Completed or GestureStatus.Canceled)
+        {
+            if (_zoom.EZoomato)
+            {
+                // Pizzicando in giù senza tornare fino a 1x, i limiti del
+                // trascinamento si restringono con la nuova scala: senza
+                // questo, uno spostamento valido alla scala precedente
+                // potrebbe restare fuori dai nuovi limiti (rilievo della
+                // revisione).
+                RientraNeiLimitiElastici(animato: true);
+            }
+            else
+            {
+                AzzeraZoomImmagine(animato: true);
+            }
         }
     }
 
     // Trascinamento attivo solo da zoomato (design §3.3): a 1x non c'è
-    // nulla da spostare. Il rientro elastico si applica solo al rilascio
-    // (Completed), non a ogni frame di Running, altrimenti il
-    // trascinamento risulterebbe "gommoso" invece che diretto.
+    // nulla da spostare.
     private void OnPanUpdated(object? sender, PanUpdatedEventArgs e)
     {
-        if (_scaleCorrente <= 1.01)
+        if (!_zoom.EZoomato)
         {
             return;
         }
@@ -116,25 +116,52 @@ public partial class GamePage : ContentPage
         switch (e.StatusType)
         {
             case GestureStatus.Started:
-                _xOffsetPartenza = _xOffset;
-                _yOffsetPartenza = _yOffset;
+                ImmagineIngrandita.CancelAnimations();
+                _xOffsetPartenza = _zoom.OffsetX;
+                _yOffsetPartenza = _zoom.OffsetY;
                 break;
 
             case GestureStatus.Running:
+                // TotalX/TotalY QUI sono cumulativi dall'inizio del gesto
+                // (a differenza di Completed/Canceled, dove sono zero -
+                // rilievo Critical della revisione).
                 ImmagineIngrandita.TranslationX = _xOffsetPartenza + e.TotalX;
                 ImmagineIngrandita.TranslationY = _yOffsetPartenza + e.TotalY;
                 break;
 
             case GestureStatus.Completed:
             case GestureStatus.Canceled:
-                var limiteX = ImmagineIngrandita.Width * (_scaleCorrente - 1) / 2;
-                var limiteY = ImmagineIngrandita.Height * (_scaleCorrente - 1) / 2;
-
-                _xOffset = Math.Clamp(_xOffsetPartenza + e.TotalX, -limiteX, limiteX);
-                _yOffset = Math.Clamp(_yOffsetPartenza + e.TotalY, -limiteY, limiteY);
-
-                _ = ImmagineIngrandita.TranslateTo(_xOffset, _yOffset, 150, Easing.CubicOut);
+                RientraNeiLimitiElastici(animato: true);
                 break;
+        }
+    }
+
+    // Rientro elastico: legge la posizione già applicata alla Image
+    // (ImmagineIngrandita.TranslationX/Y), non gli argomenti del gesto -
+    // a fine gesto PanUpdatedEventArgs.TotalX/Y sono zero, non il totale
+    // spostato (rilievo Critical della revisione). Il lato del contenuto
+    // è il minore fra larghezza e altezza della Image: con
+    // Aspect="AspectFit" e un'illustrazione quadrata, è quello
+    // effettivamente disegnato, non l'intera area della view che include
+    // il bordo vuoto (rilievo della revisione).
+    private void RientraNeiLimitiElastici(bool animato)
+    {
+        var latoContenuto = Math.Min(ImmagineIngrandita.Width, ImmagineIngrandita.Height);
+        var (x, y) = _zoom.RientraNeiLimiti(
+            ImmagineIngrandita.TranslationX,
+            ImmagineIngrandita.TranslationY,
+            ImmagineIngrandita.Width,
+            ImmagineIngrandita.Height,
+            latoContenuto);
+
+        if (animato)
+        {
+            _ = ImmagineIngrandita.TranslateTo(x, y, 150, Easing.CubicOut);
+        }
+        else
+        {
+            ImmagineIngrandita.TranslationX = x;
+            ImmagineIngrandita.TranslationY = y;
         }
     }
 
@@ -147,10 +174,9 @@ public partial class GamePage : ContentPage
     // zoomata.
     private void AzzeraZoomImmagine(bool animato)
     {
-        _scaleCorrente = 1;
-        _scalePartenza = 1;
-        _xOffset = 0;
-        _yOffset = 0;
+        _zoom.Azzera();
+        ImmagineIngrandita.AnchorX = 0.5;
+        ImmagineIngrandita.AnchorY = 0.5;
 
         if (animato)
         {

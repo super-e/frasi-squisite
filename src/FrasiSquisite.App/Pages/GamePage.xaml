@@ -507,6 +507,7 @@
             <Image x:Name="ImmagineIngrandita"
                    Source="{Binding ExpandedImageUrl}" Aspect="AspectFit" Margin="24">
                 <Image.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnOverlayTapped" />
                     <PinchGestureRecognizer PinchUpdated="OnPinchUpdated" />
                     <PanGestureRecognizer PanUpdated="OnPanUpdated" />
                 </Image.GestureRecognizers>
