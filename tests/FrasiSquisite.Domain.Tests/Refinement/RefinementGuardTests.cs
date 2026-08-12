@@ -27,28 +27,37 @@ public class RefinementGuardTests
     }
 
     /// <summary>
-    /// Il controllo che protegge il gioco: il divertimento vive degli
-    /// incidenti dei giocatori, e un modello che trasforma "il cadavere
-    /// squisito" in "il defunto elegante" lo ucciderebbe. La casella
-    /// riscritta torna grezza; le altre passano lo stesso.
+    /// La guardia non verifica più che le parole del giocatore ricompaiano
+    /// alla lettera nella casella rifinita (design 2026-08-12 "migliora la
+    /// rifinitura", §3.2): per permettere concordanza di genere/numero e
+    /// coniugazione, non c'è più un modo puramente sintattico di distinguere
+    /// un aggiustamento di forma da una riscrittura completa. La fedeltà
+    /// del contenuto resta affidata al prompt, non più al codice - scelta
+    /// dell'utente, consapevole del rischio.
     /// </summary>
     [Fact]
-    public void UnaCasellaRiscrittaTornaGrezzaSenzaTrascinareLeAltre()
+    public void UnaCasellaCompletamenteRiscrittaVieneOraAccettata()
     {
         var esito = RefinementGuard.Applica(
             ["il cadavere squisito", "la mamma"],
             ["il defunto elegante", "con la mamma"],
             Semplice);
 
-        Assert.Equal(["il cadavere squisito", "con la mamma"], esito);
+        Assert.Equal(["il defunto elegante", "con la mamma"], esito);
     }
 
+    /// <summary>
+    /// Prova diretta del punto centrale di questo cambiamento (design
+    /// 2026-08-12 §3.2): un aggiustamento della forma della parola per
+    /// farla concordare (qui, plurale) passa la guardia, cosa impossibile
+    /// prima con il controllo di contenimento letterale.
+    /// </summary>
     [Fact]
-    public void IlContenimentoIgnoraMaiuscoleESpaziDoppi()
+    public void UnaParolaConFormaDiversaPerConcordanzaVieneAccettata()
     {
-        var esito = RefinementGuard.Applica(["la  nonna"], ["Con La Nonna"], "{0}");
+        var esito = RefinementGuard.Applica(["montagna"], ["su alcune montagne"], "{0}");
 
-        Assert.Equal(["Con La Nonna"], esito);
+        Assert.Equal(["su alcune montagne"], esito);
     }
 
     /// <summary>

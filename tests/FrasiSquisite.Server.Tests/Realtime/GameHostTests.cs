@@ -377,7 +377,7 @@ public class GameHostTests
 
         var engine = new FakeGameEngine(evt => evt switch
         {
-            GameStartRequested => [new RequestRefinement([["a", "b"]], "{0} {1}")],
+            GameStartRequested => [new RequestRefinement([["a", "b"]], "{0} {1}", ["Soggetto", "Predicato"])],
             _ => [],
         });
 
@@ -422,7 +422,7 @@ public class GameHostTests
 
         var engine = new FakeGameEngine(evt => evt switch
         {
-            GameStartRequested => [new RequestRefinement([["a", "b"]], "{0} {1}")],
+            GameStartRequested => [new RequestRefinement([["a", "b"]], "{0} {1}", ["Soggetto", "Predicato"])],
             _ => [],
         });
 
@@ -459,7 +459,7 @@ public class GameHostTests
 
         var engine = new FakeGameEngine(evt => evt switch
         {
-            GameStartRequested => [new RequestRefinement([["a", "b"]], "{0} {1}")],
+            GameStartRequested => [new RequestRefinement([["a", "b"]], "{0} {1}", ["Soggetto", "Predicato"])],
             _ => [],
         });
 

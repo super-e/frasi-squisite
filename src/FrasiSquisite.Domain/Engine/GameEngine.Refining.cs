@@ -23,7 +23,10 @@ public sealed partial class GameEngine
             .ToList();
 
         effetti.Add(new BroadcastToRoom(RoomState(rifinendo)));
-        effetti.Add(new RequestRefinement(frasi, rifinendo.Schema.Template));
+        effetti.Add(new RequestRefinement(
+            frasi,
+            rifinendo.Schema.Template,
+            [.. rifinendo.Schema.Caselle.Select(c => c.Ruolo)]));
 
         return new EngineResult(rifinendo, effetti);
     }

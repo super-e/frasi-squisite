@@ -4,8 +4,10 @@ namespace FrasiSquisite.Domain.Refinement;
 
 /// <summary>
 /// Decide, casella per casella, se fidarsi di quello che il modello ha
-/// restituito. Un prompt e' una preghiera: la garanzia sta qui, in codice
-/// puro e provabile, non nelle istruzioni che si mandano (spec §4.3).
+/// restituito. Protegge da risposte rotte - vuote, troppo lunghe, che
+/// ripetono il template - non dalla fedeltà delle singole parole: quella
+/// e' affidata al prompt (design 2026-08-12 "migliora la rifinitura",
+/// §3.2 - scelta deliberata, non un compromesso implicito).
 /// </summary>
 public static partial class RefinementGuard
 {
@@ -39,13 +41,13 @@ public static partial class RefinementGuard
 
         for (var i = 0; i < grezze.Count; i++)
         {
-            esito[i] = Accettabile(grezze[i], rifinite[i], precedenti[i]) ? rifinite[i] : grezze[i];
+            esito[i] = Accettabile(rifinite[i], precedenti[i]) ? rifinite[i] : grezze[i];
         }
 
         return esito;
     }
 
-    private static bool Accettabile(string grezza, string rifinita, string precedente)
+    private static bool Accettabile(string rifinita, string precedente)
     {
         if (string.IsNullOrWhiteSpace(rifinita) || rifinita.Length > MaxCaratteri)
         {
@@ -54,14 +56,7 @@ public static partial class RefinementGuard
 
         var r = Normalizza(rifinita);
 
-        // Il modello non puo' riscrivere: le parole del giocatore devono
-        // ricomparire dentro la casella rifinita.
-        if (!r.Contains(Normalizza(grezza), StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        // E non puo' ripetere cio' che il template gli mette gia' davanti.
+        // Non puo' ripetere cio' che il template gli mette gia' davanti.
         return string.IsNullOrEmpty(precedente)
             || !r.StartsWith(Normalizza(precedente), StringComparison.Ordinal);
     }

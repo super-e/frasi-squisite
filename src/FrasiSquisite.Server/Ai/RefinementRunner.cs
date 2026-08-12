@@ -23,13 +23,18 @@ public sealed class RefinementRunner(
         congiunzioni, accordi.
 
         REGOLE INDEROGABILI
-        - Non sostituire le parole scelte dai giocatori. Devono comparire
-          tutte, invariate, dentro la casella corrispondente.
+        - Le parole scelte dai giocatori restano le stesse: puoi aggiustarne
+          delicatamente la forma — plurale, genere, coniugazione — per farle
+          concordare con il resto della frase. Non sostituirle con parole
+          diverse, non cambiarne il significato, non aggiungere idee nuove.
         - Non riordinare le caselle e non spostarne il contenuto.
-        - Non aggiungere idee, aggettivi o dettagli tuoi.
         - Se una casella si legge già bene, restituiscila identica.
         - Il template della frase contiene già del testo fisso: non ripeterlo,
           e non ripeterne nemmeno il senso.
+        - Il campo "ruoli" dice la funzione grammaticale di ogni casella nella
+          frase (es. "Con chi?", "Dove?"), nello stesso ordine delle caselle:
+          usalo per scegliere la preposizione o l'accordo giusto, non per
+          cambiare cosa la casella dice.
 
         L'assurdo è voluto. Non renderlo sensato: rendilo leggibile.
 
@@ -42,6 +47,7 @@ public sealed class RefinementRunner(
     public async Task<IReadOnlyList<IReadOnlyList<string>>?> RifinisciAsync(
         IReadOnlyList<IReadOnlyList<string>> frasi,
         string template,
+        IReadOnlyList<string> ruoli,
         CancellationToken ct)
     {
         // Non e' un doppione del c.Timeout impostato in Program.cs sull'
@@ -51,22 +57,25 @@ public sealed class RefinementRunner(
         // CompletaAsync", valido per qualunque implementazione dietro
         // l'interfaccia, presente o futura - ed e' cio' che permette di
         // provare il timeout (vedi OltreIlTimeoutSiRestituisceNull) con un
-        // doppio finto, senza rete. I due valori NON coincidono piu': quello
-        // HttpClient e' impostato al piu' grande fra TimeoutSeconds e
-        // ImageTimeoutSeconds (oggi 90s, perche' lo stesso client serve anche
-        // il primo passo dell'illustrazione), mentre qui restano i
-        // TimeoutSeconds veri e propri (10s). E' comunque corretto: il
-        // trasporto e' solo una rete di sicurezza piu' larga, il limite
-        // effettivo della rifinitura lo impone sempre questo token, non
-        // quello.
+        // doppio finto, senza rete. Il valore qui cresce con il numero di
+        // frasi (design 2026-08-12 "migliora la rifinitura", §3.1): una
+        // rifinitura batch per tutta la partita costa di piu' con piu'
+        // giocatori, e un tetto fisso a 10s scadeva sistematicamente anche
+        // con poche frasi. TimeoutMassimoSecondi resta cio' che impedisce a
+        // una partita numerosa di aspettare troppo.
+        var secondi = Math.Min(
+            _opzioni.TimeoutMassimoSecondi,
+            _opzioni.TimeoutSeconds + _opzioni.TimeoutSecondiPerFraseAggiuntiva * Math.Max(0, frasi.Count - 1));
+
         using var scadenza = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        scadenza.CancelAfter(TimeSpan.FromSeconds(_opzioni.TimeoutSeconds));
+        scadenza.CancelAfter(TimeSpan.FromSeconds(secondi));
 
         try
         {
             var utente = JsonSerializer.Serialize(new
             {
                 template,
+                ruoli,
                 frasi = frasi.Select(f => new { caselle = f }),
             });
 
@@ -76,7 +85,7 @@ public sealed class RefinementRunner(
         }
         catch (OperationCanceledException)
         {
-            logger.LogWarning("Rifinitura scaduta dopo {Secondi}s: si prosegue con le caselle grezze.", _opzioni.TimeoutSeconds);
+            logger.LogWarning("Rifinitura scaduta dopo {Secondi}s: si prosegue con le caselle grezze.", secondi);
             return null;
         }
     }

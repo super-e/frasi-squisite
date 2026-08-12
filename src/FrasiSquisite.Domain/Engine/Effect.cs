@@ -18,7 +18,8 @@ public sealed record BroadcastToRoom(object Message) : Effect;
 /// </summary>
 public sealed record RequestRefinement(
     IReadOnlyList<IReadOnlyList<string>> Frasi,
-    string Template) : Effect;
+    string Template,
+    IReadOnlyList<string> Ruoli) : Effect;
 
 /// <summary>
 /// Chiede l'illustrazione di una frase. Porta la frase composta e nient'altro:

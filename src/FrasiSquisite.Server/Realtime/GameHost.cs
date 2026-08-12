@@ -153,7 +153,7 @@ public sealed class GameHost(
 
             try
             {
-                rifinite = await runner.RifinisciAsync(richiesta.Frasi, richiesta.Template, CancellationToken.None);
+                rifinite = await runner.RifinisciAsync(richiesta.Frasi, richiesta.Template, richiesta.Ruoli, CancellationToken.None);
             }
             catch (Exception ex)
             {

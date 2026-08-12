@@ -56,7 +56,8 @@ if (aiOptions.Abilitato)
         // ciascuna operazione e' quindi sempre il runner, non questo client.
         //
         // Il valore qui pero' deve essere il PIU' GRANDE dei due
-        // (ImageTimeoutSeconds, che oggi e' 90 contro i 10 di TimeoutSeconds):
+        // (ImageTimeoutSeconds, che oggi e' 90 contro il tetto di
+        // TimeoutMassimoSecondi della rifinitura, 30):
         // questo stesso HttpClient e' condiviso dal primo passo
         // dell'illustrazione (la traduzione, guidata dal token a
         // ImageTimeoutSeconds di IllustrationRunner). Impostarlo al piu'
@@ -85,8 +86,9 @@ if (aiOptions.Abilitato)
         // domani qualcuno lo rimettesse qui "per semplificare", la chiave
         // tornerebbe a seguire il download verso qualunque host.
 
-        // Non TimeoutSeconds: quello è il limite della rifinitura, dieci
-        // secondi, e generare un'immagine ne richiede molti di più.
+        // Non TimeoutSeconds: quello è la base del limite della rifinitura
+        // (fino a TimeoutMassimoSecondi con molte frasi), e generare
+        // un'immagine ne richiede molti di più.
         c.Timeout = TimeSpan.FromSeconds(aiOptions.ImageTimeoutSeconds);
     });
 }

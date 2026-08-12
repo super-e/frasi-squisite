@@ -60,6 +60,7 @@ public class RifinituraTests
         Assert.Equal(N, richiesta.Frasi.Count);
         Assert.All(richiesta.Frasi, f => Assert.Equal(K, f.Count));
         Assert.False(string.IsNullOrWhiteSpace(richiesta.Template));
+        Assert.Equal(["Ruolo0", "Ruolo1"], richiesta.Ruoli);
     }
 
     [Fact]
@@ -110,11 +111,14 @@ public class RifinituraTests
     }
 
     /// <summary>
-    /// Una casella che il modello ha riscritto torna grezza, senza che le
-    /// altre ne risentano: e' RefinementGuard, applicato dal motore.
+    /// La guardia non confronta piu' il testo rifinito con quello grezzo
+    /// (design 2026-08-12 "migliora la rifinitura", §3.2): una riscrittura
+    /// completa passa quanto un aggiustamento delicato, perche' il codice
+    /// non ha piu' modo di distinguerli. La fedeltà del contenuto resta
+    /// affidata al prompt, non piu' a RefinementGuard.
     /// </summary>
     [Fact]
-    public void UnaCasellaRiscrittaDalModelloTornaGrezza()
+    public void UnaCasellaRiscrittaDalModelloVieneOraAccettata()
     {
         var (stato, _) = ScritturaConclusa();
 
@@ -125,7 +129,7 @@ public class RifinituraTests
 
         var risultato = _motore.Handle(stato, new RefinementFinished(rifinite));
 
-        Assert.Equal("p00", risultato.State.Phrases[0].Slots[0]!.Text);
+        Assert.Equal("tutt'altro", risultato.State.Phrases[0].Slots[0]!.Text);
         Assert.Equal("con p11", risultato.State.Phrases[0].Slots[1]!.Text);
     }
 
