@@ -607,6 +607,29 @@ public class GameSessionViewModelTests
         Assert.Equal(ScreenState.Waiting, vm.Screen);
     }
 
+    // Rilievo Important della revisione di Task 1: JoinRoomAsync assegnava
+    // RoomCode PRIMA della conferma di rete, quindi un guasto di trasporto a
+    // freddo (nessuna HubConnection ancora aperta, come qui - RoomCode parte
+    // vuoto) faceva credere a ReconnectTransportAndRoomAsync di essere già
+    // in una stanza, e il retry chiamava un RejoinRoom spurio invece di
+    // richiamare JoinRoom per davvero. Questo test prova che, con il fix,
+    // RoomCode resta vuoto fino al successo e il retry richiama JoinRoom.
+    [Fact]
+    public async Task UnGuastoDiTrasportoAFreddoNellIngressoVieneRitentatoConSuccesso()
+    {
+        var (vm, conn, _) = Crea();
+        vm.Nickname = "Bruno";
+        vm.JoinCode = "abcd";
+        conn.NextFailure = new InvalidOperationException("guasto di trasporto simulato");
+
+        await vm.JoinRoomCommand.ExecuteAsync(null);
+
+        Assert.Contains("JoinRoom(Bruno,ABCD)", conn.Calls);
+        Assert.DoesNotContain(conn.Calls, c => c.StartsWith("RejoinRoom"));
+        Assert.Equal(string.Empty, vm.ErrorText);
+        Assert.Equal("ABCD", vm.RoomCode);
+    }
+
     [Fact]
     public async Task UnGuastoDiTrasportoCheNonSiRiconnetteMostraLErroreDiSempre()
     {

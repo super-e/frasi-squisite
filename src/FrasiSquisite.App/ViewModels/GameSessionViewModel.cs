@@ -359,8 +359,19 @@ public partial class GameSessionViewModel : ObservableObject
         // all'esito della rete.
         _playerProfile.SaveNickname(Nickname);
 
-        RoomCode = JoinCode.Trim().ToUpperInvariant();
-        await _connection.JoinRoomAsync(_playerId, Nickname, RoomCode);
+        // Come in CreateRoomAsync: RoomCode va assegnato solo DOPO che la
+        // rete conferma, non prima. Se il tentativo iniziale fallisce a
+        // trasporto freddo (nessuna HubConnection ancora aperta) e viene
+        // ritentato da ReconnectTransportAndRoomAsync, quel metodo decide se
+        // rientrare guardando proprio RoomCode: assegnarlo qui prima
+        // dell'esito lo farebbe scambiare per "già in una stanza" e
+        // scatenerebbe un RejoinRoom spurio per una stanza in cui non si è
+        // mai davvero entrati, invece di lasciare che il retry richiami
+        // questo stesso JoinRoomAsync (rilievo Important della revisione,
+        // design 2026-08-13 "retry di riconnessione").
+        var codice = JoinCode.Trim().ToUpperInvariant();
+        await _connection.JoinRoomAsync(_playerId, Nickname, codice);
+        RoomCode = codice;
     });
 
     [RelayCommand]
