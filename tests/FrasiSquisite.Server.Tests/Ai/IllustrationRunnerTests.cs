@@ -137,9 +137,10 @@ public class IllustrationRunnerTests
     /// veloce ma la generazione e' lenta, e il risultato deve comunque essere
     /// null. E' questo il test che dimostra che il limite governa l'intera
     /// operazione a due passi - se qualcuno usasse per errore TimeoutSeconds
-    /// (10s, pensato per la sola rifinitura) al posto di ImageTimeoutSeconds
-    /// (90s), l'operazione fallirebbe comunque ma per la ragione sbagliata, e
-    /// senza un test come questo nessuno se ne accorgerebbe.
+    /// (15s, la base della rifinitura, pensata per un'altra operazione) al
+    /// posto di ImageTimeoutSeconds (90s), l'operazione fallirebbe comunque
+    /// ma per la ragione sbagliata, e senza un test come questo nessuno se
+    /// ne accorgerebbe.
     /// </summary>
     [Fact]
     public async Task OltreIlTimeoutSulPassoDiGenerazioneSiRestituisceNull()

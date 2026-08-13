@@ -45,11 +45,13 @@ if (aiOptions.Abilitato)
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", aiOptions.ApiKey);
 
         // Non è un doppione dei CancellationTokenSource che RefinementRunner e
-        // IllustrationRunner creano con TimeoutMassimoSecondi (rifinitura) e
-        // ImageTimeoutSeconds (illustrazione): questo qui limita solo la
-        // richiesta HTTP di OpenAiCompatibleTextProvider, un dettaglio di
-        // QUESTA implementazione. Quelli dei runner sono il limite a livello
-        // di contratto - valgono per qualunque IAiTextProvider, presente o
+        // IllustrationRunner creano: quello di RefinementRunner e' un valore
+        // calcolato (base piu' un incremento per frase, con tetto a
+        // TimeoutMassimoSecondi), quello di IllustrationRunner e'
+        // ImageTimeoutSeconds. Questo qui limita solo la richiesta HTTP di
+        // OpenAiCompatibleTextProvider, un dettaglio di QUESTA
+        // implementazione. Quelli dei runner sono il limite a livello di
+        // contratto - valgono per qualunque IAiTextProvider, presente o
         // futuro, HTTP o no - ed e' cio' che rende testabile ciascun timeout
         // (RefinementRunnerTests.OltreIlTimeoutSiRestituisceNull,
         // IllustrationRunnerTests) con un doppio finto e senza HttpClient.
@@ -59,13 +61,16 @@ if (aiOptions.Abilitato)
         // Il valore qui pero' deve essere il PIU' GRANDE dei due TETTI, non
         // delle due basi: la rifinitura puo' arrivare fino a
         // TimeoutMassimoSecondi (oggi 30, non TimeoutSeconds che e' solo il
-        // punto di partenza a 15) con molte frasi nello stesso giro. Usare
-        // TimeoutSeconds qui sarebbe silenziosamente sbagliato con una
-        // partita numerosa: il trasporto troncherebbe la richiesta prima che
-        // il token del runner scada davvero, e il fallimento diventa - per
-        // contratto di IAiTextProvider - un null muto, senza eccezioni e
-        // senza test rossi (AiConfigurazioneTests.
-        // IlClientDelProviderDiTestoUsaIlPiuGrandeDeiDueTetti lo prova).
+        // punto di partenza a 15) con molte frasi nello stesso giro. Se
+        // ImageTimeoutSeconds scendesse mai sotto il tetto della rifinitura,
+        // usare TimeoutSeconds qui sarebbe silenziosamente sbagliato: il
+        // trasporto troncherebbe la richiesta prima che il token del runner
+        // scada davvero, e il fallimento diventa - per contratto di
+        // IAiTextProvider - un null muto, senza eccezioni e senza test rossi
+        // (AiConfigurazioneTests.
+        // IlClientDelProviderDiTestoSegueIlTettoDellaRifinituraQuandoEPiuGrande
+        // e' il test che lo pinza: l'altro, con TimeoutMassimoSecondi sotto
+        // ImageTimeoutSeconds, passerebbe anche con la formula sbagliata).
         // Questo stesso HttpClient e' anche condiviso dal primo passo
         // dell'illustrazione (la traduzione, guidata dal token a
         // ImageTimeoutSeconds di IllustrationRunner): con ImageTimeoutSeconds

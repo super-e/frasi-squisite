@@ -123,7 +123,7 @@ public class AiConfigurazioneTests
     /// bottiglia proprio nel caso che questo lotto doveva risolvere.
     /// </summary>
     [Fact]
-    public void IlClientDelProviderDiTestoSeguIlTettoDellaRifinituraQuandoEPiuGrande()
+    public void IlClientDelProviderDiTestoSegueIlTettoDellaRifinituraQuandoEPiuGrande()
     {
         using var factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder => builder.UseSetting("Ai:ApiKey", "chiave-di-prova-mai-reale")
