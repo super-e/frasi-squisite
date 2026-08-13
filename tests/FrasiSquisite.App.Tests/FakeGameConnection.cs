@@ -32,6 +32,16 @@ public sealed class FakeGameConnection : IGameConnection
     public Exception? NextFailure { get; set; }
 
     /// <summary>
+    /// Se impostata, OGNI metodo invocato la lancia, senza azzerarsi:
+    /// simula una rete giù per davvero (non un singolo blip), dove anche il
+    /// tentativo di riconnessione fallisce. A differenza di
+    /// <see cref="NextFailure"/> serve per provare il retry-di-riconnessione
+    /// (design 2026-08-13 "retry di riconnessione") quando SIA il comando
+    /// originale SIA il tentativo di riconnessione devono fallire.
+    /// </summary>
+    public Exception? AlwaysFailWith { get; set; }
+
+    /// <summary>
     /// Se impostato, viene emesso <em>durante</em> la prossima
     /// <see cref="SubmitSlotAsync"/>, prima che il Task ritorni (e si azzera
     /// da solo).
@@ -199,6 +209,11 @@ public sealed class FakeGameConnection : IGameConnection
 
     private void LanciaSeImpostato()
     {
+        if (AlwaysFailWith is { } permanente)
+        {
+            throw permanente;
+        }
+
         if (NextFailure is { } eccezione)
         {
             NextFailure = null;

@@ -338,7 +338,6 @@ public partial class GameSessionViewModel : ObservableObject
         // evitare.
         _playerProfile.SaveNickname(Nickname);
 
-        await EnsureConnectedAsync();
         RoomCode = await _connection.CreateRoomAsync(_playerId, Nickname);
     });
 
@@ -360,7 +359,6 @@ public partial class GameSessionViewModel : ObservableObject
         // all'esito della rete.
         _playerProfile.SaveNickname(Nickname);
 
-        await EnsureConnectedAsync();
         RoomCode = JoinCode.Trim().ToUpperInvariant();
         await _connection.JoinRoomAsync(_playerId, Nickname, RoomCode);
     });
@@ -619,6 +617,23 @@ public partial class GameSessionViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Riconnette il trasporto e, se si crede già in una stanza, rientra
+    /// anche lì (design 2026-08-13 "retry di riconnessione", §3.1). A
+    /// differenza di <see cref="TryRejoinAsync"/> non inghiotte le
+    /// eccezioni: chi lo chiama (il retry in <see cref="EseguiComandoAsync"/>
+    /// o <see cref="ReconnectAsync"/>) decide come mostrarle.
+    /// </summary>
+    private async Task ReconnectTransportAndRoomAsync()
+    {
+        await EnsureConnectedAsync();
+
+        if (RoomCode.Length > 0)
+        {
+            await _connection.RejoinRoomAsync(_playerId, RoomCode);
+        }
+    }
+
+    /// <summary>
     /// Ogni comando generato da [RelayCommand] diventa un AsyncRelayCommand: con
     /// le opzioni di default un'eccezione non osservata viene ri-lanciata sul
     /// thread che l'ha invocato, che su Android è il main looper - crash del
@@ -637,16 +652,33 @@ public partial class GameSessionViewModel : ObservableObject
         {
             // Il server risponde già con un messaggio pensato per l'utente,
             // in italiano (es. "Stanza non trovata.", "...Aggiorna l'app."):
-            // lo si mostra così com'è, senza riformularlo.
+            // lo si mostra così com'è, senza riformularlo. Un rifiuto del
+            // server non è un guasto di trasporto: ritentarlo otterrebbe
+            // solo lo stesso rifiuto, quindi non passa dal retry sotto.
             ErrorText = ex.Message;
         }
         catch (Exception)
         {
             // Guasto di trasporto (URL irraggiungibile, connessione caduta
-            // prima ancora di parlare con l'hub, ecc.): non c'è un messaggio
-            // del server da mostrare, quindi uno generico ma comunque visibile
-            // - non deve mai sparire nel nulla.
-            ErrorText = "Non riesco a raggiungere il server.";
+            // prima ancora di parlare con l'hub, ecc.): un solo tentativo di
+            // riconnessione + rientro, poi si ripete l'azione una volta sola
+            // (design 2026-08-13 "retry di riconnessione", §3.2). Nessun
+            // backoff, nessun retry-del-retry: se fallisce ancora, stesso
+            // messaggio generico di prima - l'utente può riprovare lui
+            // stesso (azione o bottone "Riconnetti").
+            try
+            {
+                await ReconnectTransportAndRoomAsync();
+                await azione();
+            }
+            catch (HubException ex)
+            {
+                ErrorText = ex.Message;
+            }
+            catch (Exception)
+            {
+                ErrorText = "Non riesco a raggiungere il server.";
+            }
         }
     }
 

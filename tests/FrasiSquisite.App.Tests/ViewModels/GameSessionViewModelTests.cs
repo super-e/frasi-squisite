@@ -553,7 +553,7 @@ public class GameSessionViewModelTests
     public async Task UnGuastoDiTrasportoNellaCreazioneDellaStanzaVieneMostratoENonPropaga()
     {
         var (vm, conn, _) = Crea();
-        conn.NextFailure = new HttpRequestException("host irraggiungibile");
+        conn.AlwaysFailWith = new HttpRequestException("host irraggiungibile");
         vm.Nickname = "Anna";
 
         await vm.CreateRoomCommand.ExecuteAsync(null);
@@ -587,6 +587,38 @@ public class GameSessionViewModelTests
         await vm.SubmitSlotCommand.ExecuteAsync(null);
 
         Assert.Equal("Non è il momento di scrivere.", vm.ErrorText);
+        Assert.Equal(ScreenState.Writing, vm.Screen);
+    }
+
+    [Fact]
+    public async Task UnGuastoDiTrasportoNellInvioVieneRitentatoConSuccesso()
+    {
+        var (vm, conn, _) = Crea();
+        vm.RoomCode = "ABCD";
+        conn.Emit(new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio", GiaInviato: false));
+        vm.SlotText = "Il cadavere";
+        conn.NextFailure = new InvalidOperationException("guasto di trasporto simulato");
+
+        await vm.SubmitSlotCommand.ExecuteAsync(null);
+
+        Assert.Contains($"RejoinRoom({Anna},ABCD)", conn.Calls);
+        Assert.Contains("SubmitSlot(ABCD,Il cadavere)", conn.Calls);
+        Assert.Equal(string.Empty, vm.ErrorText);
+        Assert.Equal(ScreenState.Waiting, vm.Screen);
+    }
+
+    [Fact]
+    public async Task UnGuastoDiTrasportoCheNonSiRiconnetteMostraLErroreDiSempre()
+    {
+        var (vm, conn, _) = Crea();
+        vm.RoomCode = "ABCD";
+        conn.Emit(new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio", GiaInviato: false));
+        vm.SlotText = "Il cadavere";
+        conn.AlwaysFailWith = new InvalidOperationException("rete giù per davvero");
+
+        await vm.SubmitSlotCommand.ExecuteAsync(null);
+
+        Assert.Equal("Non riesco a raggiungere il server.", vm.ErrorText);
         Assert.Equal(ScreenState.Writing, vm.Screen);
     }
 
@@ -1408,7 +1440,7 @@ public class GameSessionViewModelTests
         vm.RoomCode = "ABCD";
         conn.Emit(new GameFinishedMessage([new PhraseResultView(0, "Il cadavere squisito", [], 0, false)]));
         Assert.NotEmpty(vm.FinalResults);
-        conn.NextFailure = new HttpRequestException("host irraggiungibile");
+        conn.AlwaysFailWith = new HttpRequestException("host irraggiungibile");
 
         await vm.NewGameCommand.ExecuteAsync(null);
 
@@ -1423,7 +1455,7 @@ public class GameSessionViewModelTests
         vm.RoomCode = "ABCD";
         conn.Emit(new GameFinishedMessage([new PhraseResultView(0, "Il cadavere squisito", [], 0, false)]));
         Assert.NotEmpty(vm.FinalResults);
-        conn.NextFailure = new HttpRequestException("host irraggiungibile");
+        conn.AlwaysFailWith = new HttpRequestException("host irraggiungibile");
 
         await vm.BackToLobbyCommand.ExecuteAsync(null);
 
@@ -1509,7 +1541,7 @@ public class GameSessionViewModelTests
     public async Task UnGuastoDiTrasportoNonImpedisceDiRicordareIlNickname()
     {
         var (vm, conn, profilo) = CreaConProfilo();
-        conn.NextFailure = new HttpRequestException("host irraggiungibile");
+        conn.AlwaysFailWith = new HttpRequestException("host irraggiungibile");
         vm.Nickname = "  anna  ";
 
         await vm.CreateRoomCommand.ExecuteAsync(null);
