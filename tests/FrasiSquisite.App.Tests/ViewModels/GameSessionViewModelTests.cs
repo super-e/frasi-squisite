@@ -553,7 +553,7 @@ public class GameSessionViewModelTests
     public async Task UnGuastoDiTrasportoNellaCreazioneDellaStanzaVieneMostratoENonPropaga()
     {
         var (vm, conn, _) = Crea();
-        conn.NextFailure = new HttpRequestException("host irraggiungibile");
+        conn.AlwaysFailWith = new HttpRequestException("host irraggiungibile");
         vm.Nickname = "Anna";
 
         await vm.CreateRoomCommand.ExecuteAsync(null);
@@ -590,6 +590,61 @@ public class GameSessionViewModelTests
         Assert.Equal(ScreenState.Writing, vm.Screen);
     }
 
+    [Fact]
+    public async Task UnGuastoDiTrasportoNellInvioVieneRitentatoConSuccesso()
+    {
+        var (vm, conn, _) = Crea();
+        vm.RoomCode = "ABCD";
+        conn.Emit(new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio", GiaInviato: false));
+        vm.SlotText = "Il cadavere";
+        conn.NextFailure = new InvalidOperationException("guasto di trasporto simulato");
+
+        await vm.SubmitSlotCommand.ExecuteAsync(null);
+
+        Assert.Contains($"RejoinRoom({Anna},ABCD)", conn.Calls);
+        Assert.Contains("SubmitSlot(ABCD,Il cadavere)", conn.Calls);
+        Assert.Equal(string.Empty, vm.ErrorText);
+        Assert.Equal(ScreenState.Waiting, vm.Screen);
+    }
+
+    // Rilievo Important della revisione di Task 1: JoinRoomAsync assegnava
+    // RoomCode PRIMA della conferma di rete, quindi un guasto di trasporto a
+    // freddo (nessuna HubConnection ancora aperta, come qui - RoomCode parte
+    // vuoto) faceva credere a ReconnectTransportAndRoomAsync di essere già
+    // in una stanza, e il retry chiamava un RejoinRoom spurio invece di
+    // richiamare JoinRoom per davvero. Questo test prova che, con il fix,
+    // RoomCode resta vuoto fino al successo e il retry richiama JoinRoom.
+    [Fact]
+    public async Task UnGuastoDiTrasportoAFreddoNellIngressoVieneRitentatoConSuccesso()
+    {
+        var (vm, conn, _) = Crea();
+        vm.Nickname = "Bruno";
+        vm.JoinCode = "abcd";
+        conn.NextFailure = new InvalidOperationException("guasto di trasporto simulato");
+
+        await vm.JoinRoomCommand.ExecuteAsync(null);
+
+        Assert.Contains("JoinRoom(Bruno,ABCD)", conn.Calls);
+        Assert.DoesNotContain(conn.Calls, c => c.StartsWith("RejoinRoom"));
+        Assert.Equal(string.Empty, vm.ErrorText);
+        Assert.Equal("ABCD", vm.RoomCode);
+    }
+
+    [Fact]
+    public async Task UnGuastoDiTrasportoCheNonSiRiconnetteMostraLErroreDiSempre()
+    {
+        var (vm, conn, _) = Crea();
+        vm.RoomCode = "ABCD";
+        conn.Emit(new SlotRequestMessage(0, 5, "Soggetto", "prompt", "esempio", GiaInviato: false));
+        vm.SlotText = "Il cadavere";
+        conn.AlwaysFailWith = new InvalidOperationException("rete giù per davvero");
+
+        await vm.SubmitSlotCommand.ExecuteAsync(null);
+
+        Assert.Equal("Non riesco a raggiungere il server.", vm.ErrorText);
+        Assert.Equal(ScreenState.Writing, vm.Screen);
+    }
+
     // I1: un riavvio del trasporto (.WithAutomaticReconnect) apre una
     // connessione con un nuovo ConnectionId che non recupera l'appartenenza
     // ai gruppi SignalR della stanza: da quel momento un bot gioca al posto
@@ -605,6 +660,72 @@ public class GameSessionViewModelTests
         conn.EmitConnectionInterrupted();
 
         Assert.False(string.IsNullOrEmpty(vm.ConnectionBanner));
+    }
+
+    [Fact]
+    public void UnMessaggioDalServerSvuotaIlBannerDiConnessione()
+    {
+        var (vm, conn, _) = Crea();
+
+        conn.EmitConnectionInterrupted();
+        Assert.False(string.IsNullOrEmpty(vm.ConnectionBanner));
+
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [new PlayerView(Anna, "Anna", true, true, false)],
+            "surrealista-classico", 5));
+
+        Assert.Equal(string.Empty, vm.ConnectionBanner);
+    }
+
+    [Fact]
+    public async Task IlBottoneRiconnettiRipristinaIlTrasportoERientraInStanza()
+    {
+        var (vm, conn, _) = Crea();
+        vm.RoomCode = "ABCD";
+
+        await vm.ReconnectCommand.ExecuteAsync(null);
+
+        Assert.Contains(conn.Calls, c => c.StartsWith("Connect(", StringComparison.Ordinal));
+        Assert.Contains($"RejoinRoom({Anna},ABCD)", conn.Calls);
+    }
+
+    [Fact]
+    public async Task IlBottoneRiconnettiSenzaStanzaNonTentaUnRientro()
+    {
+        var (vm, conn, _) = Crea();
+
+        await vm.ReconnectCommand.ExecuteAsync(null);
+
+        Assert.Contains(conn.Calls, c => c.StartsWith("Connect(", StringComparison.Ordinal));
+        Assert.DoesNotContain(conn.Calls, c => c.StartsWith("RejoinRoom", StringComparison.Ordinal));
+    }
+
+    // Rilievo Critical della revisione del Task 3: ReconnectAsync passava da
+    // EseguiComandoAsync con se stesso come azione, e quel wrapper ritenta
+    // chiamando ReconnectTransportAndRoomAsync una seconda volta al suo
+    // interno. Con AlwaysFailWith (guasto permanente su ConnectAsync) il
+    // primo tentativo (await azione(), cioè ReconnectTransportAndRoomAsync)
+    // fallisce già dentro EnsureConnectedAsync, prima di arrivare a
+    // RejoinRoomAsync; il catch del wrapper richiama esplicitamente
+    // ReconnectTransportAndRoomAsync una seconda volta, che fallisce di
+    // nuovo nello stesso punto - ed è quel secondo fallimento a essere
+    // intercettato dal catch interno, senza mai raggiungere il terzo
+    // await azione(). Il codice difettoso arrivava quindi a
+    // TentativiTotali == 2 (non 3: quella cifra si otterrebbe solo se il
+    // trasporto si connettesse ma RejoinRoomAsync fallisse due volte, uno
+    // scenario diverso da questo test); con il fix, un solo tentativo.
+    [Fact]
+    public async Task IlBottoneRiconnettiConGuastoPermanenteTentaUnaVoltaSola()
+    {
+        var (vm, conn, _) = Crea();
+        vm.RoomCode = "ABCD";
+        conn.AlwaysFailWith = new InvalidOperationException("rete giù per davvero");
+
+        await vm.ReconnectCommand.ExecuteAsync(null);
+
+        Assert.Equal("Non riesco a raggiungere il server.", vm.ErrorText);
+        Assert.Equal(1, conn.TentativiTotali);
     }
 
     // Home: "Ho un codice" sostituisce Crea/Ho-un-codice con CodeEntry, Entra,
@@ -1408,7 +1529,7 @@ public class GameSessionViewModelTests
         vm.RoomCode = "ABCD";
         conn.Emit(new GameFinishedMessage([new PhraseResultView(0, "Il cadavere squisito", [], 0, false)]));
         Assert.NotEmpty(vm.FinalResults);
-        conn.NextFailure = new HttpRequestException("host irraggiungibile");
+        conn.AlwaysFailWith = new HttpRequestException("host irraggiungibile");
 
         await vm.NewGameCommand.ExecuteAsync(null);
 
@@ -1423,7 +1544,7 @@ public class GameSessionViewModelTests
         vm.RoomCode = "ABCD";
         conn.Emit(new GameFinishedMessage([new PhraseResultView(0, "Il cadavere squisito", [], 0, false)]));
         Assert.NotEmpty(vm.FinalResults);
-        conn.NextFailure = new HttpRequestException("host irraggiungibile");
+        conn.AlwaysFailWith = new HttpRequestException("host irraggiungibile");
 
         await vm.BackToLobbyCommand.ExecuteAsync(null);
 
@@ -1509,7 +1630,7 @@ public class GameSessionViewModelTests
     public async Task UnGuastoDiTrasportoNonImpedisceDiRicordareIlNickname()
     {
         var (vm, conn, profilo) = CreaConProfilo();
-        conn.NextFailure = new HttpRequestException("host irraggiungibile");
+        conn.AlwaysFailWith = new HttpRequestException("host irraggiungibile");
         vm.Nickname = "  anna  ";
 
         await vm.CreateRoomCommand.ExecuteAsync(null);

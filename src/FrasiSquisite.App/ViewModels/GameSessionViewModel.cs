@@ -338,7 +338,6 @@ public partial class GameSessionViewModel : ObservableObject
         // evitare.
         _playerProfile.SaveNickname(Nickname);
 
-        await EnsureConnectedAsync();
         RoomCode = await _connection.CreateRoomAsync(_playerId, Nickname);
     });
 
@@ -360,9 +359,19 @@ public partial class GameSessionViewModel : ObservableObject
         // all'esito della rete.
         _playerProfile.SaveNickname(Nickname);
 
-        await EnsureConnectedAsync();
-        RoomCode = JoinCode.Trim().ToUpperInvariant();
-        await _connection.JoinRoomAsync(_playerId, Nickname, RoomCode);
+        // Come in CreateRoomAsync: RoomCode va assegnato solo DOPO che la
+        // rete conferma, non prima. Se il tentativo iniziale fallisce a
+        // trasporto freddo (nessuna HubConnection ancora aperta) e viene
+        // ritentato da ReconnectTransportAndRoomAsync, quel metodo decide se
+        // rientrare guardando proprio RoomCode: assegnarlo qui prima
+        // dell'esito lo farebbe scambiare per "già in una stanza" e
+        // scatenerebbe un RejoinRoom spurio per una stanza in cui non si è
+        // mai davvero entrati, invece di lasciare che il retry richiami
+        // questo stesso JoinRoomAsync (rilievo Important della revisione,
+        // design 2026-08-13 "retry di riconnessione").
+        var codice = JoinCode.Trim().ToUpperInvariant();
+        await _connection.JoinRoomAsync(_playerId, Nickname, codice);
+        RoomCode = codice;
     });
 
     [RelayCommand]
@@ -619,6 +628,23 @@ public partial class GameSessionViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Riconnette il trasporto e, se si crede già in una stanza, rientra
+    /// anche lì (design 2026-08-13 "retry di riconnessione", §3.1). A
+    /// differenza di <see cref="TryRejoinAsync"/> non inghiotte le
+    /// eccezioni: chi lo chiama (il retry in <see cref="EseguiComandoAsync"/>
+    /// o <see cref="ReconnectAsync"/>) decide come mostrarle.
+    /// </summary>
+    private async Task ReconnectTransportAndRoomAsync()
+    {
+        await EnsureConnectedAsync();
+
+        if (RoomCode.Length > 0)
+        {
+            await _connection.RejoinRoomAsync(_playerId, RoomCode);
+        }
+    }
+
+    /// <summary>
     /// Ogni comando generato da [RelayCommand] diventa un AsyncRelayCommand: con
     /// le opzioni di default un'eccezione non osservata viene ri-lanciata sul
     /// thread che l'ha invocato, che su Android è il main looper - crash del
@@ -637,15 +663,57 @@ public partial class GameSessionViewModel : ObservableObject
         {
             // Il server risponde già con un messaggio pensato per l'utente,
             // in italiano (es. "Stanza non trovata.", "...Aggiorna l'app."):
-            // lo si mostra così com'è, senza riformularlo.
+            // lo si mostra così com'è, senza riformularlo. Un rifiuto del
+            // server non è un guasto di trasporto: ritentarlo otterrebbe
+            // solo lo stesso rifiuto, quindi non passa dal retry sotto.
             ErrorText = ex.Message;
         }
         catch (Exception)
         {
             // Guasto di trasporto (URL irraggiungibile, connessione caduta
-            // prima ancora di parlare con l'hub, ecc.): non c'è un messaggio
-            // del server da mostrare, quindi uno generico ma comunque visibile
-            // - non deve mai sparire nel nulla.
+            // prima ancora di parlare con l'hub, ecc.): un solo tentativo di
+            // riconnessione + rientro, poi si ripete l'azione una volta sola
+            // (design 2026-08-13 "retry di riconnessione", §3.2). Nessun
+            // backoff, nessun retry-del-retry: se fallisce ancora, stesso
+            // messaggio generico di prima - l'utente può riprovare lui
+            // stesso (azione o bottone "Riconnetti").
+            try
+            {
+                await ReconnectTransportAndRoomAsync();
+                await azione();
+            }
+            catch (HubException ex)
+            {
+                ErrorText = ex.Message;
+            }
+            catch (Exception)
+            {
+                ErrorText = "Non riesco a raggiungere il server.";
+            }
+        }
+    }
+
+    /// <summary>
+    /// Un solo tentativo per pressione, senza passare da EseguiComandoAsync:
+    /// quel wrapper ritenterebbe chiamando ReconnectTransportAndRoomAsync una
+    /// seconda volta al suo interno - dato che qui è sia l'azione sia il
+    /// meccanismo di recupero, il risultato sarebbe un secondo RejoinRoomAsync
+    /// duplicato verso il server a una singola pressione (design 2026-08-13
+    /// "retry di riconnessione", §3.3: "nessun retry-del-retry interno").
+    /// </summary>
+    [RelayCommand]
+    private async Task ReconnectAsync()
+    {
+        try
+        {
+            await ReconnectTransportAndRoomAsync();
+        }
+        catch (HubException ex)
+        {
+            ErrorText = ex.Message;
+        }
+        catch (Exception)
+        {
             ErrorText = "Non riesco a raggiungere il server.";
         }
     }
@@ -661,21 +729,20 @@ public partial class GameSessionViewModel : ObservableObject
 
     private void OnMessage(object message)
     {
-        // Regola unica per lo svuotamento del banner d'errore: qualunque
-        // messaggio diverso da ErrorMessage significa che il server è
-        // andato avanti, quindi un errore mostrato in precedenza è ormai
-        // stantio e va cancellato. Non basta agganciarsi al cambio di
-        // schermata (OnScreenChanged) perché durante il Reveal ogni
-        // RevealStepMessage reimposta Screen sullo stesso valore che ha
-        // già: il setter generato da [ObservableProperty] non invoca
-        // l'hook quando il valore non cambia, quindi un errore transitorio
-        // (es. durante AdvanceReveal) resterebbe visibile anche dopo un
-        // aggiornamento riuscito dello stesso schermo. Meglio un unico
-        // punto qui che tanti "ErrorText = string.Empty" sparsi nei
-        // singoli case dei messaggi.
+        // Qualunque messaggio dal server (incluso un RoomStateMessage dopo
+        // un rientro riuscito) è prova che il giro di andata e ritorno
+        // funziona di nuovo: sia l'errore sia l'avviso di connessione
+        // instabile sono ormai stantii (design 2026-08-13 "retry di
+        // riconnessione", §3.4). Questa pulizia vive qui e non in un hook
+        // OnScreenChanged perché durante il Reveal ogni RevealStepMessage
+        // riassegna Screen allo stesso valore che ha già: il setter generato
+        // da [ObservableProperty] non invoca On<Prop>Changed quando il
+        // valore nuovo è uguale al vecchio, quindi un hook non pulirebbe mai
+        // un errore o un banner rimasti stantii durante il Reveal.
         if (message is not ErrorMessage)
         {
             ErrorText = string.Empty;
+            ConnectionBanner = string.Empty;
         }
 
         switch (message)

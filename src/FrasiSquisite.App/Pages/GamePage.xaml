@@ -18,6 +18,9 @@
 
             <Label Text="{Binding ConnectionBanner}" TextColor="OrangeRed"
                    IsVisible="{Binding ConnectionBanner, Converter={StaticResource NotEmpty}}" />
+            <Button Text="Riconnetti" Style="{StaticResource SecondaryButton}"
+                    Command="{Binding ReconnectCommand}"
+                    IsVisible="{Binding ConnectionBanner, Converter={StaticResource NotEmpty}}" />
 
             <!-- ================= Home ================= -->
             <VerticalStackLayout Spacing="20" IsVisible="{Binding Screen, Converter={StaticResource IsScreen}, ConverterParameter=Home}">
