@@ -694,14 +694,29 @@ public partial class GameSessionViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Tentativo esplicito, innescato dal bottone "Riconnetti" nel banner
-    /// (design 2026-08-13 "retry di riconnessione", §3.3): stesso helper del
-    /// retry automatico in <see cref="EseguiComandoAsync"/>, un solo
-    /// tentativo per pressione - nessun retry-del-retry interno. Se fallisce,
-    /// l'utente vede l'errore e può premere di nuovo.
+    /// Un solo tentativo per pressione, senza passare da EseguiComandoAsync:
+    /// quel wrapper ritenterebbe chiamando ReconnectTransportAndRoomAsync una
+    /// seconda volta al suo interno - dato che qui è sia l'azione sia il
+    /// meccanismo di recupero, il risultato sarebbe un secondo RejoinRoomAsync
+    /// duplicato verso il server a una singola pressione (design 2026-08-13
+    /// "retry di riconnessione", §3.3: "nessun retry-del-retry interno").
     /// </summary>
     [RelayCommand]
-    private Task ReconnectAsync() => EseguiComandoAsync(ReconnectTransportAndRoomAsync);
+    private async Task ReconnectAsync()
+    {
+        try
+        {
+            await ReconnectTransportAndRoomAsync();
+        }
+        catch (HubException ex)
+        {
+            ErrorText = ex.Message;
+        }
+        catch (Exception)
+        {
+            ErrorText = "Non riesco a raggiungere il server.";
+        }
+    }
 
     private void OnConnectionInterrupted()
     {

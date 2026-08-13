@@ -701,6 +701,26 @@ public class GameSessionViewModelTests
         Assert.DoesNotContain(conn.Calls, c => c.StartsWith("RejoinRoom", StringComparison.Ordinal));
     }
 
+    // Rilievo Critical della revisione del Task 3: ReconnectAsync passava da
+    // EseguiComandoAsync con se stesso come azione, e quel wrapper ritenta
+    // chiamando ReconnectTransportAndRoomAsync una seconda volta al suo
+    // interno - fino a 3 chiamate a una singola pressione se il trasporto è
+    // giù. Con AlwaysFailWith (guasto permanente, mai su RejoinRoomAsync
+    // perché ConnectAsync fallisce sempre per primo) il codice difettoso
+    // arrivava a TentativiTotali == 3; con il fix, un solo tentativo.
+    [Fact]
+    public async Task IlBottoneRiconnettiConGuastoPermanenteTentaUnaVoltaSola()
+    {
+        var (vm, conn, _) = Crea();
+        vm.RoomCode = "ABCD";
+        conn.AlwaysFailWith = new InvalidOperationException("rete giù per davvero");
+
+        await vm.ReconnectCommand.ExecuteAsync(null);
+
+        Assert.Equal("Non riesco a raggiungere il server.", vm.ErrorText);
+        Assert.Equal(1, conn.TentativiTotali);
+    }
+
     // Home: "Ho un codice" sostituisce Crea/Ho-un-codice con CodeEntry, Entra,
     // Indietro (lotto-a-brief.md); "Indietro" torna allo stato iniziale e
     // pulisce quanto scritto, così non resta un codice a metà se si riapre.

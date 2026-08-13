@@ -207,8 +207,19 @@ public sealed class FakeGameConnection : IGameConnection
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Conta ogni chiamata tentata, riuscita o no: a differenza di
+    /// <see cref="Calls"/> (che registra solo le chiamate andate a buon
+    /// fine, perché LanciaSeImpostato lancia prima di registrarle) serve a
+    /// provare "un solo tentativo" anche quando OGNI tentativo fallisce
+    /// (es. AlwaysFailWith), dove Calls resterebbe sempre vuoto.
+    /// </summary>
+    public int TentativiTotali { get; private set; }
+
     private void LanciaSeImpostato()
     {
+        TentativiTotali++;
+
         if (AlwaysFailWith is { } permanente)
         {
             throw permanente;
