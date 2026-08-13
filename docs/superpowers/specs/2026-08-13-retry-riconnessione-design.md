@@ -139,11 +139,38 @@ fallimento lì è comunque coperto dal retry generale) e vengono rimosse.
 
 ### 3.3 Bottone "Riconnetti"
 
-Nuovo comando:
+Nuovo comando. Una bozza precedente lo faceva passare da
+`EseguiComandoAsync(ReconnectTransportAndRoomAsync)`, ma quel wrapper
+ritenta l'azione al suo interno: essendo qui l'azione e il meccanismo di
+recupero la stessa cosa, il risultato era un secondo `RejoinRoomAsync`
+duplicato verso il server a una singola pressione. Da qui il try/catch
+standalone sotto, che non passa da `EseguiComandoAsync`:
 
 ```
+/// <summary>
+/// Un solo tentativo per pressione, senza passare da EseguiComandoAsync:
+/// quel wrapper ritenterebbe chiamando ReconnectTransportAndRoomAsync una
+/// seconda volta al suo interno - dato che qui è sia l'azione sia il
+/// meccanismo di recupero, il risultato sarebbe un secondo RejoinRoomAsync
+/// duplicato verso il server a una singola pressione (design 2026-08-13
+/// "retry di riconnessione", §3.3: "nessun retry-del-retry interno").
+/// </summary>
 [RelayCommand]
-private Task ReconnectAsync() => EseguiComandoAsync(ReconnectTransportAndRoomAsync);
+private async Task ReconnectAsync()
+{
+    try
+    {
+        await ReconnectTransportAndRoomAsync();
+    }
+    catch (HubException ex)
+    {
+        ErrorText = ex.Message;
+    }
+    catch (Exception)
+    {
+        ErrorText = "Non riesco a raggiungere il server.";
+    }
+}
 ```
 
 `GamePage.xaml`, subito sotto il banner esistente:

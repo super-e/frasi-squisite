@@ -733,7 +733,12 @@ public partial class GameSessionViewModel : ObservableObject
         // un rientro riuscito) è prova che il giro di andata e ritorno
         // funziona di nuovo: sia l'errore sia l'avviso di connessione
         // instabile sono ormai stantii (design 2026-08-13 "retry di
-        // riconnessione", §3.4).
+        // riconnessione", §3.4). Questa pulizia vive qui e non in un hook
+        // OnScreenChanged perché durante il Reveal ogni RevealStepMessage
+        // riassegna Screen allo stesso valore che ha già: il setter generato
+        // da [ObservableProperty] non invoca On<Prop>Changed quando il
+        // valore nuovo è uguale al vecchio, quindi un hook non pulirebbe mai
+        // un errore o un banner rimasti stantii durante il Reveal.
         if (message is not ErrorMessage)
         {
             ErrorText = string.Empty;

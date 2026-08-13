@@ -704,10 +704,17 @@ public class GameSessionViewModelTests
     // Rilievo Critical della revisione del Task 3: ReconnectAsync passava da
     // EseguiComandoAsync con se stesso come azione, e quel wrapper ritenta
     // chiamando ReconnectTransportAndRoomAsync una seconda volta al suo
-    // interno - fino a 3 chiamate a una singola pressione se il trasporto è
-    // giù. Con AlwaysFailWith (guasto permanente, mai su RejoinRoomAsync
-    // perché ConnectAsync fallisce sempre per primo) il codice difettoso
-    // arrivava a TentativiTotali == 3; con il fix, un solo tentativo.
+    // interno. Con AlwaysFailWith (guasto permanente su ConnectAsync) il
+    // primo tentativo (await azione(), cioè ReconnectTransportAndRoomAsync)
+    // fallisce già dentro EnsureConnectedAsync, prima di arrivare a
+    // RejoinRoomAsync; il catch del wrapper richiama esplicitamente
+    // ReconnectTransportAndRoomAsync una seconda volta, che fallisce di
+    // nuovo nello stesso punto - ed è quel secondo fallimento a essere
+    // intercettato dal catch interno, senza mai raggiungere il terzo
+    // await azione(). Il codice difettoso arrivava quindi a
+    // TentativiTotali == 2 (non 3: quella cifra si otterrebbe solo se il
+    // trasporto si connettesse ma RejoinRoomAsync fallisse due volte, uno
+    // scenario diverso da questo test); con il fix, un solo tentativo.
     [Fact]
     public async Task IlBottoneRiconnettiConGuastoPermanenteTentaUnaVoltaSola()
     {
