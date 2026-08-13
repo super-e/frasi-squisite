@@ -341,7 +341,7 @@
                 <ActivityIndicator IsRunning="True" HorizontalOptions="Center" />
                 <Label Style="{StaticResource FootnoteLabel}" HorizontalOptions="Center"
                        HorizontalTextAlignment="Center"
-                       Text="Stiamo rimettendo a posto le preposizioni. Le parole restano vostre." />
+                       Text="Stiamo rimettendo a posto le preposizioni." />
             </VerticalStackLayout>
 
             <!-- ================= Reveal ================= -->

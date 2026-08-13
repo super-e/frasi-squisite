@@ -41,8 +41,9 @@ public sealed class IllustrationRunner(
         // generazione), non un doppione del timeout dell'HttpClient di una
         // specifica implementazione - e' cio' che rende il timeout provabile
         // con doppi finti, senza rete. Qui si usa ImageTimeoutSeconds (90) e
-        // non TimeoutSeconds (10): una generazione d'immagine richiede molto
-        // piu' tempo di una rifinitura testuale.
+        // non TimeoutSeconds (15, e comunque pensato solo per la base della
+        // rifinitura): una generazione d'immagine richiede molto piu' tempo
+        // di una rifinitura testuale.
         using var scadenza = CancellationTokenSource.CreateLinkedTokenSource(ct);
         scadenza.CancelAfter(TimeSpan.FromSeconds(_opzioni.ImageTimeoutSeconds));
 

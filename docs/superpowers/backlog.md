@@ -106,3 +106,24 @@ diventa una svista.
   circa nove centesimi l'una. Se in una serata diventasse un problema, il
   posto dove metterlo è il motore, come limite per stanza — non il client, che
   non è la fonte della verità.
+
+---
+
+## 5. Il limite di token della rifinitura non cresce con la partita
+
+**Trovato nella revisione finale del lotto "migliora la rifinitura"
+(12 agosto 2026).** Il timeout ora cresce col numero di frasi, ma
+`OpenAiCompatibleTextProvider` manda ancora `max_tokens = 2000` fisso in
+ogni chiamata. Con una partita numerosa (9 giocatori × 8 caselle dello
+schema "storia" = 72 caselle in un'unica risposta) il testo generato può
+superare comodamente quel limite prima ancora di contare i token di
+ragionamento del modello — la risposta tronca produce JSON sbilanciato,
+`Leggi` lo scarta, e l'intera rifinitura torna al testo grezzo: lo
+stesso sintomo che il lotto sul timeout doveva risolvere, raggiunto da
+un collo di bottiglia diverso.
+
+**Conti già fatti dalla revisione:** scalare `max_tokens` con
+`500 + 120 * caselleTotali` (caselleTotali = frasi × caselle per frase)
+copre il caso peggiore con margine. In alternativa, o in aggiunta,
+loggare quando `choices[0].finish_reason == "length"` renderebbe un
+troncamento distinguibile da una risposta malformata nei log.

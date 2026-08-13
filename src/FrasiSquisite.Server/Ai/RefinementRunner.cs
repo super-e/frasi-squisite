@@ -25,8 +25,11 @@ public sealed class RefinementRunner(
         REGOLE INDEROGABILI
         - Le parole scelte dai giocatori restano le stesse: puoi aggiustarne
           delicatamente la forma — plurale, genere, coniugazione — per farle
-          concordare con il resto della frase. Non sostituirle con parole
-          diverse, non cambiarne il significato, non aggiungere idee nuove.
+          concordare con il resto della frase. Resta aderente alla parola
+          data: cambia solo la desinenza o piccole variazioni morfologiche,
+          mai la radice. Non sostituirla con una parola diversa, non
+          cambiarne il significato.
+        - Non aggiungere idee, aggettivi o dettagli tuoi.
         - Non riordinare le caselle e non spostarne il contenuto.
         - Se una casella si legge già bene, restituiscila identica.
         - Il template della frase contiene già del testo fisso: non ripeterlo,

@@ -45,33 +45,35 @@ if (aiOptions.Abilitato)
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", aiOptions.ApiKey);
 
         // Non è un doppione dei CancellationTokenSource che RefinementRunner e
-        // IllustrationRunner creano con TimeoutSeconds e ImageTimeoutSeconds:
-        // questo qui limita solo la richiesta HTTP di
-        // OpenAiCompatibleTextProvider, un dettaglio di QUESTA implementazione.
-        // Quelli dei runner sono il limite a livello di contratto - valgono
-        // per qualunque IAiTextProvider, presente o futuro, HTTP o no - ed e'
-        // cio' che rende testabile ciascun timeout (RefinementRunnerTests.
-        // OltreIlTimeoutSiRestituisceNull, IllustrationRunnerTests) con un
-        // doppio finto e senza HttpClient. Chi impone davvero il limite di
-        // ciascuna operazione e' quindi sempre il runner, non questo client.
+        // IllustrationRunner creano con TimeoutMassimoSecondi (rifinitura) e
+        // ImageTimeoutSeconds (illustrazione): questo qui limita solo la
+        // richiesta HTTP di OpenAiCompatibleTextProvider, un dettaglio di
+        // QUESTA implementazione. Quelli dei runner sono il limite a livello
+        // di contratto - valgono per qualunque IAiTextProvider, presente o
+        // futuro, HTTP o no - ed e' cio' che rende testabile ciascun timeout
+        // (RefinementRunnerTests.OltreIlTimeoutSiRestituisceNull,
+        // IllustrationRunnerTests) con un doppio finto e senza HttpClient.
+        // Chi impone davvero il limite di ciascuna operazione e' quindi
+        // sempre il runner, non questo client.
         //
-        // Il valore qui pero' deve essere il PIU' GRANDE dei due
-        // (ImageTimeoutSeconds, che oggi e' 90 contro il tetto di
-        // TimeoutMassimoSecondi della rifinitura, 30):
-        // questo stesso HttpClient e' condiviso dal primo passo
+        // Il valore qui pero' deve essere il PIU' GRANDE dei due TETTI, non
+        // delle due basi: la rifinitura puo' arrivare fino a
+        // TimeoutMassimoSecondi (oggi 30, non TimeoutSeconds che e' solo il
+        // punto di partenza a 15) con molte frasi nello stesso giro. Usare
+        // TimeoutSeconds qui sarebbe silenziosamente sbagliato con una
+        // partita numerosa: il trasporto troncherebbe la richiesta prima che
+        // il token del runner scada davvero, e il fallimento diventa - per
+        // contratto di IAiTextProvider - un null muto, senza eccezioni e
+        // senza test rossi (AiConfigurazioneTests.
+        // IlClientDelProviderDiTestoUsaIlPiuGrandeDeiDueTetti lo prova).
+        // Questo stesso HttpClient e' anche condiviso dal primo passo
         // dell'illustrazione (la traduzione, guidata dal token a
-        // ImageTimeoutSeconds di IllustrationRunner). Impostarlo al piu'
-        // piccolo dei due tronca la traduzione a dieci secondi indipendentemente
-        // da quanto il runner sia disposto ad aspettare, e il fallimento del
-        // trasporto diventa - per contratto di IAiTextProvider - un null muto,
-        // senza eccezioni e senza test rossi: l'illustrazione fallirebbe ogni
-        // volta che il modello supera i dieci secondi, cosa tutt'altro che
-        // rara con un modello di ragionamento. La rifinitura non ne risente:
-        // resta comunque tagliata a TimeoutSeconds dal proprio token in
-        // RefinementRunner, che e' il limite vero e quello provato dai test.
-        // Questo timeout di trasporto resta solo una rete di sicurezza grossolana
-        // per il caso (oggi non previsto) in cui nessun token la governi.
-        c.Timeout = TimeSpan.FromSeconds(Math.Max(aiOptions.TimeoutSeconds, aiOptions.ImageTimeoutSeconds));
+        // ImageTimeoutSeconds di IllustrationRunner): con ImageTimeoutSeconds
+        // a 90, oggi resta comunque il piu' grande dei due tetti.
+        // Questo timeout di trasporto resta solo una rete di sicurezza
+        // grossolana per il caso (oggi non previsto) in cui nessun token la
+        // governi.
+        c.Timeout = TimeSpan.FromSeconds(Math.Max(aiOptions.TimeoutMassimoSecondi, aiOptions.ImageTimeoutSeconds));
     });
 
     builder.Services.AddHttpClient<IAiImageProvider, OpenAiCompatibleImageProvider>(c =>

@@ -55,7 +55,8 @@ public sealed class AiOptions
 
     /// <summary>
     /// Generare un'immagine richiede molto più tempo che correggere un testo, e
-    /// il limite della rifinitura (dieci secondi) la farebbe fallire sempre.
+    /// il limite base della rifinitura (oggi 15s, fino a
+    /// TimeoutMassimoSecondi con più frasi) la farebbe fallire sempre.
     /// Qui non c'è una partita che aspetta: l'host ha premuto un pulsante e sta
     /// guardando una rotellina, quindi si può essere pazienti.
     /// </summary>
