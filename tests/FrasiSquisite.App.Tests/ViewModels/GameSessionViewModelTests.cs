@@ -662,6 +662,22 @@ public class GameSessionViewModelTests
         Assert.False(string.IsNullOrEmpty(vm.ConnectionBanner));
     }
 
+    [Fact]
+    public void UnMessaggioDalServerSvuotaIlBannerDiConnessione()
+    {
+        var (vm, conn, _) = Crea();
+
+        conn.EmitConnectionInterrupted();
+        Assert.False(string.IsNullOrEmpty(vm.ConnectionBanner));
+
+        conn.Emit(new RoomStateMessage(
+            "ABCD", "Lobby",
+            [new PlayerView(Anna, "Anna", true, true, false)],
+            "surrealista-classico", 5));
+
+        Assert.Equal(string.Empty, vm.ConnectionBanner);
+    }
+
     // Home: "Ho un codice" sostituisce Crea/Ho-un-codice con CodeEntry, Entra,
     // Indietro (lotto-a-brief.md); "Indietro" torna allo stato iniziale e
     // pulisce quanto scritto, così non resta un codice a metà se si riapre.

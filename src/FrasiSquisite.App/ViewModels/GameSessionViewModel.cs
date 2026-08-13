@@ -704,21 +704,15 @@ public partial class GameSessionViewModel : ObservableObject
 
     private void OnMessage(object message)
     {
-        // Regola unica per lo svuotamento del banner d'errore: qualunque
-        // messaggio diverso da ErrorMessage significa che il server è
-        // andato avanti, quindi un errore mostrato in precedenza è ormai
-        // stantio e va cancellato. Non basta agganciarsi al cambio di
-        // schermata (OnScreenChanged) perché durante il Reveal ogni
-        // RevealStepMessage reimposta Screen sullo stesso valore che ha
-        // già: il setter generato da [ObservableProperty] non invoca
-        // l'hook quando il valore non cambia, quindi un errore transitorio
-        // (es. durante AdvanceReveal) resterebbe visibile anche dopo un
-        // aggiornamento riuscito dello stesso schermo. Meglio un unico
-        // punto qui che tanti "ErrorText = string.Empty" sparsi nei
-        // singoli case dei messaggi.
+        // Qualunque messaggio dal server (incluso un RoomStateMessage dopo
+        // un rientro riuscito) è prova che il giro di andata e ritorno
+        // funziona di nuovo: sia l'errore sia l'avviso di connessione
+        // instabile sono ormai stantii (design 2026-08-13 "retry di
+        // riconnessione", §3.4).
         if (message is not ErrorMessage)
         {
             ErrorText = string.Empty;
+            ConnectionBanner = string.Empty;
         }
 
         switch (message)
