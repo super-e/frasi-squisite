@@ -678,6 +678,29 @@ public class GameSessionViewModelTests
         Assert.Equal(string.Empty, vm.ConnectionBanner);
     }
 
+    [Fact]
+    public async Task IlBottoneRiconnettiRipristinaIlTrasportoERientraInStanza()
+    {
+        var (vm, conn, _) = Crea();
+        vm.RoomCode = "ABCD";
+
+        await vm.ReconnectCommand.ExecuteAsync(null);
+
+        Assert.Contains(conn.Calls, c => c.StartsWith("Connect(", StringComparison.Ordinal));
+        Assert.Contains($"RejoinRoom({Anna},ABCD)", conn.Calls);
+    }
+
+    [Fact]
+    public async Task IlBottoneRiconnettiSenzaStanzaNonTentaUnRientro()
+    {
+        var (vm, conn, _) = Crea();
+
+        await vm.ReconnectCommand.ExecuteAsync(null);
+
+        Assert.Contains(conn.Calls, c => c.StartsWith("Connect(", StringComparison.Ordinal));
+        Assert.DoesNotContain(conn.Calls, c => c.StartsWith("RejoinRoom", StringComparison.Ordinal));
+    }
+
     // Home: "Ho un codice" sostituisce Crea/Ho-un-codice con CodeEntry, Entra,
     // Indietro (lotto-a-brief.md); "Indietro" torna allo stato iniziale e
     // pulisce quanto scritto, così non resta un codice a metà se si riapre.

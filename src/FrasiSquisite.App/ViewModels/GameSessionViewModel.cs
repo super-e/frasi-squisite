@@ -693,6 +693,16 @@ public partial class GameSessionViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Tentativo esplicito, innescato dal bottone "Riconnetti" nel banner
+    /// (design 2026-08-13 "retry di riconnessione", §3.3): stesso helper del
+    /// retry automatico in <see cref="EseguiComandoAsync"/>, un solo
+    /// tentativo per pressione - nessun retry-del-retry interno. Se fallisce,
+    /// l'utente vede l'errore e può premere di nuovo.
+    /// </summary>
+    [RelayCommand]
+    private Task ReconnectAsync() => EseguiComandoAsync(ReconnectTransportAndRoomAsync);
+
     private void OnConnectionInterrupted()
     {
         // Il trasporto è giù o ci sta provando (Reconnecting/Closed): il
