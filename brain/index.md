@@ -1,6 +1,6 @@
 # Brain Index
 
-_Auto-generated. Last updated 2026-08-13T07:03:05.166Z._
+_Auto-generated. Last updated 2026-08-13T10:01:46.268Z._
 
 - [fallback-come-implementazione](pages/fallback-come-implementazione.md) — category: decision | **Cosa:** quando una dipendenza esterna non è disponibile (AI
 - [keystore-firma-dedicato](pages/keystore-firma-dedicato.md) — category: decision | **Cosa:** le build Release Android sono firmate con un keystore

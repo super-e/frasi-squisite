@@ -4,7 +4,7 @@ title: "Keystore di firma Android dedicato, fuori dal repository"
 category: decision
 status: active
 created: "2026-08-12T10:52:37"
-updated: "2026-08-12T10:54:00"
+updated: "2026-08-13T12:01:46"
 ---
 
 <!-- compiled_truth -->
@@ -51,4 +51,10 @@ processo di build locale, nessun impatto su server o protocollo.
   kind: decision
   summary: "catturata durante il lotto overlay illustrazione, 2026-08-12"
   source: ".csproj; sessione 2026-08-09..2026-08-12"
+  affects: [keystore-firma-dedicato]
+
+- time: 2026-08-13T12:01:46
+  kind: reversal
+  summary: "Password del keystore originale (creato 2026-08-09) persa, mai annotata da nessuna parte recuperabile. Rigenerato un nuovo keystore PKCS12 con lo stesso path e alias (frasisquisite), nuova password casuale impostata via setx (User) su questo PC. Il vecchio file e' stato spostato in frasi-squisite.keystore.orphaned-password-persa-2026-08-13 (inutilizzabile, tenuto solo come reperto). Conseguenza pratica: l'app gia' installata sui telefoni firmata con la chiave vecchia va disinstallata prima di poter installare una build firmata con la chiave nuova (fatto per il device di test in questa sessione). La password nuova NON e' salvata in nessun file del repository ne' altrove se non nella variabile d'ambiente locale: se si perde di nuovo, si ripete la stessa procedura."
+  source: "sessione 2026-08-13, PC principale"
   affects: [keystore-firma-dedicato]
