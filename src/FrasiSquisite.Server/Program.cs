@@ -19,7 +19,11 @@ builder.Services.AddSignalR()
 
 builder.Services.AddSingleton<ISchemaCatalog, EmbeddedSchemaCatalog>();
 builder.Services.AddSingleton<IRandomSource, SystemRandomSource>();
-builder.Services.AddSingleton<IWordPool, StaticWordPool>();
+builder.Services.AddSingleton<StaticWordPool>();
+builder.Services.AddSingleton<CachedAiWordPool>();
+builder.Services.AddSingleton<IWordPool>(sp => sp.GetRequiredService<CachedAiWordPool>());
+builder.Services.AddSingleton<BotWordPoolRunner>();
+builder.Services.AddHostedService<BotWordPoolWarmupService>();
 builder.Services.AddSingleton<IGameMode, RoleSchemaMode>();
 builder.Services.AddSingleton<IGameEngine, GameEngine>();
 builder.Services.AddSingleton<RoomCodeGenerator>();
