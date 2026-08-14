@@ -28,10 +28,9 @@ public sealed class GameHubTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    public Task DisposeAsync()
+    public async Task DisposeAsync()
     {
-        _factory.Dispose();
-        return Task.CompletedTask;
+        await _factory.DisposeAsync();
     }
 
     private sealed class Client(HubConnection connection) : IAsyncDisposable
