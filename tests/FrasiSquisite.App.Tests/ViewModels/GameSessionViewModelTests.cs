@@ -1881,6 +1881,36 @@ public class GameSessionViewModelTests
         Assert.True(riga.CanRequest);
     }
 
+    /// <summary>
+    /// Gemello del test sopra, verso opposto: un host retrocesso (un altro
+    /// giocatore diventa host al suo posto) non deve più vedere "Illustra".
+    /// Il codice è già simmetrico e corretto (OnIsHostChanged propaga
+    /// IsHost a ogni riga a ogni cambio, in entrambe le direzioni), ma senza
+    /// questo test niente bloccherebbe chi "ottimizzasse"
+    /// OnIsHostChanged con un `if (value)` che gestisse solo la promozione
+    /// (backlog.md §4, rilievo 1).
+    /// </summary>
+    [Fact]
+    public void UnHostRetrocessoDopoLaClassificaNonPuoPiuIllustrare()
+    {
+        var (vm, conn) = InFinale(ioSonoHost: true);
+        var riga = vm.FinalResults[0];
+        Assert.True(riga.CanRequest);
+
+        // Anna (il giocatore locale) perde l'host: un altro giocatore lo
+        // diventa, la stanza trasmette il nuovo stato - dopo la classifica
+        // finale, come nel test gemello sopra.
+        conn.Emit(new RoomStateMessage(
+            "ABCD",
+            "Lobby",
+            [new PlayerView(Anna, "Anna", false, true, false), new PlayerView(Guid.NewGuid(), "Bruno", true, true, false)],
+            "storia",
+            8));
+
+        Assert.False(vm.IsHost);
+        Assert.False(riga.CanRequest);
+    }
+
     [Fact]
     public async Task ChiedereLIllustrazioneMettelaRigaInAttesa()
     {
