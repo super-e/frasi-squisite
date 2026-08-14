@@ -7,6 +7,7 @@ using FrasiSquisite.Server.Rooms;
 using FrasiSquisite.Server.Tests.Ai;
 using FrasiSquisite.Shared.Protocol;
 using FrasiSquisite.Shared.Schemas;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
@@ -16,22 +17,40 @@ using Xunit;
 
 namespace FrasiSquisite.Server.Tests.Realtime;
 
-public sealed class GameHubTests : IAsyncLifetime
+/// <summary>
+/// Un'unica istanza per tutta la classe (via IClassFixture sotto), non una
+/// per test: 22 host ASP.NET completi per esecuzione della classe erano un
+/// candidato concreto per la flakiness intermittente diagnosticata in
+/// docs/superpowers/backlog.md §2. Implementa Xunit.IAsyncLifetime
+/// esplicitamente perché xUnit smaltisca la fixture con un vero await
+/// invece del Dispose() sincrono che userebbe di default su un
+/// IAsyncDisposable a fine classe.
+/// </summary>
+public sealed class GameHubTestsFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    private WebApplicationFactory<Program> _factory = null!;
+    protected override void ConfigureWebHost(IWebHostBuilder builder) =>
+        builder.ConfigureServices(services =>
+            services.AddSingleton<IGracePeriodTimer>(new VelocizzaGraziaTimer()));
 
-    public Task InitializeAsync()
-    {
-        _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services =>
-                services.AddSingleton<IGracePeriodTimer>(new VelocizzaGraziaTimer())));
-        return Task.CompletedTask;
-    }
+    Task IAsyncLifetime.InitializeAsync() => Task.CompletedTask;
 
-    public async Task DisposeAsync()
+    async Task IAsyncLifetime.DisposeAsync() => await base.DisposeAsync();
+
+    /// <summary>
+    /// Il periodo di grazia di produzione dura 30s reali. Qui si accorcia a
+    /// una manciata di millisecondi — abbastanza perché un rientro immediato
+    /// lo batta ancora sul tempo, ma senza aspettare per davvero i 30s di
+    /// produzione in ogni test che tocca una disconnessione.
+    /// </summary>
+    private sealed class VelocizzaGraziaTimer : IGracePeriodTimer
     {
-        await _factory.DisposeAsync();
+        public Task DelayAsync(TimeSpan durata, CancellationToken ct) => Task.Delay(TimeSpan.FromMilliseconds(200), ct);
     }
+}
+
+public sealed class GameHubTests(GameHubTestsFactory fabbricaCondivisa) : IClassFixture<GameHubTestsFactory>
+{
+    private readonly WebApplicationFactory<Program> _factory = fabbricaCondivisa;
 
     private sealed class Client(HubConnection connection) : IAsyncDisposable
     {
@@ -150,17 +169,6 @@ public sealed class GameHubTests : IAsyncLifetime
                 }
             }
         }
-    }
-
-    /// <summary>
-    /// Il periodo di grazia di produzione dura 30s reali. Qui si accorcia a
-    /// una manciata di millisecondi — abbastanza perché un rientro immediato
-    /// lo batta ancora sul tempo, ma senza aspettare per davvero i 30s di
-    /// produzione in ogni test che tocca una disconnessione.
-    /// </summary>
-    private sealed class VelocizzaGraziaTimer : IGracePeriodTimer
-    {
-        public Task DelayAsync(TimeSpan durata, CancellationToken ct) => Task.Delay(TimeSpan.FromMilliseconds(200), ct);
     }
 
     /// <summary>
