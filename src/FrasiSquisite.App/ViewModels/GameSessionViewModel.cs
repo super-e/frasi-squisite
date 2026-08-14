@@ -973,6 +973,15 @@ public partial class GameSessionViewModel : ObservableObject
                 break;
 
             case ErrorMessage errore:
+                // ErrorMessage non porta l'indice della frase, quindi non
+                // c'è modo di sapere quale riga di FinalResults spegnere:
+                // oggi comunque irraggiungibile (le guardie del motore su
+                // IllustrationRequested rispondono tutte con un codice
+                // specifico). Lasciato così di proposito - spegnere
+                // IsWaiting su un errore qualunque riabiliterebbe il
+                // pulsante "Illustra" mentre una generazione è ancora in
+                // corso altrove, che è peggio di una rotellina che gira
+                // un po' più a lungo del dovuto (backlog.md §4, rilievo 4).
                 ErrorText = errore.Message;
                 break;
 
