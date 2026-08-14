@@ -46,7 +46,15 @@ public sealed class BotWordPoolRunner(IAiTextProvider ai)
             caselle = schema.Caselle.Select(c => new { c.Ruolo, c.Prompt, c.Esempio }),
         });
 
-        var risposta = await ai.CompletaAsync(Sistema, utente, ct, 1500);
+        // Una decina di parole per ruolo, in italiano: ~120 token per ruolo
+        // bastano con margine. Un tetto fisso rischiava di troncare gli
+        // schemi con più ruoli (es. "storia", 8 ruoli) — un troncamento qui
+        // produce un JSON sbilanciato, GeneraAsync torna null, e lo schema
+        // riprova ogni 30 minuti pagando una chiamata ogni volta, sempre
+        // nello stesso modo (whole-branch review finding).
+        var maxTokens = 500 + 150 * schema.Caselle.Select(c => c.Ruolo).Distinct().Count();
+
+        var risposta = await ai.CompletaAsync(Sistema, utente, ct, maxTokens);
 
         if (risposta is null)
         {

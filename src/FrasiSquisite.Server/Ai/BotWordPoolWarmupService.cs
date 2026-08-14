@@ -52,7 +52,15 @@ public sealed class BotWordPoolWarmupService(
         {
             var esito = await runner.GeneraAsync(schema, ct);
 
-            if (esito is null)
+            // Non basta che esito non sia null: una copertura parziale (solo
+            // alcuni ruoli, o nomi di ruolo che non combaciano con
+            // schema.Caselle) lascerebbe il ruolo mancante inchiodato al
+            // dizionario statico per sempre, senza che nessuno se ne accorga
+            // — esattamente il fallimento silenzioso che questa classe dice
+            // di voler evitare (whole-branch review).
+            var ruoliDelloSchema = schema.Caselle.Select(c => c.Ruolo).Distinct().ToHashSet();
+
+            if (esito is null || !ruoliDelloSchema.IsSubsetOf(esito.Keys))
             {
                 continue;
             }

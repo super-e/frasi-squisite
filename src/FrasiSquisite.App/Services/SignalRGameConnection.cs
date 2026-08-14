@@ -24,8 +24,17 @@ public sealed class SignalRGameConnection : IGameConnection, IAsyncDisposable
             await _connection.DisposeAsync();
         }
 
+        // Stesso problema e stessa correzione delle URL di illustrazione in
+        // GameSessionViewModel (vedi baseConSlash lì): se ServerUrl porta un
+        // path-prefix di un reverse proxy (path-based, non a sottodominio),
+        // combinarlo con Uri senza uno '/' finale lo scarterebbe in
+        // silenzio. "hubs/game" (relativo, senza '/' iniziale) non ha
+        // bisogno di TrimStart qui: è già nella forma giusta perché Uri lo
+        // aggiunga invece di sostituirlo.
+        var baseConSlash = serverUrl.EndsWith('/') ? serverUrl : serverUrl + "/";
+
         _connection = new HubConnectionBuilder()
-            .WithUrl(new Uri(new Uri(serverUrl), "hubs/game"))
+            .WithUrl(new Uri(new Uri(baseConSlash), "hubs/game"))
             .WithAutomaticReconnect()
             .Build();
 

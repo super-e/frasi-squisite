@@ -132,7 +132,7 @@ public class IllustrazioneTests
     /// nessun tetto di default a fermarle.
     /// </summary>
     [Fact]
-    public void SenzaConfigurazioneNonCESunTettoDiDefault()
+    public void SenzaConfigurazioneNonCEUnTettoDiDefault()
     {
         var stato = AllaClassifica();
         for (var i = 0; i < 3; i++)

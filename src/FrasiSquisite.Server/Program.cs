@@ -24,7 +24,6 @@ builder.Services.AddSingleton<StaticWordPool>();
 builder.Services.AddSingleton<CachedAiWordPool>();
 builder.Services.AddSingleton<IWordPool>(sp => sp.GetRequiredService<CachedAiWordPool>());
 builder.Services.AddSingleton<BotWordPoolRunner>();
-builder.Services.AddHostedService<BotWordPoolWarmupService>();
 builder.Services.AddSingleton<IGameMode, RoleSchemaMode>();
 builder.Services.AddSingleton<IGameEngine>(sp => new GameEngine(
     sp.GetRequiredService<IGameMode>(),
@@ -107,6 +106,15 @@ if (aiOptions.Abilitato)
         // un'immagine ne richiede molti di più.
         c.Timeout = TimeSpan.FromSeconds(aiOptions.ImageTimeoutSeconds);
     });
+
+    // Solo qui, non sopra: StaticWordPool/CachedAiWordPool/IWordPool/
+    // BotWordPoolRunner restano registrati sempre (CachedAiWordPool.Take
+    // deve funzionare, ricadendo su StaticWordPool, anche ad AI spenta).
+    // Questo hosted service invece è il ciclo di ritentativo attivo che
+    // logga un warning ogni 30 minuti finché la cache non è piena: senza
+    // AI accesa non riempirebbe mai nulla e produrrebbe solo rumore
+    // fuorviante per sempre su un server sano (whole-branch review).
+    builder.Services.AddHostedService<BotWordPoolWarmupService>();
 }
 else
 {

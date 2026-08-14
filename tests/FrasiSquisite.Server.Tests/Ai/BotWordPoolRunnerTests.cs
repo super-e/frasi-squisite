@@ -110,7 +110,7 @@ public class BotWordPoolRunnerTests
     }
 
     [Fact]
-    public async Task IlPromptDiSistemaFiniceNellaChiamataAlModello()
+    public async Task IlPromptDiSistemaFinisceNellaChiamataAlModello()
     {
         var ai = new FakeAiTextProvider { Risposta = """{"ruoli": []}""" };
 
