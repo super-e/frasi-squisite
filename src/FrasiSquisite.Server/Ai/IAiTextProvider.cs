@@ -7,5 +7,5 @@ namespace FrasiSquisite.Server.Ai;
 /// </summary>
 public interface IAiTextProvider
 {
-    Task<string?> CompletaAsync(string sistema, string utente, CancellationToken ct);
+    Task<string?> CompletaAsync(string sistema, string utente, CancellationToken ct, int maxTokens);
 }

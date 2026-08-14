@@ -82,7 +82,7 @@ public sealed class RefinementRunner(
                 frasi = frasi.Select(f => new { caselle = f }),
             });
 
-            var risposta = await ai.CompletaAsync(Sistema, utente, scadenza.Token);
+            var risposta = await ai.CompletaAsync(Sistema, utente, scadenza.Token, 2000);
 
             return risposta is null ? null : Leggi(risposta, frasi.Count);
         }

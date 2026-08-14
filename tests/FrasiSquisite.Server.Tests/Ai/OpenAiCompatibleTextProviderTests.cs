@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using FrasiSquisite.Server.Ai;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -44,9 +45,23 @@ public class OpenAiCompatibleTextProviderTests
             """{"choices":[{"message":{"content":"Frase rifinita con garbo."}}]}""");
         var provider = CreaProvider(handler);
 
-        var risultato = await provider.CompletaAsync("sistema", "utente", CancellationToken.None);
+        var risultato = await provider.CompletaAsync("sistema", "utente", CancellationToken.None, maxTokens: 2000);
 
         Assert.Equal("Frase rifinita con garbo.", risultato);
+    }
+
+    [Fact]
+    public async Task IlMaxTokensPassatoDalChiamanteFiniceNellaRichiesta()
+    {
+        var handler = HandlerFittizio.ConRisposta(HttpStatusCode.OK,
+            """{"choices":[{"message":{"content":"ok"}}]}""");
+        var provider = CreaProvider(handler);
+
+        await provider.CompletaAsync("sistema", "utente", CancellationToken.None, maxTokens: 777);
+
+        Assert.NotNull(handler.UltimaRichiestaGrezza);
+        using var documento = JsonDocument.Parse(handler.UltimaRichiestaGrezza!);
+        Assert.Equal(777, documento.RootElement.GetProperty("max_tokens").GetInt32());
     }
 
     [Fact]
@@ -56,7 +71,7 @@ public class OpenAiCompatibleTextProviderTests
             """{"error":"guasto interno del fornitore"}""");
         var provider = CreaProvider(handler);
 
-        var risultato = await provider.CompletaAsync("sistema", "utente", CancellationToken.None);
+        var risultato = await provider.CompletaAsync("sistema", "utente", CancellationToken.None, maxTokens: 2000);
 
         Assert.Null(risultato);
     }
@@ -67,7 +82,7 @@ public class OpenAiCompatibleTextProviderTests
         var handler = HandlerFittizio.ConRisposta(HttpStatusCode.OK, "questo non e' JSON, e' testo qualunque");
         var provider = CreaProvider(handler);
 
-        var risultato = await provider.CompletaAsync("sistema", "utente", CancellationToken.None);
+        var risultato = await provider.CompletaAsync("sistema", "utente", CancellationToken.None, maxTokens: 2000);
 
         Assert.Null(risultato);
     }
@@ -88,7 +103,7 @@ public class OpenAiCompatibleTextProviderTests
         var handler = HandlerFittizio.ConRisposta(HttpStatusCode.OK, """{"choices": null}""");
         var provider = CreaProvider(handler);
 
-        var risultato = await provider.CompletaAsync("sistema", "utente", CancellationToken.None);
+        var risultato = await provider.CompletaAsync("sistema", "utente", CancellationToken.None, maxTokens: 2000);
 
         Assert.Null(risultato);
     }
@@ -106,7 +121,7 @@ public class OpenAiCompatibleTextProviderTests
             """{"choices":[{"message":{"content": 42}}]}""");
         var provider = CreaProvider(handler);
 
-        var risultato = await provider.CompletaAsync("sistema", "utente", CancellationToken.None);
+        var risultato = await provider.CompletaAsync("sistema", "utente", CancellationToken.None, maxTokens: 2000);
 
         Assert.Null(risultato);
     }
@@ -117,7 +132,7 @@ public class OpenAiCompatibleTextProviderTests
         var handler = HandlerFittizio.ConEccezione(new HttpRequestException("rete giu'"));
         var provider = CreaProvider(handler);
 
-        var risultato = await provider.CompletaAsync("sistema", "utente", CancellationToken.None);
+        var risultato = await provider.CompletaAsync("sistema", "utente", CancellationToken.None, maxTokens: 2000);
 
         Assert.Null(risultato);
     }
@@ -134,6 +149,8 @@ public class OpenAiCompatibleTextProviderTests
         private readonly string? _corpo;
         private readonly Exception? _daLanciare;
 
+        public string? UltimaRichiestaGrezza { get; private set; }
+
         private HandlerFittizio(HttpStatusCode? codice, string? corpo, Exception? daLanciare)
         {
             _codice = codice;
@@ -147,19 +164,24 @@ public class OpenAiCompatibleTextProviderTests
         public static HandlerFittizio ConEccezione(Exception eccezione) =>
             new(null, null, eccezione);
 
-        protected override Task<HttpResponseMessage> SendAsync(
+        protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            if (request.Content is not null)
+            {
+                UltimaRichiestaGrezza = await request.Content.ReadAsStringAsync(cancellationToken);
+            }
+
             if (_daLanciare is not null)
             {
-                return Task.FromException<HttpResponseMessage>(_daLanciare);
+                return await Task.FromException<HttpResponseMessage>(_daLanciare);
             }
 
             var risposta = new HttpResponseMessage(_codice!.Value)
             {
                 Content = new StringContent(_corpo!, Encoding.UTF8, "application/json"),
             };
-            return Task.FromResult(risposta);
+            return risposta;
         }
     }
 }

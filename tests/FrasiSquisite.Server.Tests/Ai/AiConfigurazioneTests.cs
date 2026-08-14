@@ -43,7 +43,7 @@ public class AiConfigurazioneTests
     {
         var provider = new DisabledAiTextProvider();
 
-        Assert.Null(await provider.CompletaAsync("sistema", "utente", CancellationToken.None));
+        Assert.Null(await provider.CompletaAsync("sistema", "utente", CancellationToken.None, maxTokens: 2000));
     }
 
     /// <summary>

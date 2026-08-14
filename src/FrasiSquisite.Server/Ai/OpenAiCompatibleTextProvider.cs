@@ -17,7 +17,7 @@ public sealed class OpenAiCompatibleTextProvider(
 {
     private readonly AiOptions _opzioni = opzioni.Value;
 
-    public async Task<string?> CompletaAsync(string sistema, string utente, CancellationToken ct)
+    public async Task<string?> CompletaAsync(string sistema, string utente, CancellationToken ct, int maxTokens)
     {
         try
         {
@@ -33,7 +33,7 @@ public sealed class OpenAiCompatibleTextProvider(
                 // token nascosti prima di rispondere, e per una correzione di
                 // bozze e' sproporzionato in tempo e in denaro (spec §4.2).
                 reasoning_effort = "low",
-                max_tokens = 2000,
+                max_tokens = maxTokens,
             };
 
             using var risposta = await http.PostAsJsonAsync("/chat/completions", richiesta, ct);

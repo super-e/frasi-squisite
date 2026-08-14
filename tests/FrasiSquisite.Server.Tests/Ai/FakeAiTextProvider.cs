@@ -37,11 +37,14 @@ public sealed class FakeAiTextProvider : IAiTextProvider
 
     public string? UltimoUtente { get; private set; }
 
-    public async Task<string?> CompletaAsync(string sistema, string utente, CancellationToken ct)
+    public int UltimoMaxTokens { get; private set; }
+
+    public async Task<string?> CompletaAsync(string sistema, string utente, CancellationToken ct, int maxTokens)
     {
         Chiamate++;
         UltimoSistema = sistema;
         UltimoUtente = utente;
+        UltimoMaxTokens = maxTokens;
 
         if (ProssimoErrore is { } errore)
         {

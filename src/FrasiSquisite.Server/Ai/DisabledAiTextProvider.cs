@@ -7,6 +7,6 @@ namespace FrasiSquisite.Server.Ai;
 /// </summary>
 public sealed class DisabledAiTextProvider : IAiTextProvider
 {
-    public Task<string?> CompletaAsync(string sistema, string utente, CancellationToken ct) =>
+    public Task<string?> CompletaAsync(string sistema, string utente, CancellationToken ct, int maxTokens) =>
         Task.FromResult<string?>(null);
 }

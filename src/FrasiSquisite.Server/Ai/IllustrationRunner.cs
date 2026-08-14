@@ -34,6 +34,13 @@ public sealed class IllustrationRunner(
         codice, senza spiegazioni.
         """;
 
+    /// <summary>
+    /// La traduzione italiano-inglese e' vincolata a "massimo quaranta
+    /// parole" dal prompt di sistema qui sopra: non scala con la partita
+    /// come la rifinitura, quindi resta un tetto fisso.
+    /// </summary>
+    private const int MaxTokensDescrizione = 2000;
+
     public async Task<byte[]?> IllustraAsync(string fraseItaliana, CancellationToken ct)
     {
         // Come in RefinementRunner: questo e' il limite a livello di
@@ -49,7 +56,7 @@ public sealed class IllustrationRunner(
 
         try
         {
-            var grezza = await testo.CompletaAsync(Sistema, fraseItaliana, scadenza.Token);
+            var grezza = await testo.CompletaAsync(Sistema, fraseItaliana, scadenza.Token, MaxTokensDescrizione);
             var prompt = Pulisci(grezza);
 
             if (string.IsNullOrWhiteSpace(prompt))
