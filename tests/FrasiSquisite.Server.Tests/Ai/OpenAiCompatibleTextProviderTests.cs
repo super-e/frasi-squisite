@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using FrasiSquisite.Server.Ai;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -21,7 +22,7 @@ public class OpenAiCompatibleTextProviderTests
 {
     private const string ChiaveDiProva = "chiave-di-prova-mai-reale";
 
-    private static OpenAiCompatibleTextProvider CreaProvider(HttpMessageHandler handler)
+    private static OpenAiCompatibleTextProvider CreaProvider(HttpMessageHandler handler, ILogger<OpenAiCompatibleTextProvider>? logger = null)
     {
         var http = new HttpClient(handler) { BaseAddress = new Uri("http://fornitore-fittizio.test/") };
         var opzioni = Options.Create(new AiOptions
@@ -32,10 +33,7 @@ public class OpenAiCompatibleTextProviderTests
             TimeoutSeconds = 5,
         });
 
-        // NullLogger: non ci interessa cosa viene loggato in questi test (lo
-        // verifichiamo leggendo il codice, non con un logger fittizio), ma
-        // dobbiamo comunque passare un ILogger valido al costruttore.
-        return new OpenAiCompatibleTextProvider(http, opzioni, NullLogger<OpenAiCompatibleTextProvider>.Instance);
+        return new OpenAiCompatibleTextProvider(http, opzioni, logger ?? NullLogger<OpenAiCompatibleTextProvider>.Instance);
     }
 
     [Fact]
@@ -137,6 +135,19 @@ public class OpenAiCompatibleTextProviderTests
         Assert.Null(risultato);
     }
 
+    [Fact]
+    public async Task FinishReasonLengthVieneLoggatoComeTroncamento()
+    {
+        var logger = new LoggerFittizio<OpenAiCompatibleTextProvider>();
+        var handler = HandlerFittizio.ConRisposta(HttpStatusCode.OK,
+            """{"choices":[{"finish_reason":"length","message":{"content":"testo troncato a met"}}]}""");
+        var provider = CreaProvider(handler, logger);
+
+        await provider.CompletaAsync("sistema", "utente", CancellationToken.None, maxTokens: 100);
+
+        Assert.Contains(logger.Messaggi, m => m.Contains("troncat", StringComparison.OrdinalIgnoreCase));
+    }
+
     /// <summary>
     /// Handler HTTP fittizio: intercetta la richiesta prima che tocchi la
     /// rete. O restituisce una risposta preconfezionata, o lancia
@@ -183,5 +194,17 @@ public class OpenAiCompatibleTextProviderTests
             };
             return risposta;
         }
+    }
+
+    private sealed class LoggerFittizio<T> : ILogger<T>
+    {
+        public List<string> Messaggi { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            Messaggi.Add(formatter(state, exception));
     }
 }

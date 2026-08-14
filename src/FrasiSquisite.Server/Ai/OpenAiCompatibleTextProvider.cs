@@ -48,8 +48,21 @@ public sealed class OpenAiCompatibleTextProvider(
 
             using var documento = JsonDocument.Parse(await risposta.Content.ReadAsStringAsync(ct));
 
-            return documento.RootElement
-                .GetProperty("choices")[0]
+            var scelta = documento.RootElement.GetProperty("choices")[0];
+
+            if (scelta.TryGetProperty("finish_reason", out var motivo) &&
+                motivo.GetString() == "length")
+            {
+                // Non un errore: la risposta e' comunque usabile fino a dove
+                // arriva. E' pero' il segnale che distingue un troncamento
+                // per max_tokens (qui) da una risposta davvero malformata
+                // (che RefinementRunner.Leggi logga a sua volta, ma senza
+                // poter fare questa distinzione: da li' il JSON tagliato a
+                // meta' sembra solo "illeggibile").
+                logger.LogWarning("Risposta troncata per max_tokens (finish_reason=length).");
+            }
+
+            return scelta
                 .GetProperty("message")
                 .GetProperty("content")
                 .GetString();
