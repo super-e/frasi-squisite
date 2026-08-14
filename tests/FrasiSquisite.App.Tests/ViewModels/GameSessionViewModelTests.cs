@@ -1943,6 +1943,22 @@ public class GameSessionViewModelTests
         Assert.Equal("http://test/illustrazioni/ab12", vm.FinalResults[0].ImageUrl);
     }
 
+    /// <summary>
+    /// Come sopra, ma con un ServerUrl che ha già un path (un reverse proxy
+    /// a path-prefix, non a sottodominio come Caddy in produzione oggi): il
+    /// prefisso va conservato, non scartato (backlog.md §4, rilievo 5).
+    /// </summary>
+    [Fact]
+    public void UnPrefissoDiPercorsoNelServerUrlVieneMantenuto()
+    {
+        var (vm, conn) = InFinale();
+        vm.ServerUrl = "http://test/frasi";
+
+        conn.Emit(new IllustrationReadyMessage(1, "/illustrazioni/ab12"));
+
+        Assert.Equal("http://test/frasi/illustrazioni/ab12", vm.FinalResults[0].ImageUrl);
+    }
+
     [Fact]
     public async Task LImmagineProntaTogliLAttesaEMostraIlRiquadro()
     {

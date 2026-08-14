@@ -927,7 +927,16 @@ public partial class GameSessionViewModel : ObservableObject
                     // L'indirizzo arriva relativo perché il server non sa sotto
                     // quale nome è raggiunto: davanti c'è un reverse proxy.
                     // ServerUrl è l'unico posto dove quell'informazione c'è.
-                    rigaPronta.ImageUrl = new Uri(new Uri(ServerUrl), pronta.Path).ToString();
+                    //
+                    // pronta.Path inizia sempre per '/' (percorso assoluto dal
+                    // server): combinato così com'è con Uri, scarterebbe
+                    // qualunque path già presente in ServerUrl (es. un
+                    // reverse proxy a path-prefix, non a sottodominio come
+                    // quello in uso oggi). Si forza ServerUrl a finire con
+                    // '/' e si toglie lo '/' iniziale dal percorso, cosi'
+                    // Uri li unisce invece di sostituire.
+                    var baseConSlash = ServerUrl.EndsWith('/') ? ServerUrl : ServerUrl + "/";
+                    rigaPronta.ImageUrl = new Uri(new Uri(baseConSlash), pronta.Path.TrimStart('/')).ToString();
                 }
 
                 break;
