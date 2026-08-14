@@ -106,6 +106,26 @@ public class IllustrazioneTests
         Assert.Single(risultato.Effects.OfType<RequestIllustration>());
     }
 
+    /// <summary>
+    /// Se nel frattempo la stanza è tornata in Lobby (nuova partita, o
+    /// ritorno alla lobby), un esito di illustrazione arrivato in ritardo
+    /// per la partita precedente non deve avere alcun effetto: non è un
+    /// errore da segnalare a nessuno (nessun giocatore l'ha chiesto in
+    /// questo momento), è solo un evento interno da ignorare
+    /// (backlog.md §4, rilievo 3).
+    /// </summary>
+    [Fact]
+    public void UnEsitoTardivoDopoIlRitornoInLobbyNonHaEffetto()
+    {
+        var chiesta = _motore.Handle(AllaClassifica(), new IllustrationRequested(Giocatore(0), 1)).State;
+        var nuovaPartita = _motore.Handle(chiesta, new BackToLobbyRequested(Giocatore(0))).State;
+
+        var risultato = _motore.Handle(nuovaPartita, new IllustrationFinished(1, "/illustrazioni/tardiva"));
+
+        Assert.Equal(nuovaPartita, risultato.State);
+        Assert.Empty(risultato.Effects);
+    }
+
     [Fact]
     public void SoloLHostPuoChiederla()
     {
