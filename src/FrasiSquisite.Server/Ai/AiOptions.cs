@@ -45,6 +45,22 @@ public sealed class AiOptions
     /// </summary>
     public int TimeoutMassimoSecondi { get; set; } = 30;
 
+    /// <summary>
+    /// Base del tetto di token concessi alla risposta della rifinitura,
+    /// prima di aggiungere il contributo delle caselle totali (vedi
+    /// <see cref="RifinituraMaxTokensPerCasella"/>). Un tetto fisso a 2000
+    /// (il valore precedente, prima che questo campo esistesse) troncava la
+    /// risposta con partite numerose (backlog.md §5): 9 giocatori x 8
+    /// caselle di uno schema = 72 caselle in un'unica risposta batch.
+    /// </summary>
+    public int RifinituraMaxTokensBase { get; set; } = 500;
+
+    /// <summary>
+    /// Quanti token in più concedere per ogni casella totale (frasi x
+    /// caselle per frase) da rifinire nella stessa chiamata batch.
+    /// </summary>
+    public int RifinituraMaxTokensPerCasella { get; set; } = 120;
+
     public string ImageModel { get; set; } = "nano-banana-2";
 
     /// <summary>

@@ -132,6 +132,41 @@ public class RefinementRunnerTests
     }
 
     /// <summary>
+    /// Due frasi da due caselle ciascuna fanno 4 caselle totali: con i
+    /// valori di default (base 500, 120 per casella) il tetto atteso è
+    /// 500 + 120 * 4 = 980.
+    /// </summary>
+    [Fact]
+    public async Task IlMaxTokensCresceConLeCaselleTotali()
+    {
+        var ai = new FakeAiTextProvider
+        {
+            Risposta = """{"frasi": [{"caselle": ["a", "b"]}, {"caselle": ["c", "d"]}]}""",
+        };
+
+        await Crea(ai).RifinisciAsync([["a", "b"], ["c", "d"]], Template, Ruoli, CancellationToken.None);
+
+        Assert.Equal(980, ai.UltimoMaxTokens);
+    }
+
+    /// <summary>
+    /// Con una sola frase da due caselle il tetto è quello base più il
+    /// contributo delle sole due caselle di quella frase: 500 + 120 * 2 = 740.
+    /// </summary>
+    [Fact]
+    public async Task ConUnaSolaFraseIlMaxTokensUsaSoloLeSueCaselle()
+    {
+        var ai = new FakeAiTextProvider
+        {
+            Risposta = """{"frasi": [{"caselle": ["a", "b"]}]}""",
+        };
+
+        await Crea(ai).RifinisciAsync([["a", "b"]], Template, Ruoli, CancellationToken.None);
+
+        Assert.Equal(740, ai.UltimoMaxTokens);
+    }
+
+    /// <summary>
     /// Con una sola frase il tempo concesso e' quello base: nessun
     /// incremento per frasi aggiuntive da applicare.
     /// </summary>

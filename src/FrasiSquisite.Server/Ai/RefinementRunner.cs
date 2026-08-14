@@ -70,6 +70,14 @@ public sealed class RefinementRunner(
             _opzioni.TimeoutMassimoSecondi,
             _opzioni.TimeoutSeconds + _opzioni.TimeoutSecondiPerFraseAggiuntiva * Math.Max(0, frasi.Count - 1));
 
+        // Stesso principio del timeout qui sopra: una rifinitura batch per
+        // tutta la partita produce più testo con più caselle nella stessa
+        // risposta, e un tetto fisso a 2000 troncava la risposta con
+        // partite numerose (backlog.md §5) — il JSON risultava sbilanciato,
+        // Leggi lo scartava, e l'intera rifinitura tornava al testo grezzo.
+        var caselleTotali = frasi.Count * ruoli.Count;
+        var maxTokens = _opzioni.RifinituraMaxTokensBase + _opzioni.RifinituraMaxTokensPerCasella * caselleTotali;
+
         using var scadenza = CancellationTokenSource.CreateLinkedTokenSource(ct);
         scadenza.CancelAfter(TimeSpan.FromSeconds(secondi));
 
@@ -82,7 +90,7 @@ public sealed class RefinementRunner(
                 frasi = frasi.Select(f => new { caselle = f }),
             });
 
-            var risposta = await ai.CompletaAsync(Sistema, utente, scadenza.Token, 2000);
+            var risposta = await ai.CompletaAsync(Sistema, utente, scadenza.Token, maxTokens);
 
             return risposta is null ? null : Leggi(risposta, frasi.Count);
         }
