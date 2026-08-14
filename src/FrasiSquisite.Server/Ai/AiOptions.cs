@@ -93,7 +93,7 @@ public sealed class AiOptions
     /// operatore che vuole limitare il costo lo configura esplicitamente
     /// (backlog.md §4, rilievo 7). Il conteggio è delle richieste riuscite
     /// (IllustrationsRequested a fine generazione): un tentativo fallito
-    /// viene tolto dall'insieme per permettere il riprovare, quindi non
+    /// viene tolto dall'insieme per permettere di riprovare, quindi non
     /// consuma il tetto — pur avendo comunque un costo reale per la
     /// chiamata al modello che non è andata a buon fine.
     /// </summary>

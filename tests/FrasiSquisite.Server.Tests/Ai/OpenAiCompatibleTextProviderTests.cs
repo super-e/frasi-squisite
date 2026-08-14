@@ -49,7 +49,7 @@ public class OpenAiCompatibleTextProviderTests
     }
 
     [Fact]
-    public async Task IlMaxTokensPassatoDalChiamanteFiniceNellaRichiesta()
+    public async Task IlMaxTokensPassatoDalChiamanteFinisceNellaRichiesta()
     {
         var handler = HandlerFittizio.ConRisposta(HttpStatusCode.OK,
             """{"choices":[{"message":{"content":"ok"}}]}""");

@@ -100,10 +100,14 @@ public class BotWordPoolWarmupServiceTests
     /// Una risposta che copre solo alcuni dei ruoli dello schema (es. 1 su 3
     /// per "proverbio") non basta a considerarlo riempito: senza questo
     /// controllo i ruoli mancanti resterebbero silenziosamente sul
-    /// dizionario statico per sempre (whole-branch review).
+    /// dizionario statico per sempre (whole-branch review). Ma il ruolo
+    /// coperto dalla risposta va comunque in cache: buttare via anche le
+    /// parole arrivate per bene solo perché lo schema nel suo insieme non è
+    /// completo sarebbe uno spreco, non una prudenza (fix successivo alla
+    /// revisione).
     /// </summary>
     [Fact]
-    public async Task UnaRispostaParzialeLasciaLoSchemaTraQuelliDaRiempire()
+    public async Task UnaRispostaParzialeLasciaLoSchemaTraQuelliDaRiempireMaPopolaComunqueIRuoliCoperti()
     {
         var proverbio = new EmbeddedSchemaCatalog().Get("proverbio");
         var ai = new FakeAiTextProvider { Risposta = """{"ruoli": [{"ruolo": "Premessa", "parole": ["Chi corre troppo"]}]}""" };
@@ -115,6 +119,30 @@ public class BotWordPoolWarmupServiceTests
         var restano = await servizio.EseguiUnGiroAsync(daRiempire, CancellationToken.None);
 
         Assert.Equal(daRiempire, restano);
+        Assert.Equal("Chi corre troppo", cache.Take("Premessa", new SeededRandomSource(1)));
+    }
+
+    /// <summary>
+    /// Il confronto di copertura deve essere case-insensitive quanto lo è
+    /// CachedAiWordPool stesso: un ruolo che il modello restituisce con
+    /// una capitalizzazione diversa da quella dello schema (qui "soggetto"
+    /// contro "Soggetto") copre comunque lo schema, e non deve tenerlo
+    /// bloccato in ritentativo per sempre.
+    /// </summary>
+    [Fact]
+    public async Task UnRuoloConCapitalizzazioneDiversaContaComunqueComeCoperto()
+    {
+        var schema = SchemaConUnSoloRuolo();
+        var ai = new FakeAiTextProvider { Risposta = """{"ruoli": [{"ruolo": "soggetto", "parole": ["prova"]}]}""" };
+        var cache = new CachedAiWordPool(new StaticWordPool());
+        var servizio = new BotWordPoolWarmupService(
+            new UnSoloSchemaCatalog(schema), new BotWordPoolRunner(ai), cache, NullLogger<BotWordPoolWarmupService>.Instance);
+        var daRiempire = new HashSet<string> { schema.Id };
+
+        var restano = await servizio.EseguiUnGiroAsync(daRiempire, CancellationToken.None);
+
+        Assert.Empty(restano);
+        Assert.Equal("prova", cache.Take("Soggetto", new SeededRandomSource(1)));
     }
 
     private static Schema SchemaConUnSoloRuolo() => new(

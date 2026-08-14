@@ -52,25 +52,37 @@ public sealed class BotWordPoolWarmupService(
         {
             var esito = await runner.GeneraAsync(schema, ct);
 
-            // Non basta che esito non sia null: una copertura parziale (solo
-            // alcuni ruoli, o nomi di ruolo che non combaciano con
-            // schema.Caselle) lascerebbe il ruolo mancante inchiodato al
-            // dizionario statico per sempre, senza che nessuno se ne accorga
-            // — esattamente il fallimento silenzioso che questa classe dice
-            // di voler evitare (whole-branch review).
-            var ruoliDelloSchema = schema.Caselle.Select(c => c.Ruolo).Distinct().ToHashSet();
-
-            if (esito is null || !ruoliDelloSchema.IsSubsetOf(esito.Keys))
+            if (esito is null)
             {
                 continue;
             }
 
+            // Si popola sempre per ciò che è arrivato, anche con copertura
+            // parziale: i ruoli che l'AI ha davvero coperto non vanno
+            // buttati via solo perché lo schema nel suo insieme non è
+            // ancora completo (whole-branch review, fix successivo).
             foreach (var (ruolo, parole) in esito)
             {
                 cache.Popola(ruolo, parole);
             }
 
-            restano.Remove(schema.Id);
+            // Ma lo schema resta tra quelli da riempire finché non è
+            // coperto per intero: una copertura parziale (solo alcuni
+            // ruoli, o nomi di ruolo che non combaciano con schema.Caselle,
+            // confronto case-insensitive come CachedAiWordPool) lascerebbe
+            // il ruolo mancante inchiodato al dizionario statico per
+            // sempre, senza che nessuno se ne accorga — esattamente il
+            // fallimento silenzioso che questa classe dice di voler evitare
+            // (whole-branch review).
+            var ruoliDelloSchema = schema.Caselle
+                .Select(c => c.Ruolo)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            if (ruoliDelloSchema.IsSubsetOf(esito.Keys))
+            {
+                restano.Remove(schema.Id);
+            }
         }
 
         return restano;
