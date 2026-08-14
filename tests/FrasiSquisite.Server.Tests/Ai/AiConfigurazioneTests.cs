@@ -1,5 +1,7 @@
 using FrasiSquisite.Server.Ai;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
 
@@ -82,7 +84,9 @@ public class AiConfigurazioneTests
     public void ConLaChiaveIlContainerRisolveOpenAiCompatibleImageProvider()
     {
         using var factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(builder => builder.UseSetting("Ai:ApiKey", "chiave-di-prova-mai-reale"));
+            .WithWebHostBuilder(builder => builder
+                .UseSetting("Ai:ApiKey", "chiave-di-prova-mai-reale")
+                .ConfigureServices(services => services.RemoveAll<IHostedService>()));
 
         var provider = factory.Services.GetRequiredService<IAiImageProvider>();
 
@@ -106,9 +110,11 @@ public class AiConfigurazioneTests
     public void IlClientDelProviderDiTestoUsaIlPiuGrandeDeiDueTetti()
     {
         using var factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(builder => builder.UseSetting("Ai:ApiKey", "chiave-di-prova-mai-reale")
+            .WithWebHostBuilder(builder => builder
+                .UseSetting("Ai:ApiKey", "chiave-di-prova-mai-reale")
                 .UseSetting("Ai:TimeoutMassimoSecondi", "5")
-                .UseSetting("Ai:ImageTimeoutSeconds", "20"));
+                .UseSetting("Ai:ImageTimeoutSeconds", "20")
+                .ConfigureServices(services => services.RemoveAll<IHostedService>()));
 
         var httpClientFactory = factory.Services.GetRequiredService<IHttpClientFactory>();
         var client = httpClientFactory.CreateClient(nameof(IAiTextProvider));
@@ -126,9 +132,11 @@ public class AiConfigurazioneTests
     public void IlClientDelProviderDiTestoSegueIlTettoDellaRifinituraQuandoEPiuGrande()
     {
         using var factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(builder => builder.UseSetting("Ai:ApiKey", "chiave-di-prova-mai-reale")
+            .WithWebHostBuilder(builder => builder
+                .UseSetting("Ai:ApiKey", "chiave-di-prova-mai-reale")
                 .UseSetting("Ai:TimeoutMassimoSecondi", "25")
-                .UseSetting("Ai:ImageTimeoutSeconds", "20"));
+                .UseSetting("Ai:ImageTimeoutSeconds", "20")
+                .ConfigureServices(services => services.RemoveAll<IHostedService>()));
 
         var httpClientFactory = factory.Services.GetRequiredService<IHttpClientFactory>();
         var client = httpClientFactory.CreateClient(nameof(IAiTextProvider));
