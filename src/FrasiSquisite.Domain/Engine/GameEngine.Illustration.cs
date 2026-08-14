@@ -9,7 +9,7 @@ namespace FrasiSquisite.Domain.Engine;
 /// </summary>
 public sealed partial class GameEngine
 {
-    private static EngineResult OnIllustrationRequested(GameState state, IllustrationRequested e)
+    private EngineResult OnIllustrationRequested(GameState state, IllustrationRequested e)
     {
         if (state.Phase != RoomPhase.Finished)
         {
@@ -29,6 +29,11 @@ public sealed partial class GameEngine
         if (state.IllustrationsRequested.Contains(e.PhraseIndex))
         {
             return Error(state, e.RequestedBy, "ILLUSTRATION_ALREADY_REQUESTED", "Quella frase ce l'ha già.");
+        }
+
+        if (state.IllustrationsRequested.Count >= _massimoIllustrazioniPerStanza)
+        {
+            return Error(state, e.RequestedBy, "ILLUSTRATION_LIMIT_REACHED", "Limite di illustrazioni raggiunto per questa partita.");
         }
 
         var chieste = new HashSet<int>(state.IllustrationsRequested) { e.PhraseIndex };

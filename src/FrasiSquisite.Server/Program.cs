@@ -8,6 +8,7 @@ using FrasiSquisite.Server.Realtime;
 using FrasiSquisite.Server.Rooms;
 using FrasiSquisite.Shared.Protocol;
 using FrasiSquisite.Shared.Schemas;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,7 +26,11 @@ builder.Services.AddSingleton<IWordPool>(sp => sp.GetRequiredService<CachedAiWor
 builder.Services.AddSingleton<BotWordPoolRunner>();
 builder.Services.AddHostedService<BotWordPoolWarmupService>();
 builder.Services.AddSingleton<IGameMode, RoleSchemaMode>();
-builder.Services.AddSingleton<IGameEngine, GameEngine>();
+builder.Services.AddSingleton<IGameEngine>(sp => new GameEngine(
+    sp.GetRequiredService<IGameMode>(),
+    sp.GetRequiredService<IWordPool>(),
+    sp.GetRequiredService<IRandomSource>(),
+    sp.GetRequiredService<IOptions<AiOptions>>().Value.MassimoIllustrazioniPerStanza));
 builder.Services.AddSingleton<RoomCodeGenerator>();
 builder.Services.AddSingleton<IRoomRegistry, RoomRegistry>();
 builder.Services.AddSingleton<IGracePeriodTimer, RealGracePeriodTimer>();

@@ -83,4 +83,15 @@ public sealed class AiOptions
     /// interamente giocabile (spec §7).
     /// </summary>
     public bool Abilitato => !string.IsNullOrWhiteSpace(ApiKey);
+
+    /// <summary>
+    /// Tetto alle illustrazioni per singola partita conclusa (si azzera a
+    /// ogni nuova partita, non "per serata": vedi la nota di scoping nel
+    /// piano che ha introdotto questo campo). Default int.MaxValue: nessun
+    /// tetto, comportamento identico a prima che questo campo esistesse.
+    /// Ogni illustrazione costa circa nove centesimi (spec AI); un
+    /// operatore che vuole limitare il costo lo configura esplicitamente
+    /// (backlog.md §4, rilievo 7).
+    /// </summary>
+    public int MassimoIllustrazioniPerStanza { get; set; } = int.MaxValue;
 }

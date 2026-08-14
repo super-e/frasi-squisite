@@ -7,7 +7,11 @@ using FrasiSquisite.Shared.Validation;
 
 namespace FrasiSquisite.Domain.Engine;
 
-public sealed partial class GameEngine(IGameMode mode, IWordPool pool, IRandomSource random) : IGameEngine
+public sealed partial class GameEngine(
+    IGameMode mode,
+    IWordPool pool,
+    IRandomSource random,
+    int massimoIllustrazioniPerStanza = int.MaxValue) : IGameEngine
 {
     public const int MinPlayers = 2;
 
@@ -29,6 +33,7 @@ public sealed partial class GameEngine(IGameMode mode, IWordPool pool, IRandomSo
     private readonly IGameMode _mode = mode;
     private readonly IWordPool _pool = pool;
     private readonly IRandomSource _random = random;
+    private readonly int _massimoIllustrazioniPerStanza = massimoIllustrazioniPerStanza;
 
     public EngineResult Handle(GameState state, GameEvent evt) => evt switch
     {

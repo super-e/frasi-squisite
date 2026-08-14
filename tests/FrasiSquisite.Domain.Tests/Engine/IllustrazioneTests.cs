@@ -107,6 +107,43 @@ public class IllustrazioneTests
     }
 
     /// <summary>
+    /// Il tetto è per partita conclusa (IllustrationsRequested si azzera a
+    /// ogni nuova partita): con un tetto di 1, la seconda richiesta - anche
+    /// su una frase diversa dalla prima - viene rifiutata (backlog.md §4,
+    /// rilievo 7).
+    /// </summary>
+    [Fact]
+    public void OltreIlTettoConfiguratoLeRichiesteVengonoRifiutate()
+    {
+        var motoreConTetto = new GameEngine(new RoleSchemaMode(), new StaticWordPool(), new SeededRandomSource(1), massimoIllustrazioniPerStanza: 1);
+        var statoConUna = motoreConTetto.Handle(AllaClassifica(), new IllustrationRequested(Giocatore(0), 1)).State;
+
+        var risultato = motoreConTetto.Handle(statoConUna, new IllustrationRequested(Giocatore(0), 0));
+
+        Assert.Empty(risultato.Effects.OfType<RequestIllustration>());
+        var errore = Assert.Single(risultato.MessagesTo<ErrorMessage>(Giocatore(0)));
+        Assert.Equal("ILLUSTRATION_LIMIT_REACHED", errore.Code);
+    }
+
+    /// <summary>
+    /// Senza specificare il parametro, il comportamento resta quello di
+    /// sempre: nessun tetto. AllaClassifica() con N = K = 3 produce 3
+    /// frasi, indici 0-2: tre richieste sullo stesso stato, tutte accettate,
+    /// nessun tetto di default a fermarle.
+    /// </summary>
+    [Fact]
+    public void SenzaConfigurazioneNonCESunTettoDiDefault()
+    {
+        var stato = AllaClassifica();
+        for (var i = 0; i < 3; i++)
+        {
+            stato = _motore.Handle(stato, new IllustrationRequested(Giocatore(0), i)).State;
+        }
+
+        Assert.Equal(3, stato.IllustrationsRequested.Count);
+    }
+
+    /// <summary>
     /// Se nel frattempo la stanza è tornata in Lobby (nuova partita, o
     /// ritorno alla lobby), un esito di illustrazione arrivato in ritardo
     /// per la partita precedente non deve avere alcun effetto: non è un
